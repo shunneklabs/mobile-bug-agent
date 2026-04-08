@@ -1,101 +1,87 @@
 package dev.sunnat629.mba.server
 
-import dev.sunnat629.mba.agent.AgentFactory
 import dev.sunnat629.mba.agent.CrashAnalysisAgent
-import dev.sunnat629.mba.agent.CrashAnalysisResult
-import dev.sunnat629.mba.core.config.LLM
-import dev.sunnat629.mba.core.config.LLMConfig
+import dev.sunnat629.mba.core.model.ProcessedCrashReport
 import dev.sunnat629.mba.core.model.RawCrashReport
 import dev.sunnat629.mba.core.pii.PIISanitizer
 import dev.sunnat629.mba.core.store.LocalDedupCache
+import dev.sunnat629.mba.notion.NotionClient
 import dev.sunnat629.mba.notion.NotionTicketBackend
-import io.ktor.serialization.kotlinx.json.*
-import io.ktor.server.application.*
-import io.ktor.server.engine.*
-import io.ktor.server.netty.*
-import io.ktor.server.plugins.contentnegotiation.*
-import io.ktor.server.request.*
-import io.ktor.server.response.*
-import io.ktor.server.routing.*
+import dev.sunnat629.mba.server.model.ReportRequest
+import dev.sunnat629.mba.server.model.ReportResponse
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.Application
+import io.ktor.server.application.call
+import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.request.receive
+import io.ktor.server.response.respond
+import io.ktor.server.routing.post
+import io.ktor.server.routing.routing
+import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
-import org.slf4j.LoggerFactory
-import kotlin.time.Duration.Companion.hours
 
-private val logger = LoggerFactory.getLogger("MBAServer")
+fun Application.mbaServerModule() {
+    val config = ServerConfig.load()
 
-fun main() {
-    val port = System.getenv("PORT")?.toInt() ?: 8080
-    embeddedServer(Netty, port = port) {
-        module()
-    }.start(wait = true)
-}
-
-fun Application.module() {
     install(ContentNegotiation) {
-        json(Json {
-            ignoreUnknownKeys = true
-            prettyPrint = true
-        })
+        json(
+            Json {
+                ignoreUnknownKeys = true
+                encodeDefaults = true
+                explicitNulls = false
+            }
+        )
     }
 
-    // Initialize dependencies
-    val geminiKey = System.getenv("GEMINI_API_KEY") ?: "REPLACE_WITH_GEMINI_API_KEY"
-    val notionKey = System.getenv("NOTION_API_KEY") ?: "REPLACE_WITH_NOTION_API_KEY"
-    val notionDbId = System.getenv("NOTION_DATABASE_ID") ?: "REPLACE_WITH_NOTION_DATABASE_ID"
+    // MVP: create dependencies in-process.
+    val notionClient = NotionClient(config.notion)
+    val ticketBackend = NotionTicketBackend(notion = notionClient, config = config.notion)
 
-    val llmConfig = LLMConfig(
-        provider = LLM.Provider.GEMINI,
-        model = "gemini-1.5-flash",
-        apiKey = geminiKey
+    val agent = CrashAnalysisAgent(
+        piiSanitizer = PIISanitizer(),
+        dedupCache = LocalDedupCache(),
     )
-    
-    val agentFactory = AgentFactory(llmConfig)
-    val piiSanitizer = PIISanitizer()
-    val dedupCache = LocalDedupCache(maxSize = 1000, ttl = 24.hours)
-    
-    val analysisAgent = CrashAnalysisAgent(agentFactory, piiSanitizer, dedupCache)
-    val notionBackend = NotionTicketBackend(notionKey, notionDbId)
 
     routing {
-        get("/") {
-            call.respondText("Mobile Bug Agent (MBA) Server is running!")
-        }
-
         post("/report") {
-            try {
-                val rawReport = call.receive<RawCrashReport>()
-                logger.info("Received crash report: ${rawReport.id}")
+            val req = call.receive<ReportRequest>()
+            val raw: RawCrashReport = req.crash
 
-                // 1. Process with AI Agent
-                val result = analysisAgent.process(rawReport)
-
-                when (result) {
-                    is CrashAnalysisResult.New -> {
-                        logger.info("New crash analyzed. Creating Notion ticket...")
-                        val ticketResult = notionBackend.createTicket(result.report)
-                        if (ticketResult.success) {
-                            logger.info("Ticket created: ${ticketResult.url}")
-                            call.respond(ticketResult)
-                        } else {
-                            logger.error("Failed to create ticket: ${ticketResult.errorMessage}")
-                            call.respond(ticketResult)
-                        }
-                    }
-                    is CrashAnalysisResult.Duplicate -> {
-                        logger.info("Duplicate crash detected: ${result.report.fingerprint}")
-                        // Optionally update existing ticket count here
-                        call.respond(mapOf("status" to "duplicate", "fingerprint" to result.report.fingerprint))
-                    }
-                    is CrashAnalysisResult.Fallback -> {
-                        logger.warn("AI analysis failed. Creating fallback ticket...")
-                        val ticketResult = notionBackend.createTicket(result.report)
-                        call.respond(ticketResult)
-                    }
+            val result = agent.process(raw)
+            val processed: ProcessedCrashReport = when (result) {
+                is dev.sunnat629.mba.agent.CrashAnalysisResult.New -> result.report
+                is dev.sunnat629.mba.agent.CrashAnalysisResult.Duplicate -> {
+                    // MVP: still create a ticket for now (or could be no-op). Build minimal processed report.
+                    val parsed = dev.sunnat629.mba.agent.tools.StackTraceParserTool.parse(raw.stackTrace)
+                    val severity = dev.sunnat629.mba.agent.tools.SeverityClassifierTool.classify(parsed, raw.device)
+                    val summary = dev.sunnat629.mba.agent.tools.SummaryGeneratorTool.generate(parsed, severity, raw)
+                    ProcessedCrashReport(
+                        raw = raw,
+                        fingerprint = result.fingerprint,
+                        severity = severity.severity,
+                        confidence = severity.confidence,
+                        title = summary.title,
+                        description = summary.description,
+                        stepsToReproduce = summary.stepsToReproduce,
+                        possibleCause = summary.possibleCause,
+                        crashFile = parsed.crashFile,
+                        crashLine = parsed.crashLine,
+                        crashMethod = parsed.crashMethod,
+                        isAppCode = parsed.isAppCode,
+                        sanitizedStackTrace = raw.stackTrace,
+                    )
                 }
-            } catch (e: Exception) {
-                logger.error("Error processing crash report", e)
-                call.respond(io.ktor.http.HttpStatusCode.InternalServerError, "Error: ${e.message}")
             }
+
+            val ticket = ticketBackend.createTicket(processed)
+
+            call.respond(
+                status = HttpStatusCode.OK,
+                message = ReportResponse(
+                    processed = processed,
+                    ticket = ticket,
+                )
+            )
         }
     }
 }
