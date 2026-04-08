@@ -5,11 +5,14 @@ import dev.sunnat629.mba.notion.model.NotionCreatePageResponse
 import dev.sunnat629.mba.notion.model.NotionErrorResponse
 import dev.sunnat629.mba.notion.model.NotionQueryDatabaseRequest
 import dev.sunnat629.mba.notion.model.NotionQueryDatabaseResponse
+import dev.sunnat629.mba.notion.model.NotionUpdatePageRequest
+import dev.sunnat629.mba.notion.model.NotionUpdatePageResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.accept
 import io.ktor.client.request.header
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
@@ -37,6 +40,23 @@ class NotionClient(
         if (resp.status.value >= 400) {
             val err = runCatching { resp.body<NotionErrorResponse>() }.getOrNull()
             error("Notion createPage failed: HTTP ${resp.status.value} ${err?.code ?: ""} ${err?.message ?: ""}".trim())
+        }
+
+        return resp.body()
+    }
+
+    suspend fun updatePage(pageId: String, request: NotionUpdatePageRequest): NotionUpdatePageResponse {
+        val resp = http.patch("${config.baseUrl}/pages/$pageId") {
+            header("Authorization", "Bearer ${config.token}")
+            header("Notion-Version", config.notionVersion)
+            contentType(ContentType.Application.Json)
+            accept(ContentType.Application.Json)
+            setBody(request)
+        }
+
+        if (resp.status.value >= 400) {
+            val err = runCatching { resp.body<NotionErrorResponse>() }.getOrNull()
+            error("Notion updatePage failed: HTTP ${resp.status.value} ${err?.code ?: ""} ${err?.message ?: ""}".trim())
         }
 
         return resp.body()
