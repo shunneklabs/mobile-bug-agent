@@ -16,15 +16,6 @@ import java.io.File
 
 /**
  * Reads and processes crash files written during previous sessions.
- *
- * MVP behavior (SDK-only + Notion):
- * - run on next launch (or scheduled background work)
- * - process crash JSON files under filesDir/mba-crashes
- * - analyze via [CrashAnalysisAgent]
- * - persist via [CrashStore] and create tickets via [TicketBackend]
- *
- * NOTE: Notion tokens/db-ids are app-owned secrets.
- * The host app must construct and pass in CrashStore/TicketBackend instances.
  */
 internal object PendingCrashProcessor {
 
@@ -43,24 +34,42 @@ internal object PendingCrashProcessor {
         ticketBackend: TicketBackend,
     ) {
         scope.launch {
-            val crashDir = context.filesDir.resolve("mba-crashes")
-            if (!crashDir.exists()) return@launch
+            processInternal(context, config, crashStore, ticketBackend)
+        }
+    }
 
-            val agent = CrashAnalysisAgent(
-                piiSanitizer = config.piiSanitizer,
-                dedupCache = LocalDedupCache(
-                    maxSize = config.agentConfig.maxDedupCacheSize,
-                    ttl = config.agentConfig.localDedupWindow,
-                ),
-            )
+    /**
+     * Internal suspendable entry point used by WorkManager.
+     */
+    suspend fun processInternal(
+        context: Context,
+        config: MBAConfig,
+        crashStore: CrashStore,
+        ticketBackend: TicketBackend,
+    ) {
+        val crashDir = context.filesDir.resolve("mba-crashes")
+        if (!crashDir.exists()) return
 
-            crashDir.listFiles()
-                ?.filter { it.isFile && it.name.endsWith(".json") }
-                ?.take(config.agentConfig.maxCrashesPerBatch)
-                ?.forEach { file ->
+        val badDir = crashDir.resolve("bad")
+        badDir.mkdirs()
+
+        val agent = CrashAnalysisAgent(
+            piiSanitizer = config.piiSanitizer,
+            dedupCache = LocalDedupCache(
+                maxSize = config.agentConfig.maxDedupCacheSize,
+                ttl = config.agentConfig.localDedupWindow,
+            ),
+        )
+
+        crashDir.listFiles()
+            ?.filter { it.isFile && it.name.endsWith(".json") }
+            ?.sortedBy { it.lastModified() }
+            ?.take(config.agentConfig.maxCrashesPerBatch)
+            ?.forEach { file ->
+                runCatching {
                     processOne(file, agent, crashStore, ticketBackend)
                 }
-        }
+            }
     }
 
     private suspend fun processOne(
@@ -71,7 +80,13 @@ internal object PendingCrashProcessor {
     ) {
         val raw: RawCrashReport = runCatching {
             json.decodeFromString(RawCrashReport.serializer(), file.readText())
-        }.getOrNull() ?: return
+        }.getOrElse {
+            // Corrupt JSON: move aside so we don't loop forever.
+            val badDir = file.parentFile?.resolve("bad") ?: return
+            badDir.mkdirs()
+            file.renameTo(badDir.resolve(file.name))
+            return
+        }
 
         val result = agent.process(raw)
 
@@ -83,14 +98,14 @@ internal object PendingCrashProcessor {
                 val ticket = ticketBackend.createTicket(result.report)
                 crashStore.linkTicket(group.id, ticket.ticketId)
 
-                file.delete() // success
+                file.delete() // delete only after successful Notion sync
             }
 
             is dev.sunnat629.mba.agent.CrashAnalysisResult.Duplicate -> {
                 val group = crashStore.findByFingerprint(result.fingerprint)
                 if (group != null) {
                     crashStore.incrementCount(group.id, raw.device)
-                    file.delete() // success
+                    file.delete()
                 }
             }
         }

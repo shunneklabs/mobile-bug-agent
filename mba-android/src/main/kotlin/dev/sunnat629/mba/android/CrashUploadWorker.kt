@@ -5,16 +5,33 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 
 /**
- * WorkManager worker that uploads processed crash reports.
- *
- * MVP scaffold; actual network/store integration will be wired after Notion/GitHub backends land.
+ * WorkManager worker that processes and syncs pending crash reports.
  */
 internal class CrashUploadWorker(
     appContext: Context,
     params: WorkerParameters,
 ) : CoroutineWorker(appContext, params) {
+
     override suspend fun doWork(): Result {
-        // TODO: fetch pending processed reports and upload.
-        return Result.success()
+        val config = MBAAndroidRuntime.config
+        val crashStore = MBAAndroidRuntime.crashStore
+        val ticketBackend = MBAAndroidRuntime.ticketBackend
+
+        if (config == null || crashStore == null || ticketBackend == null) {
+            // Not configured yet; retry later.
+            return Result.retry()
+        }
+
+        return try {
+            PendingCrashProcessor.processInternal(
+                context = applicationContext,
+                config = config,
+                crashStore = crashStore,
+                ticketBackend = ticketBackend,
+            )
+            Result.success()
+        } catch (_: Throwable) {
+            Result.retry()
+        }
     }
 }

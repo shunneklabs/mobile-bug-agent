@@ -74,7 +74,7 @@ class NotionCrashStore(
         report.crashLine?.let { props[propCrashLine] = NotionProperty.number(it) }
         props[propAppVersion] = NotionProperty.richText(report.raw.appVersion)
 
-        // MVP: affected devices/os versions stored as rich text (to avoid multi-select option management)
+        // MVP: stored as newline-separated text so we don't need to manage multi-select options.
         props[propAffectedDevices] = NotionProperty.richText(deviceKey(report.raw.device))
         props[propOsVersions] = NotionProperty.richText(report.raw.device.osVersion)
 
@@ -100,8 +100,8 @@ class NotionCrashStore(
     }
 
     override suspend fun incrementCount(groupId: String, device: DeviceContext) {
-        // Read current page to get the current number.
         val page = notion.retrievePage(groupId)
+
         val currentCount = page.properties[propOccurrenceCount]
             ?.let(NotionProperty::readNumber)
             ?.toInt()
@@ -109,29 +109,35 @@ class NotionCrashStore(
 
         val newCount = currentCount + 1
 
+        // Merge newline-separated device/os lists.
+        val existingDevices = page.properties[propAffectedDevices]?.let(NotionProperty::readPlainText).orEmpty()
+        val existingOs = page.properties[propOsVersions]?.let(NotionProperty::readPlainText).orEmpty()
+
+        val mergedDevices = mergeLines(existingDevices, deviceKey(device))
+        val mergedOs = mergeLines(existingOs, device.osVersion)
+
         val props = linkedMapOf<String, JsonElement>()
         props[propOccurrenceCount] = NotionProperty.number(newCount)
+        props[propAffectedDevices] = NotionProperty.richText(mergedDevices)
+        props[propOsVersions] = NotionProperty.richText(mergedOs)
 
-        // Best-effort device/os updates (still stored as text for MVP).
-        props[propAffectedDevices] = NotionProperty.richText(deviceKey(device))
-        props[propOsVersions] = NotionProperty.richText(device.osVersion)
-
-        notion.updatePage(
-            pageId = groupId,
-            request = NotionUpdatePageRequest(properties = props)
-        )
+        notion.updatePage(groupId, NotionUpdatePageRequest(properties = props))
     }
 
     override suspend fun linkTicket(groupId: String, ticketId: String) {
         val props = linkedMapOf<String, JsonElement>()
-        // Proper relation (requires propBugTicket to be a Relation property).
+        // Relation property (Crash Reports DB must have propBugTicket as Relation)
         props[propBugTicket] = NotionProperty.relation(ticketId)
-
-        notion.updatePage(
-            pageId = groupId,
-            request = NotionUpdatePageRequest(properties = props)
-        )
+        notion.updatePage(groupId, NotionUpdatePageRequest(properties = props))
     }
 
     private fun deviceKey(d: DeviceContext): String = "${d.manufacturer} ${d.model}".trim()
+
+    private fun mergeLines(existing: String, newValue: String): String {
+        val set = linkedSetOf<String>()
+        existing.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.forEach(set::add)
+        val nv = newValue.trim()
+        if (nv.isNotEmpty()) set.add(nv)
+        return set.joinToString("\n")
+    }
 }
