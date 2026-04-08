@@ -1,14 +1,24 @@
 package dev.sunnat629.mba.core
 
-import dev.sunnat629.mba.core.model.RawCrashReport
 import dev.sunnat629.mba.core.model.DeviceContext
+import dev.sunnat629.mba.core.model.RawCrashReport
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.io.PrintWriter
+import java.io.StringWriter
 import java.util.UUID
 import kotlin.time.Clock
 
 internal actual object CrashWriter {
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+        explicitNulls = false
+        prettyPrint = false
+    }
+
     actual fun writeToDisk(
         crashDir: String,
         throwable: Throwable,
@@ -19,40 +29,48 @@ internal actual object CrashWriter {
         breadcrumbs: List<String>,
         metadata: Map<String, String>,
     ) {
-        val runtime = Runtime.getRuntime()
-        val totalMemory = runtime.totalMemory() / (1024 * 1024)
-        val freeMemory = runtime.freeMemory() / (1024 * 1024)
-        
-        val report = RawCrashReport(
-            id = UUID.randomUUID().toString(),
-            timestamp = Clock.System.now(),
-            exceptionType = throwable::class.simpleName ?: "Unknown",
-            message = throwable.message,
-            stackTrace = throwable.stackTraceToString(),
-            threadName = threadName,
-            isFatal = isFatal,
-            device = DeviceContext(
-                manufacturer = System.getProperty("os.name") ?: "JVM",
-                model = System.getProperty("os.arch") ?: "Unknown",
-                osVersion = System.getProperty("os.version") ?: "Unknown",
-                sdkInt = 0, // Not applicable for JVM
-                locale = java.util.Locale.getDefault().toString(),
-                totalMemoryMb = totalMemory,
-                availableMemoryMb = freeMemory
-            ),
-            appVersion = "unknown",
-            buildType = "unknown",
-            currentScreen = currentScreen,
-            breadcrumbs = breadcrumbs,
-            customMetadata = metadata + (coroutineContext?.let { mapOf("coroutine" to it) } ?: emptyMap())
-        )
+        runCatching {
+            val dir = File(crashDir)
+            dir.mkdirs()
 
-        val json = Json.encodeToString(report)
-        val dir = File(crashDir)
-        if (!dir.exists()) dir.mkdirs()
-        
-        val filename = "crash_${report.timestamp.toEpochMilliseconds()}_${report.id.take(8)}.json"
-        val file = File(dir, filename)
-        file.writeText(json)
+            val sw = StringWriter()
+            throwable.printStackTrace(PrintWriter(sw))
+            val stack = sw.toString()
+
+            val device = DeviceContext(
+                manufacturer = System.getProperty("os.name") ?: "jvm",
+                model = System.getProperty("os.arch") ?: "unknown",
+                marketingName = null,
+                osVersion = System.getProperty("os.version") ?: "unknown",
+                sdkInt = -1,
+                locale = java.util.Locale.getDefault().toString(),
+                totalMemoryMb = Runtime.getRuntime().maxMemory() / (1024 * 1024),
+                availableMemoryMb = Runtime.getRuntime().freeMemory() / (1024 * 1024),
+                isLowMemory = false,
+                screenDensity = -1f,
+                orientation = "unknown",
+            )
+
+            val report = RawCrashReport(
+                id = UUID.randomUUID().toString(),
+                timestamp = Clock.System.now(),
+                exceptionType = throwable::class.qualifiedName ?: throwable::class.simpleName ?: "Throwable",
+                message = throwable.message,
+                stackTrace = stack,
+                threadName = threadName,
+                isFatal = isFatal,
+                device = device,
+                appVersion = metadata["jvm.app_version"] ?: "unknown",
+                buildType = metadata["jvm.build_type"] ?: "unknown",
+                currentScreen = currentScreen,
+                breadcrumbs = breadcrumbs,
+                customMetadata = metadata + mapOf(
+                    "mba.coroutine_context" to (coroutineContext ?: "")
+                )
+            )
+
+            val filename = "mba_crash_${report.id}_${report.timestamp.toString().replace(':', '-')}.json"
+            File(dir, filename).writeText(json.encodeToString(report))
+        }
     }
 }

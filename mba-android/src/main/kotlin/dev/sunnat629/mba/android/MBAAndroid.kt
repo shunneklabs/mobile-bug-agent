@@ -11,17 +11,23 @@ object MBAAndroid {
     private var isInstalled = false
 
     /**
-     * Installs the UncaughtExceptionHandler on the main thread for early crash capture.
+     * Installs the UncaughtExceptionHandler on the process.
+     *
+     * Uses context.filesDir/mba-crashes as the default crash directory.
      */
     fun install(context: Context) {
         if (isInstalled) return
         isInstalled = true
 
+        val appContext = context.applicationContext
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
-        val mbaHandler = MBACrashHandler(context.applicationContext, defaultHandler)
+        val mbaHandler = MBACrashHandler(appContext, defaultHandler)
         Thread.setDefaultUncaughtExceptionHandler(mbaHandler)
 
-        // Initialize core SDK as well
-        MBA.install()
+        val crashDir = appContext.filesDir.resolve("mba-crashes").absolutePath
+        MBA.install(crashDir)
+
+        // Best-effort: process crashes from previous run.
+        runCatching { PendingCrashProcessor.process(appContext) }
     }
 }
