@@ -5,8 +5,8 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class DuplicateCheckResult(
     val isDuplicate: Boolean,
-    val matchType: String? = null,
+    val matchType: String? = null, // "exact" | "semantic" | null
     val matchedCrashId: String? = null,
-    val confidence: Float = 0.0f,
-    val reasoning: String = "",
+    val confidence: Float,
+    val reasoning: String,
 )

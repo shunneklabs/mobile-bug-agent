@@ -19,5 +19,5 @@ data class StackFrame(
     val file: String,
     val line: Int? = null,
     val method: String,
-    val isApp: Boolean = false,
+    val isApp: Boolean,
 )

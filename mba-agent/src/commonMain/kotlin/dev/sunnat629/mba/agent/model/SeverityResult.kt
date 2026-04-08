@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class SeverityResult(
-    val severity: Severity = Severity.MEDIUM,
-    val confidence: Float = 0.5f,
-    val reasoning: String = "",
+    val severity: Severity,
+    val confidence: Float,
+    val reasoning: String,
 )
