@@ -22,9 +22,7 @@ import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 
-/**
- * Minimal Notion HTTP client wrapper.
- */
+/** Minimal Notion HTTP client wrapper. */
 class NotionClient(
     private val config: NotionConfig,
     private val http: HttpClient = defaultHttpClient(),
@@ -80,7 +78,9 @@ class NotionClient(
     }
 
     suspend fun queryDatabase(databaseId: String, request: NotionQueryDatabaseRequest): NotionQueryDatabaseResponse {
-        val resp = http.post("${config.baseUrl}/databases/$databaseId/query") {
+        val normalized = NotionConfig.normalizeNotionId(databaseId)
+
+        val resp = http.post("${config.baseUrl}/databases/$normalized/query") {
             header("Authorization", "Bearer ${config.token}")
             header("Notion-Version", config.notionVersion)
             contentType(ContentType.Application.Json)
