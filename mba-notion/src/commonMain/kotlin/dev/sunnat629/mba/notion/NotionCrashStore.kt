@@ -9,6 +9,7 @@ import dev.sunnat629.mba.notion.model.NotionProperty
 import dev.sunnat629.mba.notion.model.NotionQueryDatabaseRequest
 import dev.sunnat629.mba.notion.model.NotionUpdatePageRequest
 import kotlinx.serialization.json.JsonElement
+import kotlin.time.Clock
 
 /**
  * Notion implementation of CrashStore.
@@ -47,15 +48,15 @@ class NotionCrashStore(
 
         val page = resp.results.firstOrNull() ?: return null
 
-        // MVP: we only have page id + url from query response model.
         // Return minimal CrashGroup to allow incrementCount/linkTicket by id.
+        val now = Clock.System.now()
         return CrashGroup(
             id = page.id,
             fingerprint = fingerprint,
             title = "",
             severity = dev.sunnat629.mba.core.model.Severity.MEDIUM,
-            firstSeen = kotlin.time.Clock.System.now(),
-            lastSeen = kotlin.time.Clock.System.now(),
+            firstSeen = now,
+            lastSeen = now,
         )
     }
 
@@ -99,9 +100,19 @@ class NotionCrashStore(
     }
 
     override suspend fun incrementCount(groupId: String, device: DeviceContext) {
-        // MVP: we cannot read current count with current minimal query models.
-        // We still update device/os fields best-effort and rely on Notion formulas/rollups later.
+        // Read current page to get the current number.
+        val page = notion.retrievePage(groupId)
+        val currentCount = page.properties[propOccurrenceCount]
+            ?.let(NotionProperty::readNumber)
+            ?.toInt()
+            ?: 1
+
+        val newCount = currentCount + 1
+
         val props = linkedMapOf<String, JsonElement>()
+        props[propOccurrenceCount] = NotionProperty.number(newCount)
+
+        // Best-effort device/os updates (still stored as text for MVP).
         props[propAffectedDevices] = NotionProperty.richText(deviceKey(device))
         props[propOsVersions] = NotionProperty.richText(device.osVersion)
 
@@ -112,10 +123,9 @@ class NotionCrashStore(
     }
 
     override suspend fun linkTicket(groupId: String, ticketId: String) {
-        // MVP: relation property requires Notion relation JSON shape.
-        // For now, store ticketId in rich text to avoid strict schema dependency.
         val props = linkedMapOf<String, JsonElement>()
-        props[propBugTicket] = NotionProperty.richText(ticketId)
+        // Proper relation (requires propBugTicket to be a Relation property).
+        props[propBugTicket] = NotionProperty.relation(ticketId)
 
         notion.updatePage(
             pageId = groupId,

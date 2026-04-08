@@ -3,6 +3,7 @@ package dev.sunnat629.mba.notion.model
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -16,7 +17,7 @@ object NotionProperty {
     fun title(text: String): JsonElement = buildJsonObject {
         put(
             "title",
-            kotlinx.serialization.json.buildJsonArray {
+            buildJsonArray {
                 add(
                     buildJsonObject {
                         put("type", "text")
@@ -35,7 +36,7 @@ object NotionProperty {
     fun richText(text: String): JsonElement = buildJsonObject {
         put(
             "rich_text",
-            kotlinx.serialization.json.buildJsonArray {
+            buildJsonArray {
                 add(
                     buildJsonObject {
                         put("type", "text")
@@ -61,6 +62,24 @@ object NotionProperty {
 
     fun checkbox(value: Boolean): JsonElement = buildJsonObject {
         put("checkbox", value)
+    }
+
+    /** Relation to another page (page id). */
+    fun relation(vararg pageIds: String): JsonElement = buildJsonObject {
+        put(
+            "relation",
+            buildJsonArray {
+                pageIds.forEach { id ->
+                    add(buildJsonObject { put("id", id) })
+                }
+            }
+        )
+    }
+
+    /** Extract a number property value from a retrieved page JSON property object. */
+    fun readNumber(property: JsonElement): Double? {
+        val obj = property as? kotlinx.serialization.json.JsonObject ?: return null
+        return (obj["number"] as? kotlinx.serialization.json.JsonPrimitive)?.doubleOrNull
     }
 }
 
