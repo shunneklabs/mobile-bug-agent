@@ -7,10 +7,6 @@ import dev.sunnat629.mba.core.model.RawCrashReport
 import dev.sunnat629.mba.core.store.CrashStore
 import dev.sunnat629.mba.core.store.LocalDedupCache
 import dev.sunnat629.mba.core.ticket.TicketBackend
-import dev.sunnat629.mba.notion.NotionClient
-import dev.sunnat629.mba.notion.NotionConfig
-import dev.sunnat629.mba.notion.NotionCrashStore
-import dev.sunnat629.mba.notion.NotionTicketBackend
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -21,10 +17,14 @@ import java.io.File
 /**
  * Reads and processes crash files written during previous sessions.
  *
- * MVP behavior:
- * - runs on next launch
- * - processes all crash JSON files under filesDir/mba-crashes
- * - creates/updates Notion crash reports + bug tickets
+ * MVP behavior (SDK-only + Notion):
+ * - run on next launch (or scheduled background work)
+ * - process crash JSON files under filesDir/mba-crashes
+ * - analyze via [CrashAnalysisAgent]
+ * - persist via [CrashStore] and create tickets via [TicketBackend]
+ *
+ * NOTE: Notion tokens/db-ids are app-owned secrets.
+ * The host app must construct and pass in CrashStore/TicketBackend instances.
  */
 internal object PendingCrashProcessor {
 
@@ -36,27 +36,15 @@ internal object PendingCrashProcessor {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /**
-     * Process pending crashes.
-     *
-     * This requires MBAConfig in SDK-only mode so we can access Notion token + db id.
-     */
-    fun process(context: Context, config: MBAConfig) {
+    fun process(
+        context: Context,
+        config: MBAConfig,
+        crashStore: CrashStore,
+        ticketBackend: TicketBackend,
+    ) {
         scope.launch {
             val crashDir = context.filesDir.resolve("mba-crashes")
             if (!crashDir.exists()) return@launch
-
-            val mode = config.mode
-            if (mode !is dev.sunnat629.mba.core.config.MBAMode.SdkOnly) return@launch
-
-            val notionConfig = NotionConfig(
-                token = mode.ticketBackendToken,
-                databaseId = mode.crashDatabaseId,
-            )
-
-            val notion = NotionClient(notionConfig)
-            val crashStore: CrashStore = NotionCrashStore(notion, notionConfig)
-            val ticketBackend: TicketBackend = NotionTicketBackend(notion, notionConfig)
 
             val agent = CrashAnalysisAgent(
                 piiSanitizer = config.piiSanitizer,
@@ -81,8 +69,9 @@ internal object PendingCrashProcessor {
         crashStore: CrashStore,
         ticketBackend: TicketBackend,
     ) {
-        val raw = runCatching { json.decodeFromString(RawCrashReport.serializer(), file.readText()) }.getOrNull()
-            ?: return
+        val raw: RawCrashReport = runCatching {
+            json.decodeFromString(RawCrashReport.serializer(), file.readText())
+        }.getOrNull() ?: return
 
         val result = agent.process(raw)
 
@@ -94,15 +83,14 @@ internal object PendingCrashProcessor {
                 val ticket = ticketBackend.createTicket(result.report)
                 crashStore.linkTicket(group.id, ticket.ticketId)
 
-                // Success → delete crash file.
-                file.delete()
+                file.delete() // success
             }
 
             is dev.sunnat629.mba.agent.CrashAnalysisResult.Duplicate -> {
                 val group = crashStore.findByFingerprint(result.fingerprint)
                 if (group != null) {
                     crashStore.incrementCount(group.id, raw.device)
-                    file.delete()
+                    file.delete() // success
                 }
             }
         }

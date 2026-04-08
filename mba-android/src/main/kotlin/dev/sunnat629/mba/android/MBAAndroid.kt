@@ -27,7 +27,7 @@ object MBAAndroid {
         val crashDir = appContext.filesDir.resolve("mba-crashes").absolutePath
         MBA.install(crashDir)
 
-        // Best-effort: process crashes from previous run.
-        runCatching { PendingCrashProcessor.process(appContext) }
+        // Pending crash processing requires app-owned secrets (Notion token/db ids)
+        // and is triggered after MBA.configure(...) in the host app.
     }
 }
