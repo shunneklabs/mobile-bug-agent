@@ -1,33 +1,40 @@
 package dev.sunnat629.mba.core
 
 /**
- * Simple in-memory breadcrumb tracker used for crash context.
- *
- * Notes:
- * - Must be safe to call from any thread.
- * - Avoid heavy allocations.
- * - This is intentionally platform-agnostic and kept in mba-core so common code can use it.
+ * Thread-safe circular buffer for user action breadcrumbs.
+ * Zero allocation on add (reuses array slots).
  */
-internal class BreadcrumbTracker(
-    private val maxSize: Int = 50,
+class BreadcrumbTracker(
+    private val maxSize: Int = 20,
 ) {
-    private val lock = Any()
-    private val buffer: ArrayDeque<String> = ArrayDeque(maxSize)
+    private val buffer = arrayOfNulls<String>(maxSize)
+    private var head = 0
+    private var count = 0
 
+    @Synchronized
     fun add(message: String) {
-        val m = message.trim()
-        if (m.isEmpty()) return
-        synchronized(lock) {
-            if (buffer.size == maxSize) {
-                buffer.removeFirst()
-            }
-            buffer.addLast(m)
-        }
+        buffer[head] = message
+        head = (head + 1) % maxSize
+        if (count < maxSize) count++
     }
 
-    fun snapshot(): List<String> = synchronized(lock) { buffer.toList() }
+    /** Returns breadcrumbs in chronological order. Thread-safe snapshot. */
+    @Synchronized
+    fun snapshot(): List<String> {
+        if (count == 0) return emptyList()
+        val result = ArrayList<String>(count)
+        val start = if (count < maxSize) 0 else head
+        for (i in 0 until count) {
+            val idx = (start + i) % maxSize
+            buffer[idx]?.let { result.add(it) }
+        }
+        return result
+    }
 
+    @Synchronized
     fun clear() {
-        synchronized(lock) { buffer.clear() }
+        buffer.fill(null)
+        head = 0
+        count = 0
     }
 }
