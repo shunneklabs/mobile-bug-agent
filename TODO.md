@@ -12,39 +12,42 @@ Goal: **Crash the sample app → reopen → Notion Crash Report + Bug Ticket cre
 - KMP multi-module repo scaffold (`mba-core`, `mba-android`, `mba-agent`, `mba-notion`, `mba-server`, `mba-sample`)
 - Crash capture plumbing (Android/JVM CrashWriter actuals + crash handler wiring)
 - `mba-agent` models + prompts + analysis pipeline scaffold (Gemini-ready)
-- `mba-notion` basics: `NotionClient`, models, `NotionTicketBackend` (creates a ticket page)
-- `mba-server` MVP `/report` endpoint (optional; not required for SDK-only MVP)
+- `mba-notion`:
+  - `NotionClient` (create + query + **updatePage**)
+  - Notion models (create/query/update)
+  - `NotionTicketBackend` (creates a ticket page)
+  - **`NotionCrashStore` (CrashStore impl) — MVP**
+- Android next-launch processing:
+  - **`PendingCrashProcessor` implemented** (disk → agent → CrashStore + TicketBackend)
+  - Architecture: app injects CrashStore/TicketBackend (app owns secrets)
 - `PHASES.md` created (roadmap/phase plan)
 
 ---
 
 ## 🔴 MVP blockers (must do next)
 
-### 1) Notion Crash Store (Crash Reports DB)
-Implement `mba-notion/NotionCrashStore.kt` as `CrashStore`:
-- [ ] `findByFingerprint(fingerprint)` → query Crash Reports DB
-- [ ] `insertCrash(report)` → create Crash Report row
-- [ ] `incrementCount(groupId, device)` → occurrence count + device/os sets + last seen
-- [ ] `linkTicket(groupId, ticketId)` → relation Crash Report ↔ Bug Ticket
+### 1) Notion Crash Store correctness (dedup + counters + relations)
+Current status: implemented, but needs finishing touches for a *real* Notion schema.
 
-Also required in `NotionClient`:
-- [ ] `updatePage(pageId, properties)` (PATCH `/v1/pages/{page_id}`)
+- [ ] Properly support **Occurrence Count** increment
+  - Add a Notion API read path to fetch current property values OR store count locally and push updates
+- [ ] Properly support **Bug Ticket relation** property
+  - Use Notion relation JSON shape (instead of storing ticketId as rich text)
+- [ ] Device/OS matrix
+  - Currently written as rich text to avoid multi-select option management
+  - Decide: keep as text (MVP) or manage multi-select options
 
-### 2) Android next-launch processing
-Implement real logic in `mba-android/PendingCrashProcessor`:
-- [ ] List pending crash files under `filesDir/mba-crashes`
-- [ ] Deserialize `RawCrashReport`
-- [ ] Run `CrashAnalysisAgent`
-- [ ] Dedup + persistence:
-  - [ ] new crash → create Crash Report + create Bug Ticket + link
-  - [ ] duplicate → update Crash Report (increment count + device matrix)
-- [ ] Delete/mark processed crash file only after successful Notion sync
+### 2) Android processing lifecycle + reliability
+- [ ] Call `PendingCrashProcessor.process(...)` after `MBA.configure(...)` in the host app (sample app will demonstrate)
+- [ ] Ensure crash-file deletion is safe:
+  - If Notion sync fails, keep file for retry
+  - If file is corrupted, move aside (do not loop forever)
+- [ ] Rate limiting / retries for Notion API (3 req/sec)
 
-### 3) WorkManager reliability
-Make `CrashUploadWorker` actually do “process + sync” with retries:
+### 3) WorkManager reliability (recommended for MVP)
+- [ ] Wire `CrashUploadWorker` to run `PendingCrashProcessor` in background
 - [ ] exponential backoff
 - [ ] offline handling
-- [ ] rate limit friendly Notion calls
 
 ---
 
@@ -56,8 +59,10 @@ Make `CrashUploadWorker` actually do “process + sync” with retries:
 - [ ] Add test fixtures: 10+ real stack traces for parser/classifier/summary
 
 ### Notion schema alignment
-- [ ] Confirm/standardize Notion property names used by backends (Crash Reports DB + Bug Tickets DB)
-- [ ] Add Notion database template export instructions (README)
+- [ ] Confirm/standardize Notion property names used by backends:
+  - Crash Reports DB: Fingerprint, Severity, Occurrence Count, Stack Trace, etc.
+  - Bug Tickets DB: Title, Severity, Description, Steps, etc.
+- [ ] Provide duplicatable Notion DB templates + setup guide
 
 ### PII + security
 - [ ] Expand PII scrubber patterns (emails, tokens, phone, IPs)
