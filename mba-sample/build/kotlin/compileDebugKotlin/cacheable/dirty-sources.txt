@@ -1,0 +1,3 @@
+/Users/mohi/AndroidStudioProjects/MobileBugAgent/mba-sample/src/main/kotlin/dev/sunnat629/mba/sample/SampleApplication.kt
+/Users/mohi/AndroidStudioProjects/MobileBugAgent/mba-sample/src/main/kotlin/dev/sunnat629/mba/sample/MainActivity.kt
+/Users/mohi/AndroidStudioProjects/MobileBugAgent/mba-sample/src/main/kotlin/dev/sunnat629/mba/sample/CrashScenarios.kt

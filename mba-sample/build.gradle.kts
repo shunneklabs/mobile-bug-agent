@@ -60,6 +60,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":mba-core"))
     implementation(project(":mba-android"))
     implementation(project(":mba-notion"))
 

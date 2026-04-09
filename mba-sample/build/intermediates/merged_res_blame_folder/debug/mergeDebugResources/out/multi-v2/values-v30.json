@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "dev.sunnat629.mba.sample.mba-sample-mergeDebugResources-48:/values-v30/values-v30.xml",
+            "map": [
+                {
+                    "source": "/Users/mohi/.gradle/caches/9.3.1/transforms/101725c0cc2f76aadf9d9191bd042f57/transformed/jetified-material3/res/values-v30/values-v30.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "72",
+                        "endOffsets": "123"
+                    }
+                }
+            ]
+        }
+    ]
+}
