@@ -1,1 +1,3 @@
 dev.sunnat629.mba.sample
+string app_name
+style Theme_MobileBugAgent
