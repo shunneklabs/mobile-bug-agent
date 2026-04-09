@@ -13,7 +13,7 @@ import dev.sunnat629.mba.notion.model.NotionProperty
  * Assumptions:
  * - The target database has properties with the following names:
  *   - Name (title)
- *   - Severity (select) OR Severity (rich text) depending on your DB
+ *   - Severity (select)
  *   - Fingerprint (rich text)
  *   - Description (rich text)
  */
@@ -38,24 +38,24 @@ class NotionTicketBackend(
 
         val resp = notion.createPage(
             NotionCreatePageRequest(
-                parent = NotionCreatePageRequest.Parent(databaseId = config.databaseId),
+                parent = NotionCreatePageRequest.Parent(databaseId = config.normalizedDatabaseId()),
                 properties = props,
             )
         )
 
         return TicketResult(
             ticketId = resp.id,
+            backendName = name,
             url = resp.url,
-            backend = name,
         )
     }
 
     override suspend fun updateTicket(ticketId: String, update: TicketUpdate): TicketResult {
-        // MVP: not implemented (Notion update endpoint wiring can be added when DB schema is finalized)
+        // MVP: not implemented
         return TicketResult(
             ticketId = ticketId,
+            backendName = name,
             url = null,
-            backend = name,
         )
     }
 }
