@@ -1,0 +1,6 @@
+dev.sunnat629.mba.sample.mba-sample-updated_navigation_xml-0 /Users/mohi/AndroidStudioProjects/MobileBugAgent/mba-sample/build/generated/updated_navigation_xml/debug
+dev.sunnat629.mba.sample.mba-sample-packageDebugResources-1 /Users/mohi/AndroidStudioProjects/MobileBugAgent/mba-sample/build/intermediates/incremental/debug/packageDebugResources/merged.dir
+dev.sunnat629.mba.sample.mba-sample-packageDebugResources-2 /Users/mohi/AndroidStudioProjects/MobileBugAgent/mba-sample/build/intermediates/incremental/debug/packageDebugResources/stripped.dir
+dev.sunnat629.mba.sample.mba-sample-debug-3 /Users/mohi/AndroidStudioProjects/MobileBugAgent/mba-sample/build/intermediates/merged_res/debug/mergeDebugResources
+dev.sunnat629.mba.sample.mba-sample-debug-4 /Users/mohi/AndroidStudioProjects/MobileBugAgent/mba-sample/src/debug/res
+dev.sunnat629.mba.sample.mba-sample-main-5 /Users/mohi/AndroidStudioProjects/MobileBugAgent/mba-sample/src/main/res

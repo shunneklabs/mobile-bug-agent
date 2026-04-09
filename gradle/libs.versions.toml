@@ -16,9 +16,13 @@ androidx-activity-compose = "1.13.0"
 android-gradle-plugin = "9.1.0"
 android-compileSdk = "36"
 android-minSdk = "26"
+koog = "0.7.3"                   # latest Koog release
 android-targetSdk = "36"
 
 [libraries]
+
+koog-agents = { module = "ai.koog:koog-agents", version.ref = "koog" }
+
 # Ktor Client
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }

@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="mba-core">
+    <output-path>$PROJECT_DIR$/mba-core/build/libs</output-path>
+    <root id="archive" name="mba-core.jar">
+      <element id="module-output" name="mobile-bug-agent.mba-core.androidMain" />
+    </root>
+  </artifact>
+</component>
