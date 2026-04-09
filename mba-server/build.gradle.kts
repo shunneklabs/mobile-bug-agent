@@ -13,7 +13,8 @@ dependencies {
     implementation(libs.ktor.server.netty)
     implementation(libs.ktor.server.content.negotiation)
     implementation(libs.ktor.serialization.json)
-    
-    // For logging
-    implementation("ch.qos.logback:logback-classic:1.5.6")
+    implementation(libs.logback.classic)
+
+    testImplementation(kotlin("test"))
+    testImplementation(libs.kotlinx.coroutines.test)
 }
