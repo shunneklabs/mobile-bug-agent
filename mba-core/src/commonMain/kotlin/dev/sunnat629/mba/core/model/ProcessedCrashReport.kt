@@ -4,11 +4,13 @@ import kotlin.time.Instant
 import kotlinx.serialization.Serializable
 
 /**
- * Output of the on-device Koog agent. Ready for ticket creation.
- * Contains the AI-generated title, description, severity, and root cause hypothesis.
+ * Output of the AI crash analysis pipeline. Ready for ticket creation.
+ *
+ * Contains AI-generated title, description, severity, and root cause hypothesis.
+ * Consumed by [TicketBackend] implementations.
  */
 @Serializable
-data class ProcessedCrashReport(
+public data class ProcessedCrashReport(
     val raw: RawCrashReport,
     val fingerprint: String,
     val severity: Severity,
@@ -25,11 +27,11 @@ data class ProcessedCrashReport(
 )
 
 /**
- * Returned when local dedup cache detects a known crash fingerprint.
- * No LLM call needed — just update the count.
+ * Returned when the local dedup cache detects a known crash fingerprint.
+ * No LLM call needed — just update the count on the existing ticket.
  */
 @Serializable
-data class DuplicateCrashReport(
+public data class DuplicateCrashReport(
     val fingerprint: String,
     val newDevice: DeviceContext,
     val timestamp: Instant,

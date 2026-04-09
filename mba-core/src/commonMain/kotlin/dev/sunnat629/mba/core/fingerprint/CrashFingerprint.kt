@@ -5,17 +5,23 @@ import dev.sunnat629.mba.core.model.RawCrashReport
 
 /**
  * Deterministic crash fingerprinting.
+ *
  * Same crash on different devices = same fingerprint.
- * Used for dedup both locally and in the crash store.
+ * Used for dedup both locally (on-device cache) and in the crash store.
+ *
+ * **Internal** — external devs never call this directly.
  */
-object CrashFingerprint {
+internal object CrashFingerprint {
 
     private const val DEFAULT_TOP_FRAMES = 5
 
+    // Pre-compiled regexes — avoid recompilation on every call.
+    private val LINE_NUMBER_REGEX = Regex(":\\d+\\)")
+
     /**
      * Compute SHA-256 hash from exception type + top N stack frames.
-     * Strips line numbers from consideration if [ignoreLineNumbers] is true
-     * (useful when code changes shift line numbers but the crash is the same).
+     *
+     * @param ignoreLineNumbers Strip line numbers so code-shift doesn't split groups.
      */
     fun compute(
         exceptionType: String,
@@ -30,8 +36,7 @@ object CrashFingerprint {
             .take(topFrames)
             .map { frame ->
                 if (ignoreLineNumbers) {
-                    // "at com.app.Foo.bar(Foo.kt:42)" → "at com.app.Foo.bar(Foo.kt)"
-                    frame.replace(Regex(":\\d+\\)"), ")")
+                    frame.replace(LINE_NUMBER_REGEX, ")")
                 } else {
                     frame
                 }
@@ -42,9 +47,7 @@ object CrashFingerprint {
         return sha256Hex(input)
     }
 
-    /**
-     * Compute fingerprint directly from a RawCrashReport.
-     */
+    /** Compute fingerprint directly from a [RawCrashReport]. */
     fun compute(report: RawCrashReport): String =
         compute(
             exceptionType = report.exceptionType,

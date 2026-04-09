@@ -7,19 +7,21 @@ import kotlin.time.Duration.Companion.hours
 
 /**
  * On-device LRU cache of crash fingerprints.
- * Prevents re-sending known crashes to the LLM.
+ * Prevents re-sending known crashes to the LLM (saves cost + latency).
  *
  * - Max [maxSize] entries (default 100)
- * - TTL of [ttl] (default 24 hours)
- * - Persisted to disk via [save]/[load] for survival across app restarts
+ * - TTL of [ttl] (default 24h) — expired entries are lazily evicted
+ * - Supports [snapshot]/[restore] for disk persistence across app restarts
  *
- * Thread-safety: synchronized on all public methods.
+ * **Internal** — external devs configure via [MBAConfig.Builder.agent].
+ *
+ * Thread-safety: @Synchronized on all public methods (JVM/Android only).
  */
-class LocalDedupCache(
+internal class LocalDedupCache(
     private val maxSize: Int = 100,
     private val ttl: Duration = 24.hours,
 ) {
-    // fingerprint -> last seen timestamp
+    // fingerprint → last seen timestamp. Access-ordered for LRU eviction.
     private val cache = LinkedHashMap<String, Instant>(maxSize, 0.75f, true)
 
     @Synchronized
@@ -39,7 +41,7 @@ class LocalDedupCache(
         }
     }
 
-    /** Update last-seen time for an existing entry (used when duplicate is detected). */
+    /** Update last-seen time for an existing entry (duplicate detected). */
     @Synchronized
     fun touch(fingerprint: String) {
         if (cache.containsKey(fingerprint)) {
@@ -54,7 +56,7 @@ class LocalDedupCache(
     }
 
     @Synchronized
-    fun clear() = cache.clear()
+    fun clear(): Unit = cache.clear()
 
     /** Export cache state for disk persistence. */
     @Synchronized
@@ -70,12 +72,13 @@ class LocalDedupCache(
 
     private fun evictExpired() {
         val now = Clock.System.now()
-        val toRemove = mutableListOf<String>()
-        cache.forEach { (fingerprint, lastSeen) ->
-            if ((now - lastSeen) > ttl) {
-                toRemove.add(fingerprint)
+        // Use iterator for safe removal during iteration
+        val iter = cache.entries.iterator()
+        while (iter.hasNext()) {
+            val entry = iter.next()
+            if ((now - entry.value) > ttl) {
+                iter.remove()
             }
         }
-        toRemove.forEach { cache.remove(it) }
     }
 }

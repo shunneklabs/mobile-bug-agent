@@ -5,49 +5,75 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
 
 /**
- * Public API for the MBA SDK. Thread-safe.
+ * Public entry point for the MBA SDK.
+ *
+ * **Minimal external API** — external devs only interact with:
+ * - [install] / [configure] / [init]
+ * - [setScreen] / [addBreadcrumb] / [logError]
+ * - [exceptionHandler] (attach to CoroutineScope)
  *
  * Two-phase initialization:
- *   1. install(crashDir) — sets crash handler (~2ms). Call early.
- *   2. configure(config) — AI + backend config. Any thread. DI-friendly.
+ *   1. [install] — sets crash handler (~2ms). Call early (Application.onCreate).
+ *   2. [configure] — AI + backend config. Any thread. DI-friendly.
  *
- * Or use init() for one-step convenience.
+ * Or use [init] for one-step convenience.
+ *
+ * Thread-safe. All mutable state is @Volatile or synchronized.
  */
-object MBA {
+public object MBA {
 
     @Volatile
     private var installed = false
+
     @Volatile
     private var configured = false
+
     private var config: MBAConfig? = null
 
     @Volatile
-    var currentScreen: String? = null
+    public var currentScreen: String? = null
         internal set
 
+    @get:JvmSynthetic // Hide from Java — internal use only
     internal lateinit var breadcrumbs: BreadcrumbTracker
         private set
 
+    @get:JvmSynthetic
     internal lateinit var crashDirPath: String
         private set
 
     /**
-     * CoroutineExceptionHandler — add to your scope to capture coroutine crashes.
+     * [CoroutineExceptionHandler] that captures coroutine crashes.
+     *
+     * Usage:
+     * ```kotlin
+     * val scope = CoroutineScope(Dispatchers.IO + MBA.exceptionHandler)
+     * ```
      */
-    val exceptionHandler = CoroutineExceptionHandler { ctx, throwable ->
-        val coroutineName = ctx[CoroutineName]?.name
-        handleCrash(
-            throwable = throwable,
-            isFatal = false,
-            threadName = "Coroutine",
-            coroutineContext = coroutineName,
-        )
-    }
+    public val exceptionHandler: CoroutineExceptionHandler =
+        CoroutineExceptionHandler { ctx, throwable ->
+            val coroutineName = ctx[CoroutineName]?.name
+            handleCrash(
+                throwable = throwable,
+                isFatal = false,
+                threadName = "Coroutine",
+                coroutineContext = coroutineName,
+            )
+        }
+
+    // ------------------------------------------------------------------ //
+    //  Public API — Phase 1: Install
+    // ------------------------------------------------------------------ //
 
     /**
-     * Phase 1: Install crash handler.
+     * Phase 1: Install the crash handler.
+     *
+     * Call as early as possible (e.g., `Application.onCreate`).
+     * Idempotent — second call is a no-op.
+     *
+     * @param crashDir Writable directory path for crash files.
      */
-    fun install(crashDir: String) {
+    public fun install(crashDir: String) {
         if (installed) return
         installed = true
         this.crashDirPath = crashDir
@@ -62,10 +88,17 @@ object MBA {
         }
     }
 
+    // ------------------------------------------------------------------ //
+    //  Public API — Phase 2: Configure
+    // ------------------------------------------------------------------ //
+
     /**
-     * Phase 2: Configure AI processing + backends.
+     * Phase 2: Configure AI processing and ticket backends.
+     *
+     * Requires [install] to be called first.
+     * Idempotent — second call is a no-op.
      */
-    fun configure(config: MBAConfig) {
+    public fun configure(config: MBAConfig) {
         check(installed) { "Call MBA.install(crashDir) before MBA.configure()" }
         if (configured) return
         configured = true
@@ -73,45 +106,72 @@ object MBA {
     }
 
     /**
-     * Convenience: install + configure in one call.
+     * Convenience: [install] + [configure] in one call.
+     *
+     * ```kotlin
+     * MBA.init(crashDir = context.filesDir.path + "/crashes") {
+     *     mode = MBAMode.SdkOnly(llmApiKey = "...", ticketBackend = notionBackend)
+     * }
+     * ```
      */
-    fun init(crashDir: String, block: MBAConfig.Builder.() -> Unit) {
+    public fun init(crashDir: String, block: MBAConfig.Builder.() -> Unit) {
         install(crashDir)
         configure(MBAConfig.Builder().apply(block).build())
     }
 
+    // ------------------------------------------------------------------ //
+    //  Public API — Runtime
+    // ------------------------------------------------------------------ //
+
     /** Set current screen name for crash context. */
-    fun setScreen(name: String) {
+    public fun setScreen(name: String) {
         currentScreen = name
     }
 
     /** Add a breadcrumb for crash context. Thread-safe. */
-    fun addBreadcrumb(message: String) {
+    public fun addBreadcrumb(message: String) {
         if (installed) breadcrumbs.add(message)
     }
 
-    /** Log a non-fatal error. Queued for background processing. */
-    fun logError(throwable: Throwable, threadName: String = "Unknown", metadata: Map<String, String> = emptyMap()) {
-        if (installed) {
-            handleCrash(
-                throwable = throwable,
-                isFatal = false,
-                threadName = threadName,
-                metadata = metadata,
-            )
-        }
+    /**
+     * Log a non-fatal error. Queued for background processing.
+     *
+     * @param throwable The error to log.
+     * @param metadata Optional key-value pairs for extra context.
+     */
+    public fun logError(
+        throwable: Throwable,
+        metadata: Map<String, String> = emptyMap(),
+    ) {
+        if (!installed) return
+        handleCrash(
+            throwable = throwable,
+            isFatal = false,
+            threadName = Thread.currentThread().name,
+            metadata = metadata,
+        )
     }
 
+    // ------------------------------------------------------------------ //
+    //  Internal — accessed by mba-android / mba-jvm modules
+    // ------------------------------------------------------------------ //
+
     /** Get current config. Throws if not configured. */
+    @JvmSynthetic
     internal fun requireConfig(): MBAConfig =
         config ?: error("MBA not configured. Call MBA.configure() first.")
 
     /** Check if configured (for optional features that degrade gracefully). */
+    @JvmSynthetic
     internal fun isConfigured(): Boolean = configured
 
-    // ---- Internal crash handling ----
-
-    fun handleCrash(
+    /**
+     * Core crash handler. Writes crash data to disk synchronously.
+     *
+     * MUST NOT throw — called from UncaughtExceptionHandler.
+     */
+    @JvmSynthetic
+    internal fun handleCrash(
         throwable: Throwable,
         isFatal: Boolean,
         threadName: String,
@@ -129,27 +189,21 @@ object MBA {
                 breadcrumbs = breadcrumbs.snapshot(),
                 metadata = metadata,
             )
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            // Best-effort: log to stderr so disk-write failures aren't invisible.
+            try {
+                System.err.println("MBA: Failed to write crash to disk: ${e.message}")
+            } catch (_: Throwable) {
+                // Truly nothing we can do.
+            }
         }
     }
 }
 
+/**
+ * Platform-specific crash handler installer.
+ * Implemented in androidMain / jvmMain.
+ */
 internal expect object PlatformInitializer {
     fun installCrashHandler(onCrash: (String, Throwable) -> Unit)
-}
-
-/**
- * Internal interface for the disk crash writer.
- */
-internal expect object CrashWriter {
-    fun writeToDisk(
-        crashDir: String,
-        throwable: Throwable,
-        isFatal: Boolean,
-        threadName: String,
-        coroutineContext: String?,
-        currentScreen: String?,
-        breadcrumbs: List<String>,
-        metadata: Map<String, String>,
-    )
 }

@@ -3,31 +3,31 @@ package dev.sunnat629.mba.core
 /**
  * Simple in-memory breadcrumb tracker used for crash context.
  *
- * Notes:
- * - Must be safe to call from any thread.
- * - Avoid heavy allocations.
- * - This is intentionally platform-agnostic and kept in mba-core so common code can use it.
+ * Thread-safe via @Synchronized (JVM/Android).
+ * If iOS target is added, replace with kotlinx.atomicfu.locks.SynchronizedObject.
+ *
+ * Kept intentionally minimal — no allocations on the hot path.
  */
 internal class BreadcrumbTracker(
     private val maxSize: Int = 50,
 ) {
-    private val lock = Any()
     private val buffer: ArrayDeque<String> = ArrayDeque(maxSize)
 
+    @Synchronized
     fun add(message: String) {
         val m = message.trim()
         if (m.isEmpty()) return
-        synchronized(lock) {
-            if (buffer.size == maxSize) {
-                buffer.removeFirst()
-            }
-            buffer.addLast(m)
+        if (buffer.size == maxSize) {
+            buffer.removeFirst()
         }
+        buffer.addLast(m)
     }
 
-    fun snapshot(): List<String> = synchronized(lock) { buffer.toList() }
+    @Synchronized
+    fun snapshot(): List<String> = buffer.toList()
 
+    @Synchronized
     fun clear() {
-        synchronized(lock) { buffer.clear() }
+        buffer.clear()
     }
 }

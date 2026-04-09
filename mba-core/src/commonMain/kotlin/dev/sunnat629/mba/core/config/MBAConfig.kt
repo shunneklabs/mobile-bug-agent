@@ -7,16 +7,19 @@ import kotlin.time.Duration.Companion.hours
 
 /**
  * Immutable configuration for the MBA SDK.
- * Built via [Builder] DSL. Validated on build().
+ * Built via [Builder] DSL. Validated on [Builder.build].
+ *
+ * External devs interact ONLY with [Builder] — the config itself is opaque.
  */
-data class MBAConfig(
-    val mode: MBAMode,
-    val llm: LLMConfig,
-    val piiSanitizer: PIISanitizer,
-    val agentConfig: AgentConfig,
-    val debug: Boolean,
+public class MBAConfig internal constructor(
+    internal val mode: MBAMode,
+    internal val llm: LLMConfig,
+    internal val piiSanitizer: PIISanitizer,
+    internal val agentConfig: AgentConfig,
+    public val debug: Boolean,
 ) {
-    data class AgentConfig(
+
+    internal data class AgentConfig(
         val piiScrubbing: Boolean = true,
         val severityThreshold: Severity = Severity.LOW,
         val localDedupWindow: Duration = 24.hours,
@@ -24,33 +27,53 @@ data class MBAConfig(
         val maxCrashesPerBatch: Int = 10,
     )
 
-    class Builder {
-        var mode: MBAMode? = null
-        var llm: LLMConfig? = null
-        var debug: Boolean = false
+    /**
+     * DSL builder — the ONLY way external devs create config.
+     *
+     * ```kotlin
+     * MBA.init(crashDir) {
+     *     mode = MBAMode.SdkOnly(llmApiKey = "...", ticketBackend = notionBackend)
+     *     debug = true
+     * }
+     * ```
+     */
+    public class Builder {
+        /** Required. Deployment mode. */
+        public var mode: MBAMode? = null
+
+        /** Optional. Override LLM config (defaults derived from mode). */
+        public var llm: LLMConfig? = null
+
+        /** Enable debug logging. Default false. */
+        public var debug: Boolean = false
 
         private var piiPatterns: MutableList<Regex> = mutableListOf()
         private var agentConfig = AgentConfig()
 
-        /** Add custom PII regex patterns. */
-        fun piiPatterns(vararg patterns: Regex) {
+        /** Add custom PII regex patterns to scrub from crash data. */
+        public fun piiPatterns(vararg patterns: Regex) {
             piiPatterns.addAll(patterns)
         }
 
-        /** Configure the on-device agent. */
-        fun onDeviceAgent(block: AgentConfigBuilder.() -> Unit) {
+        /** Fine-tune the on-device agent behavior. */
+        public fun agent(block: AgentConfigBuilder.() -> Unit) {
             agentConfig = AgentConfigBuilder().apply(block).build()
         }
 
-        fun build(): MBAConfig {
+        public fun build(): MBAConfig {
             val resolvedMode = requireNotNull(mode) {
                 "MBA mode must be set. Use MBAMode.SdkOnly(...) or MBAMode.Saas(...)"
             }
 
             // Resolve LLM config: explicit llm > mode's llmApiKey > error
             val resolvedLlm = llm ?: when (resolvedMode) {
-                is MBAMode.SdkOnly -> LLM.gemini(resolvedMode.llmApiKey)
-                is MBAMode.Saas -> LLMConfig.NONE  // SaaS uses server-side LLM
+                is MBAMode.SdkOnly -> {
+                    require(resolvedMode.llmApiKey.isNotBlank()) {
+                        "SdkOnly mode requires a non-blank LLM API key."
+                    }
+                    LLM.gemini(resolvedMode.llmApiKey)
+                }
+                is MBAMode.Saas -> LLMConfig.NONE
                 is MBAMode.SelfHosted -> LLMConfig.NONE
             }
 
@@ -64,12 +87,13 @@ data class MBAConfig(
         }
     }
 
-    class AgentConfigBuilder {
-        var piiScrubbing: Boolean = true
-        var severityThreshold: Severity = Severity.LOW
-        var localDedupWindow: Duration = 24.hours
-        var maxDedupCacheSize: Int = 100
-        var maxCrashesPerBatch: Int = 10
+    /** Fine-grained agent settings. Most devs won't need this. */
+    public class AgentConfigBuilder {
+        public var piiScrubbing: Boolean = true
+        public var severityThreshold: Severity = Severity.LOW
+        public var localDedupWindow: Duration = 24.hours
+        public var maxDedupCacheSize: Int = 100
+        public var maxCrashesPerBatch: Int = 10
 
         internal fun build() = AgentConfig(
             piiScrubbing = piiScrubbing,

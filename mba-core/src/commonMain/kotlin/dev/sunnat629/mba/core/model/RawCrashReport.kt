@@ -6,12 +6,13 @@ import kotlinx.serialization.Serializable
 
 /**
  * Immutable snapshot captured at crash time.
- * Written to disk synchronously. No AI processing yet.
- * This is the raw material — everything the crash handler can grab
- * before the process dies.
+ *
+ * **Internal** — external devs never construct this directly.
+ * Written to disk synchronously by the crash handler.
+ * AI processing happens later in the background.
  */
 @Serializable
-data class RawCrashReport(
+public data class RawCrashReport(
     val id: String,
     val timestamp: Instant = Clock.System.now(),
     val exceptionType: String,

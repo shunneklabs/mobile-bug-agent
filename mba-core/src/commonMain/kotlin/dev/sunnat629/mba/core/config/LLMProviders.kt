@@ -1,33 +1,58 @@
 package dev.sunnat629.mba.core.config
 
 /**
- * LLM provider configuration.
- * Developer gives a STRING (API key). MBA handles everything else.
- * Supports every provider Koog supports.
+ * LLM provider factory.
+ *
+ * External devs use these one-liners:
+ * ```kotlin
+ * llm = LLM.gemini("your-api-key")
+ * llm = LLM.openAI("your-api-key")
+ * llm = LLM.ollama() // local, no key needed
+ * ```
+ *
+ * The API key is NEVER logged, serialized, or sent anywhere except
+ * the provider's own endpoint via secure headers.
  */
-object LLM {
-    fun gemini(apiKey: String) = LLMConfig(Provider.GEMINI, apiKey, "gemini-2.0-flash")
-    fun openAI(apiKey: String) = LLMConfig(Provider.OPENAI, apiKey, "gpt-4o-mini")
-    fun anthropic(apiKey: String) = LLMConfig(Provider.ANTHROPIC, apiKey, "claude-sonnet-4-20250514")
-    fun ollama(endpoint: String = "http://localhost:11434") =
+public object LLM {
+    public fun gemini(apiKey: String): LLMConfig =
+        LLMConfig(Provider.GEMINI, apiKey, "gemini-2.0-flash")
+
+    public fun openAI(apiKey: String): LLMConfig =
+        LLMConfig(Provider.OPENAI, apiKey, "gpt-4o-mini")
+
+    public fun anthropic(apiKey: String): LLMConfig =
+        LLMConfig(Provider.ANTHROPIC, apiKey, "claude-sonnet-4-20250514")
+
+    public fun ollama(endpoint: String = "http://localhost:11434"): LLMConfig =
         LLMConfig(Provider.OLLAMA, "", "llama3", endpoint)
-    fun custom(apiKey: String, endpoint: String, model: String) =
+
+    public fun custom(apiKey: String, endpoint: String, model: String): LLMConfig =
         LLMConfig(Provider.CUSTOM, apiKey, model, endpoint)
 
-    enum class Provider { GEMINI, OPENAI, ANTHROPIC, OLLAMA, CUSTOM }
+    public enum class Provider { GEMINI, OPENAI, ANTHROPIC, OLLAMA, CUSTOM }
 }
 
-data class LLMConfig(
+/**
+ * Immutable LLM configuration. Created via [LLM] factory methods.
+ *
+ * The [apiKey] is deliberately excluded from [toString] to prevent
+ * accidental logging.
+ */
+public data class LLMConfig(
     val provider: LLM.Provider,
     val apiKey: String,
     val model: String,
     val endpoint: String? = null,
 ) {
     /** Override the default model. Returns a new config. */
-    fun model(model: String) = copy(model = model)
+    public fun model(model: String): LLMConfig = copy(model = model)
 
-    companion object {
-        /** Sentinel for SaaS mode where LLM is server-side. */
-        val NONE = LLMConfig(LLM.Provider.GEMINI, "", "")
+    /** Prevent API key from leaking into logs. */
+    override fun toString(): String =
+        "LLMConfig(provider=$provider, model=$model, endpoint=$endpoint, apiKey=***)"
+
+    public companion object {
+        /** Sentinel for SaaS/SelfHosted modes where LLM is server-side. */
+        public val NONE: LLMConfig = LLMConfig(LLM.Provider.GEMINI, "", "")
     }
 }

@@ -6,9 +6,11 @@ import kotlinx.serialization.Serializable
 /**
  * A deduplicated crash group. One group per unique fingerprint.
  * Tracks all devices/versions affected and total occurrence count.
+ *
+ * Used by [CrashStore] implementations (server-side persistence).
  */
 @Serializable
-data class CrashGroup(
+public data class CrashGroup(
     val id: String,
     val fingerprint: String,
     val title: String,
