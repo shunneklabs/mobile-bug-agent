@@ -55,7 +55,10 @@ dependencies {
     // mba-android transitively brings in mba-core.
     implementation(project(":mba-android"))
     // Notion backend — external devs would add this as a separate dependency.
+    implementation(project(":mba-core"))
     implementation(project(":mba-notion"))
+
+    implementation(libs.kotlinx.serialization.json)
 
     // Compose
     implementation(platform(libs.androidx.compose.bom))

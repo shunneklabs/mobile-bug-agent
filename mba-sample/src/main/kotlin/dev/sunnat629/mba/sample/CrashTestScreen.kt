@@ -14,6 +14,7 @@ import dev.sunnat629.mba.core.MBA
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 
 /**
  * Sample screen with 5 buttons that trigger different types of crashes and bugs.
@@ -118,7 +119,7 @@ fun CrashTestScreen() {
                     try {
                         // Simulate a caught exception
                         val json = "{invalid json}"
-                        kotlinx.serialization.json.Json.parseToJsonElement(json)
+                        Json.parseToJsonElement(json)
                     } catch (e: Exception) {
                         // Log it as a non-fatal — SDK captures it, app keeps running
                         MBA.logError(
@@ -126,6 +127,7 @@ fun CrashTestScreen() {
                             metadata = mapOf(
                                 "screen" to "CrashTestScreen",
                                 "action" to "parse_json",
+                                "error" to (e.message ?: "Unknown JSON parse error"),
                             ),
                         )
                         statusMessage = "\uD83D\uDCDD Non-fatal error logged (check crash dir)"
