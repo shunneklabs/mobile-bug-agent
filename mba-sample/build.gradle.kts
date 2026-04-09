@@ -1,8 +1,19 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kotlin.compose)
 }
+
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) {
+        f.inputStream().use { load(it) }
+    }
+}
+
+fun prop(name: String): String = (localProps.getProperty(name) ?: "").toString()
 
 android {
     namespace = "dev.sunnat629.mba.sample"
@@ -19,6 +30,12 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        // Secrets / configuration (NOT committed)
+        buildConfigField("String", "NOTION_TOKEN", "\"${prop("NOTION_TOKEN")}\"")
+        buildConfigField("String", "NOTION_CRASH_DB_ID_OR_URL", "\"${prop("NOTION_CRASH_DB_ID_OR_URL")}\"")
+        buildConfigField("String", "NOTION_TICKET_DB_ID_OR_URL", "\"${prop("NOTION_TICKET_DB_ID_OR_URL")}\"")
+        buildConfigField("String", "GEMINI_API_KEY", "\"${prop("GEMINI_API_KEY")}\"")
     }
 
     buildTypes {
@@ -33,8 +50,8 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
-    // composeOptions removed as Compose Compiler is now part of Kotlin plugin
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -45,14 +62,14 @@ android {
 dependencies {
     implementation(project(":mba-android"))
     implementation(project(":mba-notion"))
-    
+
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-    
+
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

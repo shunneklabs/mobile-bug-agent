@@ -21,19 +21,18 @@ class SampleApplication : Application() {
         MBAAndroid.install(this)
 
         // Phase 2: configure after installation
-        // NOTE: replace these with real values in local testing.
-        val notionToken = System.getenv("NOTION_TOKEN") ?: ""
-        val crashDbId = System.getenv("NOTION_CRASH_DB_ID") ?: ""
-        val ticketDbId = System.getenv("NOTION_TICKET_DB_ID") ?: ""
-        val geminiKey = System.getenv("GEMINI_API_KEY") ?: ""
+        val notionToken = BuildConfig.NOTION_TOKEN
+        val crashDb = BuildConfig.NOTION_CRASH_DB_ID_OR_URL
+        val ticketDb = BuildConfig.NOTION_TICKET_DB_ID_OR_URL
+        val geminiKey = BuildConfig.GEMINI_API_KEY
 
         val config = MBAConfig.Builder().apply {
             mode = MBAMode.SdkOnly(
                 llmApiKey = geminiKey,
                 ticketBackend = object : dev.sunnat629.mba.core.ticket.TicketBackend {
                     override val name: String = "Notion"
-                    private val notion = NotionClient(NotionConfig(token = notionToken, databaseId = ticketDbId))
-                    private val backend = NotionTicketBackend(notion, NotionConfig(token = notionToken, databaseId = ticketDbId))
+                    private val notion = NotionClient(NotionConfig(token = notionToken, databaseId = ticketDb))
+                    private val backend = NotionTicketBackend(notion, NotionConfig(token = notionToken, databaseId = ticketDb))
                     override suspend fun createTicket(report: dev.sunnat629.mba.core.model.ProcessedCrashReport) = backend.createTicket(report)
                     override suspend fun updateTicket(ticketId: String, update: dev.sunnat629.mba.core.ticket.TicketUpdate) = backend.updateTicket(ticketId, update)
                 }
@@ -42,13 +41,11 @@ class SampleApplication : Application() {
 
         MBA.configure(config)
 
-        val crashStoreConfig = NotionConfig(token = notionToken, databaseId = crashDbId)
-        val notionForCrash = NotionClient(crashStoreConfig)
-        val crashStore = NotionCrashStore(notionForCrash, crashStoreConfig)
+        val crashStoreConfig = NotionConfig(token = notionToken, databaseId = crashDb)
+        val crashStore = NotionCrashStore(NotionClient(crashStoreConfig), crashStoreConfig)
 
-        val ticketConfig = NotionConfig(token = notionToken, databaseId = ticketDbId)
-        val notionForTickets = NotionClient(ticketConfig)
-        val ticketBackend = NotionTicketBackend(notionForTickets, ticketConfig)
+        val ticketConfig = NotionConfig(token = notionToken, databaseId = ticketDb)
+        val ticketBackend = NotionTicketBackend(NotionClient(ticketConfig), ticketConfig)
 
         MBAAndroidRuntime.configure(config, crashStore, ticketBackend)
 
