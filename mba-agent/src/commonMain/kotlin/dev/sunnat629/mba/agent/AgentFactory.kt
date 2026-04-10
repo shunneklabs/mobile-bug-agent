@@ -25,9 +25,13 @@ import java.io.Closeable
  * **Internal** — external devs never import this. The SDK wires it automatically.
  *
  * Owns a shared [HttpClient] — call [close] when done (e.g., in server shutdown).
+ *
+ * Defaults to [SinglePromptExecutor] (1 LLM call) for optimal latency.
+ * Set [useMultiStep] = true to use 3 separate LLM calls (useful for debugging).
  */
-internal class AgentFactory(
+internal open class AgentFactory(
     private val llmConfig: LLMConfig,
+    private val useMultiStep: Boolean = false,
     private val json: Json = Json {
         ignoreUnknownKeys = true
         isLenient = true
@@ -41,14 +45,18 @@ internal class AgentFactory(
         }
     }
 
-    // Lazily created, reused executor. Stateless — safe to share.
+    // Lazily created, reused executor. Stateless (except SinglePromptExecutor cache).
     private val executor: CrashAnalysisExecutor by lazy {
         val llmCaller = createLLMCaller(llmConfig)
-        KoogCrashAnalysisExecutor(llmCaller, json)
+        if (useMultiStep) {
+            KoogCrashAnalysisExecutor(llmCaller, json)
+        } else {
+            SinglePromptExecutor(llmCaller, json)
+        }
     }
 
-    /** Returns a reusable, stateless executor. */
-    fun create(): CrashAnalysisExecutor = executor
+    /** Returns a reusable executor. */
+    open fun create(): CrashAnalysisExecutor = executor
 
     /** Release the shared HttpClient and its connection pool. */
     override fun close() {
@@ -102,8 +110,8 @@ internal interface LLMCaller {
 }
 
 /**
- * Production executor that orchestrates 3 LLM calls:
- * parseStackTrace → classifySeverity → generateSummary
+ * Multi-step executor (original 3-call approach).
+ * Kept as fallback / for debugging when you want to see each step separately.
  */
 internal class KoogCrashAnalysisExecutor(
     private val llm: LLMCaller,
@@ -145,7 +153,7 @@ internal class KoogCrashAnalysisExecutor(
             appendLine("Severity: ${severity.severity} (${severity.reasoning})")
             screen?.let { appendLine("Current screen: $it") }
             if (breadcrumbs.isNotEmpty()) {
-                appendLine("Breadcrumbs: ${breadcrumbs.joinToString(" → ")}")
+                appendLine("Breadcrumbs: ${breadcrumbs.joinToString(" \u2192 ")}")
             }
             appendLine("Device: ${device.displayName}")
         }
@@ -161,12 +169,6 @@ internal class KoogCrashAnalysisExecutor(
 //  LLM Provider Implementations
 // ─────────────────────────────────────────────────────────────────────── //
 
-/**
- * Gemini LLM caller.
- *
- * SECURITY: API key is sent via `x-goog-api-key` header, NOT in the URL.
- * JSON request body is built with kotlinx.serialization (not string interpolation).
- */
 internal class GeminiLLMCaller(
     private val httpClient: HttpClient,
     private val apiKey: String,
@@ -176,11 +178,9 @@ internal class GeminiLLMCaller(
 
     override suspend fun call(systemPrompt: String, userPrompt: String): String {
         val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent"
-
         val requestBody = buildGeminiRequestBody(systemPrompt, userPrompt)
 
         val response = httpClient.post(url) {
-            // API key in header — NOT in URL query string
             header("x-goog-api-key", apiKey)
             contentType(ContentType.Application.Json)
             setBody(requestBody)
@@ -194,9 +194,6 @@ internal class GeminiLLMCaller(
         return extractTextFromGeminiResponse(response.bodyAsText())
     }
 
-    /**
-     * Build request body using kotlinx.serialization — safe against injection.
-     */
     private fun buildGeminiRequestBody(systemPrompt: String, userPrompt: String): String {
         val body = buildJsonObject {
             putJsonObject("system_instruction") {
@@ -229,11 +226,6 @@ internal class GeminiLLMCaller(
     }
 }
 
-/**
- * OpenAI-compatible LLM caller (works with OpenAI, Azure OpenAI, etc.).
- *
- * SECURITY: API key sent via `Authorization: Bearer` header.
- */
 internal class OpenAILLMCaller(
     private val httpClient: HttpClient,
     private val apiKey: String,
@@ -243,7 +235,6 @@ internal class OpenAILLMCaller(
 
     override suspend fun call(systemPrompt: String, userPrompt: String): String {
         val url = "https://api.openai.com/v1/chat/completions"
-
         val requestBody = buildJsonObject {
             put("model", model)
             putJsonArray("messages") {
