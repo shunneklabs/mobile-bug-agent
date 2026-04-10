@@ -36,6 +36,7 @@ private object EnvConfig {
     val notionDatabaseId: String = requireEnv("NOTION_DATABASE_ID")
     val serverApiKey: String = requireEnv("MBA_SERVER_API_KEY")
     val port: Int = System.getenv("PORT")?.toIntOrNull() ?: 8080
+    val dedupCachePath: String = System.getenv("MBA_DEDUP_CACHE_PATH") ?: "data/dedup-cache.json"
 
     private fun requireEnv(name: String): String =
         System.getenv(name)
@@ -43,9 +44,7 @@ private object EnvConfig {
 }
 
 fun main() {
-    // Validate all env vars at startup — fail immediately if missing.
     logger.info("Starting MBA Server on port ${EnvConfig.port}")
-
     embeddedServer(Netty, port = EnvConfig.port) {
         module()
     }.start(wait = true)
@@ -72,9 +71,13 @@ fun Application.module() {
     val analysisAgent = CrashAnalysisAgent(agentFactory, piiSanitizer, dedupCache)
     val notionBackend = NotionTicketBackend(EnvConfig.notionApiKey, EnvConfig.notionDatabaseId)
 
-    // Clean up resources on shutdown
+    // ---- Restore dedup cache from disk ---- //
+    FileDedupPersistence.restore(dedupCache, EnvConfig.dedupCachePath)
+
+    // ---- Clean up resources on shutdown ---- //
     environment.monitor.subscribe(ApplicationStopped) {
-        logger.info("Shutting down — closing resources...")
+        logger.info("Shutting down — saving dedup cache and closing resources...")
+        FileDedupPersistence.save(dedupCache, EnvConfig.dedupCachePath)
         agentFactory.close()
         notionBackend.close()
     }
@@ -85,7 +88,10 @@ fun Application.module() {
         }
 
         get("/health") {
-            call.respond(mapOf("status" to "healthy"))
+            call.respond(mapOf(
+                "status" to "healthy",
+                "dedupCacheSize" to dedupCache.size(),
+            ))
         }
 
         // ---- Authenticated crash report endpoint ---- //
@@ -117,17 +123,17 @@ fun Application.module() {
                         } else {
                             logger.error("Failed to create ticket: ${ticketResult.errorMessage}")
                         }
+                        // Persist cache after new crash processed
+                        FileDedupPersistence.save(dedupCache, EnvConfig.dedupCachePath)
                         call.respond(ticketResult)
                     }
 
                     is CrashAnalysisResult.Duplicate -> {
                         logger.info("Duplicate crash detected: ${result.report.fingerprint}")
-                        call.respond(
-                            mapOf(
-                                "status" to "duplicate",
-                                "fingerprint" to result.report.fingerprint,
-                            )
-                        )
+                        call.respond(mapOf(
+                            "status" to "duplicate",
+                            "fingerprint" to result.report.fingerprint,
+                        ))
                     }
 
                     is CrashAnalysisResult.Fallback -> {
@@ -135,6 +141,7 @@ fun Application.module() {
                         val ticketResult = withContext(Dispatchers.IO) {
                             notionBackend.createTicket(result.report)
                         }
+                        FileDedupPersistence.save(dedupCache, EnvConfig.dedupCachePath)
                         call.respond(ticketResult)
                     }
                 }
