@@ -1,6 +1,5 @@
 package dev.sunnat629.mba.notion
 
-import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.model.ProcessedCrashReport
 import dev.sunnat629.mba.core.model.TicketResult
 import dev.sunnat629.mba.core.ticket.TicketBackend
@@ -13,7 +12,6 @@ import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
-import java.io.Closeable
 
 public class NotionTicketBackend(
     private val apiKey: String,
@@ -21,16 +19,22 @@ public class NotionTicketBackend(
     private val fieldMapping: NotionFieldMapping = NotionFieldMapping(),
     private val httpClient: HttpClient = defaultHttpClient(),
     private val notionApiVersion: String = "2022-06-28",
-) : TicketBackend, Closeable {
+) : TicketBackend, AutoCloseable {
 
     private companion object {
-        const val TAG = "Notion"
+        private fun defaultHttpClient(): HttpClient = HttpClient {
+            install(ContentNegotiation) {
+                json(Json {
+                    ignoreUnknownKeys = true
+                    encodeDefaults = true
+                })
+            }
+        }
     }
 
     override val name: String = "Notion"
 
     override suspend fun createTicket(report: ProcessedCrashReport): TicketResult {
-        MBALog.i(TAG, "Creating ticket: '${report.title}' [${report.severity}]")
         return try {
             val response: NotionPageResponse = httpClient.post("https://api.notion.com/v1/pages") {
                 header("Authorization", "Bearer $apiKey")
@@ -39,7 +43,6 @@ public class NotionTicketBackend(
                 setBody(mapReportToNotionRequest(report))
             }.body()
 
-            MBALog.i(TAG, "\u2705 Ticket created: id=${response.id}, url=${response.url}")
             TicketResult(
                 ticketId = response.id,
                 backendName = name,
@@ -47,13 +50,11 @@ public class NotionTicketBackend(
                 success = true,
             )
         } catch (e: Exception) {
-            MBALog.e(TAG, "\u274c Failed to create ticket: ${e.message}", e)
             TicketResult.failure(name, e.message ?: "Unknown error creating Notion ticket")
         }
     }
 
     override suspend fun updateTicket(ticketId: String, update: TicketUpdate): TicketResult {
-        MBALog.d(TAG, "Updating ticket: $ticketId")
         return try {
             httpClient.patch("https://api.notion.com/v1/pages/$ticketId") {
                 header("Authorization", "Bearer $apiKey")
@@ -67,16 +68,13 @@ public class NotionTicketBackend(
                 }
                 setBody(mapOf("properties" to properties))
             }
-            MBALog.i(TAG, "\u2705 Ticket updated: $ticketId")
             TicketResult(ticketId = ticketId, backendName = name, success = true)
         } catch (e: Exception) {
-            MBALog.e(TAG, "\u274c Failed to update ticket $ticketId: ${e.message}", e)
             TicketResult.failure(name, e.message ?: "Unknown error updating Notion ticket")
         }
     }
 
     override fun close() {
-        MBALog.d(TAG, "Closing HttpClient")
         httpClient.close()
     }
 
@@ -113,23 +111,11 @@ public class NotionTicketBackend(
             )
         ))
 
-        MBALog.d(TAG, "Built Notion request: ${properties.size} properties, ${children.size} content blocks")
         return NotionPageRequest(
             parent = NotionParent(databaseId),
             properties = properties,
             children = children,
         )
-    }
-
-    public companion object {
-        private fun defaultHttpClient(): HttpClient = HttpClient {
-            install(ContentNegotiation) {
-                json(Json {
-                    ignoreUnknownKeys = true
-                    encodeDefaults = true
-                })
-            }
-        }
     }
 }
 

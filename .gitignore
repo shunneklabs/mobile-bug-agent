@@ -22,3 +22,6 @@ local.properties
 /mba-android/build/
 /mba-core/build/
 /mba-notion/build/
+
+# Ignore build outputs for all modules
+**/build/
