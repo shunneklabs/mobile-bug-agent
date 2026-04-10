@@ -1,5 +1,6 @@
 package dev.sunnat629.mba.notion
 
+import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.model.ProcessedCrashReport
 import dev.sunnat629.mba.core.model.TicketResult
 import dev.sunnat629.mba.core.ticket.TicketBackend
@@ -14,26 +15,6 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
 import java.io.Closeable
 
-/**
- * Notion implementation of [TicketBackend].
- *
- * Creates a new Notion page in the specified database for each unique crash.
- *
- * **Public API** — external devs instantiate this and pass it to [MBAMode.SdkOnly]:
- * ```kotlin
- * val notionBackend = NotionTicketBackend(
- *     apiKey = "secret_...",
- *     databaseId = "abc123...",
- * )
- * mode = MBAMode.SdkOnly(llmApiKey = "...", ticketBackend = notionBackend)
- * ```
- *
- * @param apiKey Notion integration token (starts with "secret_").
- * @param databaseId ID of the target Notion database.
- * @param fieldMapping Custom property name mapping (defaults work with Notion's default DB).
- * @param httpClient Optional shared HttpClient. If not provided, creates one internally.
- * @param notionApiVersion Notion API version header.
- */
 public class NotionTicketBackend(
     private val apiKey: String,
     private val databaseId: String,
@@ -42,9 +23,14 @@ public class NotionTicketBackend(
     private val notionApiVersion: String = "2022-06-28",
 ) : TicketBackend, Closeable {
 
+    private companion object {
+        const val TAG = "Notion"
+    }
+
     override val name: String = "Notion"
 
     override suspend fun createTicket(report: ProcessedCrashReport): TicketResult {
+        MBALog.i(TAG, "Creating ticket: '${report.title}' [${report.severity}]")
         return try {
             val response: NotionPageResponse = httpClient.post("https://api.notion.com/v1/pages") {
                 header("Authorization", "Bearer $apiKey")
@@ -53,6 +39,7 @@ public class NotionTicketBackend(
                 setBody(mapReportToNotionRequest(report))
             }.body()
 
+            MBALog.i(TAG, "\u2705 Ticket created: id=${response.id}, url=${response.url}")
             TicketResult(
                 ticketId = response.id,
                 backendName = name,
@@ -60,17 +47,18 @@ public class NotionTicketBackend(
                 success = true,
             )
         } catch (e: Exception) {
+            MBALog.e(TAG, "\u274c Failed to create ticket: ${e.message}", e)
             TicketResult.failure(name, e.message ?: "Unknown error creating Notion ticket")
         }
     }
 
     override suspend fun updateTicket(ticketId: String, update: TicketUpdate): TicketResult {
+        MBALog.d(TAG, "Updating ticket: $ticketId")
         return try {
             httpClient.patch("https://api.notion.com/v1/pages/$ticketId") {
                 header("Authorization", "Bearer $apiKey")
                 header("Notion-Version", notionApiVersion)
                 contentType(ContentType.Application.Json)
-                // Build update body based on TicketUpdate fields
                 val properties = mutableMapOf<String, NotionProperty>()
                 update.addDevice?.let { device ->
                     properties[fieldMapping.device] = NotionProperty.RichText(
@@ -79,52 +67,44 @@ public class NotionTicketBackend(
                 }
                 setBody(mapOf("properties" to properties))
             }
+            MBALog.i(TAG, "\u2705 Ticket updated: $ticketId")
             TicketResult(ticketId = ticketId, backendName = name, success = true)
         } catch (e: Exception) {
+            MBALog.e(TAG, "\u274c Failed to update ticket $ticketId: ${e.message}", e)
             TicketResult.failure(name, e.message ?: "Unknown error updating Notion ticket")
         }
     }
 
-    /** Release the HttpClient if it was created internally. */
     override fun close() {
+        MBALog.d(TAG, "Closing HttpClient")
         httpClient.close()
     }
 
     private fun mapReportToNotionRequest(report: ProcessedCrashReport): NotionPageRequest {
         val properties = mutableMapOf<String, NotionProperty>()
-
-        // Title
         properties[fieldMapping.title] = NotionProperty.Title(
             listOf(NotionRichText(text = NotionTextContent(report.title)))
         )
-        // Severity (Select)
         properties[fieldMapping.severity] = NotionProperty.Select(
             NotionSelectItem(name = report.severity.name)
         )
-        // Fingerprint (Rich Text)
         properties[fieldMapping.fingerprint] = NotionProperty.RichText(
             listOf(NotionRichText(text = NotionTextContent(report.fingerprint)))
         )
-        // Device (Rich Text)
         properties[fieldMapping.device] = NotionProperty.RichText(
             listOf(NotionRichText(text = NotionTextContent(report.raw.device.displayName)))
         )
-        // Root Cause (Rich Text)
         properties[fieldMapping.rootCause] = NotionProperty.RichText(
             listOf(NotionRichText(text = NotionTextContent(report.possibleCause ?: "Unknown")))
         )
 
-        // Content blocks
         val children = mutableListOf<NotionBlock>()
-
-        // Description paragraph
         children.add(NotionBlock(
             type = "paragraph",
             paragraph = NotionParagraphBlock(
                 listOf(NotionRichText(text = NotionTextContent(report.description)))
             )
         ))
-        // Stack trace code block
         children.add(NotionBlock(
             type = "code",
             code = NotionCodeBlock(
@@ -133,6 +113,7 @@ public class NotionTicketBackend(
             )
         ))
 
+        MBALog.d(TAG, "Built Notion request: ${properties.size} properties, ${children.size} content blocks")
         return NotionPageRequest(
             parent = NotionParent(databaseId),
             properties = properties,
@@ -152,21 +133,6 @@ public class NotionTicketBackend(
     }
 }
 
-/**
- * Configurable mapping from MBA fields to Notion database property names.
- *
- * Defaults match a standard Notion database with properties:
- * Name, Severity, Fingerprint, Device, Root Cause.
- *
- * Override if your Notion DB uses different property names:
- * ```kotlin
- * NotionTicketBackend(
- *     apiKey = "...",
- *     databaseId = "...",
- *     fieldMapping = NotionFieldMapping(title = "Bug Title", severity = "Priority"),
- * )
- * ```
- */
 public data class NotionFieldMapping(
     val title: String = "Name",
     val severity: String = "Severity",

@@ -5,28 +5,24 @@ import dev.sunnat629.mba.agent.model.CrashSummary
 import dev.sunnat629.mba.agent.model.ParsedStackTrace
 import dev.sunnat629.mba.agent.model.SeverityResult
 import dev.sunnat629.mba.agent.prompts.SystemPrompt
+import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.model.DeviceContext
 import kotlinx.serialization.json.Json
 
-/**
- * Single-prompt executor that combines parse + classify + summarize into
- * ONE LLM call. Reduces latency from ~6-24s (3 calls) to ~2-8s (1 call).
- *
- * The LLM returns a single JSON object containing all fields.
- * If any field is missing, sensible defaults are used.
- */
 internal class SinglePromptExecutor(
     private val llm: LLMCaller,
     private val json: Json,
 ) : CrashAnalysisExecutor {
 
-    // Cache for the last combined analysis — used by the 3 interface methods
-    // which are called in sequence by CrashAnalysisAgent.
+    private companion object {
+        const val TAG = "SinglePrompt"
+    }
+
     private var lastTrace: String? = null
     private var lastAnalysis: CombinedCrashAnalysis? = null
 
     override suspend fun parseStackTrace(sanitizedTrace: String): ParsedStackTrace {
-        val analysis = analyze(sanitizedTrace, null, null, emptyList())
+        val analysis = analyze(sanitizedTrace)
         return analysis.toParsedStackTrace()
     }
 
@@ -34,12 +30,11 @@ internal class SinglePromptExecutor(
         parsed: ParsedStackTrace,
         device: DeviceContext,
     ): SeverityResult {
-        // If we already analyzed this trace, reuse the result
         return lastAnalysis?.toSeverityResult()
             ?: SeverityResult(
                 severity = dev.sunnat629.mba.core.model.Severity.MEDIUM,
                 confidence = 0.5f,
-                reasoning = "Fallback — single prompt cache miss",
+                reasoning = "Fallback \u2014 single prompt cache miss",
             )
     }
 
@@ -50,51 +45,24 @@ internal class SinglePromptExecutor(
         breadcrumbs: List<String>,
         device: DeviceContext,
     ): CrashSummary {
-        // If we already analyzed this trace, reuse the result
         return lastAnalysis?.toCrashSummary()
-            ?: CrashSummary(
-                title = "Unknown crash",
-                description = "Single prompt cache miss",
-            )
+            ?: CrashSummary(title = "Unknown crash", description = "Single prompt cache miss")
     }
 
-    /**
-     * The actual single LLM call. Called once per crash, result is cached
-     * for the subsequent classifySeverity and generateSummary calls.
-     */
-    private suspend fun analyze(
-        sanitizedTrace: String,
-        screen: String?,
-        device: DeviceContext?,
-        breadcrumbs: List<String>,
-    ): CombinedCrashAnalysis {
-        // If we already analyzed this exact trace, return cached result
+    private suspend fun analyze(sanitizedTrace: String): CombinedCrashAnalysis {
         if (sanitizedTrace == lastTrace && lastAnalysis != null) {
+            MBALog.d(TAG, "Cache hit \u2014 reusing previous analysis")
             return lastAnalysis!!
         }
+
+        MBALog.d(TAG, "Sending combined analysis prompt (${sanitizedTrace.length} chars)...")
+        val startTime = System.currentTimeMillis()
 
         val userPrompt = buildString {
             appendLine(COMBINED_PROMPT)
             appendLine()
             appendLine("=== STACK TRACE ===")
             appendLine(sanitizedTrace)
-            screen?.let {
-                appendLine()
-                appendLine("=== CURRENT SCREEN ===")
-                appendLine(it)
-            }
-            if (breadcrumbs.isNotEmpty()) {
-                appendLine()
-                appendLine("=== BREADCRUMBS ===")
-                appendLine(breadcrumbs.joinToString(" \u2192 "))
-            }
-            device?.let {
-                appendLine()
-                appendLine("=== DEVICE ===")
-                appendLine(it.displayName)
-                appendLine("Memory: ${it.availableMemoryMb}MB / ${it.totalMemoryMb}MB")
-                if (it.isLowMemory) appendLine("LOW MEMORY WARNING")
-            }
         }
 
         val response = llm.call(
@@ -102,9 +70,14 @@ internal class SinglePromptExecutor(
             userPrompt = userPrompt,
         )
 
+        val elapsed = System.currentTimeMillis() - startTime
+        MBALog.i(TAG, "LLM responded in ${elapsed}ms (${response.length} chars)")
+
         val analysis = json.decodeFromString<CombinedCrashAnalysis>(response)
         lastTrace = sanitizedTrace
         lastAnalysis = analysis
+
+        MBALog.d(TAG, "Parsed: severity=${analysis.severity}, title='${analysis.title}'")
         return analysis
     }
 

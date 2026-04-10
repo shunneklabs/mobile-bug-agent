@@ -3,43 +3,42 @@ package dev.sunnat629.mba.agent
 import dev.sunnat629.mba.agent.model.CrashSummary
 import dev.sunnat629.mba.agent.model.ParsedStackTrace
 import dev.sunnat629.mba.agent.model.SeverityResult
+import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.fingerprint.CrashFingerprint
 import dev.sunnat629.mba.core.model.*
 import dev.sunnat629.mba.core.pii.PIISanitizer
 import dev.sunnat629.mba.core.store.LocalDedupCache
 
-/**
- * The core crash analysis pipeline.
- *
- * Orchestrates:
- * 1. PII scrub (regex, no LLM, ~1-3ms)
- * 2. Fingerprint (SHA-256, no LLM, <1ms)
- * 3. Local dedup check (cache, no LLM, <1ms)
- * 4. AI analysis (LLM calls, 2-8s)
- * 5. Result packaging
- *
- * **Internal** — runs on background thread (WorkManager). Never on main thread.
- */
 internal class CrashAnalysisAgent(
     private val agentFactory: AgentFactory,
     private val piiSanitizer: PIISanitizer,
     private val dedupCache: LocalDedupCache,
 ) {
+    private companion object {
+        const val TAG = "Agent"
+    }
+
     suspend fun process(raw: RawCrashReport): CrashAnalysisResult {
-        // 1. PII scrub — fast, no network
+        MBALog.i(TAG, "Processing crash: id=${raw.id}, type=${raw.exceptionType}, fatal=${raw.isFatal}")
+
+        // 1. PII scrub
+        MBALog.d(TAG, "[1/5] PII scrub...")
         val sanitizedTrace = piiSanitizer.scrub(raw.stackTrace)
         val sanitizedMessage = raw.message?.let { piiSanitizer.scrub(it) }
         val sanitizedBreadcrumbs = raw.breadcrumbs.map { piiSanitizer.scrub(it) }
 
-        // 2. Fingerprint — deterministic hash
+        // 2. Fingerprint
+        MBALog.d(TAG, "[2/5] Computing fingerprint...")
         val fingerprint = CrashFingerprint.compute(
             exceptionType = raw.exceptionType,
             stackTrace = sanitizedTrace,
         )
 
-        // 3. Local dedup — skip LLM if we've seen this crash recently
+        // 3. Local dedup
+        MBALog.d(TAG, "[3/5] Dedup check for ${fingerprint.take(12)}...")
         if (dedupCache.contains(fingerprint)) {
             dedupCache.touch(fingerprint)
+            MBALog.w(TAG, "\u2b50 Duplicate detected: ${fingerprint.take(12)}... \u2014 skipping LLM")
             return CrashAnalysisResult.Duplicate(
                 DuplicateCrashReport(
                     fingerprint = fingerprint,
@@ -49,12 +48,17 @@ internal class CrashAnalysisAgent(
             )
         }
 
-        // 4. AI analysis — the expensive part
+        // 4. AI analysis
         return try {
+            MBALog.d(TAG, "[4/5] Running AI analysis...")
             val executor = agentFactory.create()
 
             val parsed: ParsedStackTrace = executor.parseStackTrace(sanitizedTrace)
+            MBALog.d(TAG, "  Parsed: file=${parsed.crashFile}, line=${parsed.crashLine}, method=${parsed.crashMethod}")
+
             val severity: SeverityResult = executor.classifySeverity(parsed, raw.device)
+            MBALog.d(TAG, "  Severity: ${severity.severity} (confidence=${severity.confidence})")
+
             val summary: CrashSummary = executor.generateSummary(
                 parsed = parsed,
                 severity = severity,
@@ -62,9 +66,11 @@ internal class CrashAnalysisAgent(
                 breadcrumbs = sanitizedBreadcrumbs,
                 device = raw.device,
             )
+            MBALog.d(TAG, "  Summary: '${summary.title}'")
 
-            // 5. Cache fingerprint to prevent re-processing
+            // 5. Cache
             dedupCache.put(fingerprint)
+            MBALog.i(TAG, "\u2705 New crash processed: '${summary.title}' [${severity.severity}]")
 
             CrashAnalysisResult.New(
                 ProcessedCrashReport(
@@ -88,7 +94,7 @@ internal class CrashAnalysisAgent(
                 )
             )
         } catch (e: Exception) {
-            // LLM failed — graceful fallback with basic info
+            MBALog.e(TAG, "\u274c AI analysis failed, using fallback", e)
             dedupCache.put(fingerprint)
             CrashAnalysisResult.Fallback(
                 report = ProcessedCrashReport(
@@ -106,7 +112,6 @@ internal class CrashAnalysisAgent(
     }
 }
 
-/** Sealed result type for the crash analysis pipeline. */
 internal sealed class CrashAnalysisResult {
     data class New(val report: ProcessedCrashReport) : CrashAnalysisResult()
     data class Duplicate(val report: DuplicateCrashReport) : CrashAnalysisResult()
