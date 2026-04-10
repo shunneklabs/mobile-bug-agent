@@ -8,6 +8,7 @@ kotlinx-io = "0.9.0"
 kotlinx-atomicfu = "0.27.0"
 kotlincrypto-sha2 = "0.8.0"
 uuid = "0.8.4"
+kermit = "2.1.0"
 logback = "1.5.6"
 androidx-work = "2.11.2"
 androidx-startup = "1.2.0"
@@ -16,13 +17,9 @@ androidx-activity-compose = "1.13.0"
 android-gradle-plugin = "9.1.0"
 android-compileSdk = "36"
 android-minSdk = "26"
-koog = "0.7.3"                   # latest Koog release
 android-targetSdk = "36"
 
 [libraries]
-
-koog-agents = { module = "ai.koog:koog-agents", version.ref = "koog" }
-
 # Ktor Client
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
@@ -42,6 +39,9 @@ kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-t
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
 kotlinx-io-core = { module = "org.jetbrains.kotlinx:kotlinx-io-core", version.ref = "kotlinx-io" }
 kotlinx-atomicfu = { module = "org.jetbrains.kotlinx:atomicfu", version.ref = "kotlinx-atomicfu" }
+
+# Logging
+kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }
 
 # Community
 kotlincrypto-sha2 = { module = "org.kotlincrypto.hash:sha2", version.ref = "kotlincrypto-sha2" }

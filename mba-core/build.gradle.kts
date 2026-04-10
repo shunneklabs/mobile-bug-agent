@@ -5,8 +5,6 @@ plugins {
 }
 
 kotlin {
-    // Strict explicit API mode — forces all public declarations to have
-    // explicit visibility modifiers. This prevents accidental API leaks.
     explicitApi()
 
     android {
@@ -27,6 +25,7 @@ kotlin {
             implementation(libs.uuid)
             implementation(libs.kotlincrypto.sha2)
             implementation(libs.ktor.client.core)
+            api(libs.kermit) // Exposed as api so all modules get Kermit transitively
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
