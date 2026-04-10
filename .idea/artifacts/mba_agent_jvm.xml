@@ -1,8 +1,0 @@
-<component name="ArtifactManager">
-  <artifact type="jar" name="mba-agent-jvm">
-    <output-path>$PROJECT_DIR$/mba-agent/build/libs</output-path>
-    <root id="archive" name="mba-agent-jvm.jar">
-      <element id="module-output" name="mobile-bug-agent.mba-agent.jvmMain" />
-    </root>
-  </artifact>
-</component>
