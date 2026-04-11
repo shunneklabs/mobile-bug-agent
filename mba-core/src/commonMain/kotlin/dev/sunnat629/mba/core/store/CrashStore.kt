@@ -5,21 +5,22 @@ import dev.sunnat629.mba.core.model.DeviceContext
 import dev.sunnat629.mba.core.model.ProcessedCrashReport
 
 /**
- * Where crash reports are persisted and deduplicated.
- * MVP: NotionCrashStore (Notion API).
- * Phase 2: PostgresCrashStore (Exposed + PostgreSQL).
+ * Server-side crash persistence and deduplication.
  *
- * Implementations must be thread-safe (called from WorkManager background thread).
+ * **Internal** — external devs don't interact with this.
+ * MVP: NotionCrashStore. Phase 2: PostgresCrashStore.
+ *
+ * Contract: implementations must be thread-safe.
  */
-interface CrashStore {
+internal interface CrashStore {
 
-    /** Find existing crash group by fingerprint. Returns null if this is a new crash. */
+    /** Find existing crash group by fingerprint. Null = new crash. */
     suspend fun findByFingerprint(fingerprint: String): CrashGroup?
 
-    /** Create a new crash group from a processed report. Returns the group with its assigned ID. */
+    /** Create a new crash group. Returns group with assigned ID. */
     suspend fun insertCrash(report: ProcessedCrashReport): CrashGroup
 
-    /** Increment occurrence count and add device info to an existing crash group. */
+    /** Increment occurrence count and add device info. */
     suspend fun incrementCount(groupId: String, device: DeviceContext)
 
     /** Link a ticket to a crash group after ticket creation. */

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.serialization)
@@ -14,11 +16,22 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        vectorDrawables {
-            useSupportLibrary = true
-        }
+        vectorDrawables { useSupportLibrary = true }
+
+        val localProps = rootProject.file("local.properties")
+        val props = Properties()
+        if (localProps.exists()) props.load(localProps.inputStream())
+
+        val notionKey = props.getProperty("NOTION_TOKEN") ?: props.getProperty("notion.api.key") ?: ""
+        val crashDbId = props.getProperty("NOTION_CRASH_DB_ID_OR_URL") ?: ""
+        val ticketDbId = props.getProperty("NOTION_TICKET_DB_ID_OR_URL") ?: ""
+        val geminiKey = props.getProperty("GEMINI_API_KEY") ?: ""
+
+        buildConfigField("String", "NOTION_API_KEY", "\"$notionKey\"")
+        buildConfigField("String", "NOTION_CRASH_DB_ID", "\"$crashDbId\"")
+        buildConfigField("String", "NOTION_TICKET_DB_ID", "\"$ticketDbId\"")
+        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiKey\"")
     }
 
     buildTypes {
@@ -33,26 +46,24 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
-    // composeOptions removed as Compose Compiler is now part of Kotlin plugin
-    packaging {
-        resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        }
-    }
+    packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
 }
 
 dependencies {
     implementation(project(":mba-android"))
+    implementation(project(":mba-core"))
     implementation(project(":mba-notion"))
-    
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.ktor.client.okhttp)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-    
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

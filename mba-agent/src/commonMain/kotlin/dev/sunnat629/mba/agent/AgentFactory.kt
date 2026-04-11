@@ -17,44 +17,82 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
+import java.io.Closeable
 
 /**
- * Creates the Koog AI agent with the right LLM executor.
- * Maps our LLMConfig → Koog's executor system.
- * The developer never imports Koog classes.
+ * Factory that creates [CrashAnalysisExecutor] instances backed by the configured LLM.
+ *
+ * **Internal** — external devs never import this. The SDK wires it automatically.
+ *
+ * Owns a shared [HttpClient] — call [close] when done (e.g., in server shutdown).
+ *
+ * Defaults to [SinglePromptExecutor] (1 LLM call) for optimal latency.
+ * Set [useMultiStep] = true to use 3 separate LLM calls (useful for debugging).
  */
-class AgentFactory(
+internal open class AgentFactory(
     private val llmConfig: LLMConfig,
+    private val useMultiStep: Boolean = false,
     private val json: Json = Json {
         ignoreUnknownKeys = true
         isLenient = true
     },
-) {
-    /**
-     * Create a CrashAnalysisExecutor backed by the configured LLM.
-     * Each call creates a fresh executor (stateless).
-     */
-    fun create(): CrashAnalysisExecutor {
-        // In production, this creates a Koog agent with the right LLM provider.
-        // For now, we define the interface that Koog integration will fulfill.
+) : Closeable {
+
+    // Single shared HttpClient — reused across all LLM calls.
+    private val httpClient = HttpClient {
+        install(ContentNegotiation) {
+            json(Json { ignoreUnknownKeys = true })
+        }
+    }
+
+    // Lazily created, reused executor. Stateless (except SinglePromptExecutor cache).
+    private val executor: CrashAnalysisExecutor by lazy {
         val llmCaller = createLLMCaller(llmConfig)
-        return KoogCrashAnalysisExecutor(llmCaller, json)
+        if (useMultiStep) {
+            KoogCrashAnalysisExecutor(llmCaller, json)
+        } else {
+            SinglePromptExecutor(llmCaller, json)
+        }
+    }
+
+    /** Returns a reusable executor. */
+    open fun create(): CrashAnalysisExecutor = executor
+
+    /** Release the shared HttpClient and its connection pool. */
+    override fun close() {
+        httpClient.close()
     }
 
     private fun createLLMCaller(config: LLMConfig): LLMCaller = when (config.provider) {
-        LLM.Provider.GEMINI -> KoogLLMCaller(provider = "gemini", apiKey = config.apiKey, model = config.model)
-        LLM.Provider.OPENAI -> KoogLLMCaller(provider = "openai", apiKey = config.apiKey, model = config.model)
-        LLM.Provider.ANTHROPIC -> KoogLLMCaller(provider = "anthropic", apiKey = config.apiKey, model = config.model)
-        LLM.Provider.OLLAMA -> KoogLLMCaller(provider = "ollama", apiKey = "", model = config.model, endpoint = config.endpoint)
-        LLM.Provider.CUSTOM -> KoogLLMCaller(provider = "custom", apiKey = config.apiKey, model = config.model, endpoint = config.endpoint)
+        LLM.Provider.GEMINI -> GeminiLLMCaller(
+            httpClient = httpClient,
+            apiKey = config.apiKey,
+            model = config.model,
+            json = json,
+        )
+        LLM.Provider.OPENAI -> OpenAILLMCaller(
+            httpClient = httpClient,
+            apiKey = config.apiKey,
+            model = config.model,
+            json = json,
+        )
+        LLM.Provider.ANTHROPIC -> throw NotImplementedError(
+            "Anthropic provider is planned but not yet implemented."
+        )
+        LLM.Provider.OLLAMA -> throw NotImplementedError(
+            "Ollama provider is planned but not yet implemented."
+        )
+        LLM.Provider.CUSTOM -> throw NotImplementedError(
+            "Custom provider requires endpoint configuration. Not yet implemented."
+        )
     }
 }
 
 /**
- * What the agent can do — defined as an interface so it's testable.
- * Production implementation uses Koog. Tests use a mock.
+ * What the AI agent can do — defined as an interface for testability.
+ * Production: backed by LLM. Tests: use a mock.
  */
-interface CrashAnalysisExecutor {
+internal interface CrashAnalysisExecutor {
     suspend fun parseStackTrace(sanitizedTrace: String): ParsedStackTrace
     suspend fun classifySeverity(parsed: ParsedStackTrace, device: DeviceContext): SeverityResult
     suspend fun generateSummary(
@@ -66,17 +104,14 @@ interface CrashAnalysisExecutor {
     ): CrashSummary
 }
 
-/**
- * Abstraction for LLM calls. Koog implementation lives in the actual agent module.
- * This keeps the agent testable without real LLM calls.
- */
-interface LLMCaller {
+/** Abstraction for raw LLM calls. Isolated for testability. */
+internal interface LLMCaller {
     suspend fun call(systemPrompt: String, userPrompt: String): String
 }
 
 /**
- * Production Koog-backed implementation.
- * Wires system prompt + tool prompts + structured output.
+ * Multi-step executor (original 3-call approach).
+ * Kept as fallback / for debugging when you want to see each step separately.
  */
 internal class KoogCrashAnalysisExecutor(
     private val llm: LLMCaller,
@@ -96,7 +131,7 @@ internal class KoogCrashAnalysisExecutor(
         device: DeviceContext,
     ): SeverityResult {
         val input = buildString {
-            appendLine("Parsed trace: ${json.encodeToString(ParsedStackTrace.serializer(), parsed)}")
+            appendLine("Parsed trace: ${json.encodeToString(parsed)}")
             appendLine("Device: ${device.displayName}, Memory: ${device.availableMemoryMb}MB/${device.totalMemoryMb}MB")
         }
         val response = llm.call(
@@ -114,7 +149,7 @@ internal class KoogCrashAnalysisExecutor(
         device: DeviceContext,
     ): CrashSummary {
         val input = buildString {
-            appendLine("Parsed trace: ${json.encodeToString(ParsedStackTrace.serializer(), parsed)}")
+            appendLine("Parsed trace: ${json.encodeToString(parsed)}")
             appendLine("Severity: ${severity.severity} (${severity.reasoning})")
             screen?.let { appendLine("Current screen: $it") }
             if (breadcrumbs.isNotEmpty()) {
@@ -130,78 +165,110 @@ internal class KoogCrashAnalysisExecutor(
     }
 }
 
-/**
- * Koog-backed LLM caller. This is where Koog's actual API gets called.
- * Isolated here so it's the ONLY class that imports Koog.
- */
-internal class KoogLLMCaller(
-    private val provider: String,
+// ─────────────────────────────────────────────────────────────────────── //
+//  LLM Provider Implementations
+// ─────────────────────────────────────────────────────────────────────── //
+
+internal class GeminiLLMCaller(
+    private val httpClient: HttpClient,
     private val apiKey: String,
     private val model: String,
-    private val endpoint: String? = null,
+    private val json: Json,
 ) : LLMCaller {
 
-    // Using Ktor for the actual LLM call to ensure multiplatform compatibility 
-    // and predictable behavior, as Koog's internal executors might have 
-    // platform-specific nuances or requires specific setup.
-    private val httpClient = io.ktor.client.HttpClient {
-        install(io.ktor.client.plugins.contentnegotiation.ContentNegotiation) {
-            json(Json { ignoreUnknownKeys = true })
-        }
-    }
-
     override suspend fun call(systemPrompt: String, userPrompt: String): String {
-        return when (provider) {
-            "gemini" -> callGemini(systemPrompt, userPrompt)
-            else -> throw NotImplementedError("Provider $provider not yet implemented.")
-        }
-    }
+        val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent"
+        val requestBody = buildGeminiRequestBody(systemPrompt, userPrompt)
 
-    private suspend fun callGemini(systemPrompt: String, userPrompt: String): String {
-        val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey"
-        
-        val requestBody = buildGeminiRequest(systemPrompt, userPrompt)
-        
-        val response: io.ktor.client.statement.HttpResponse = httpClient.post(url) {
-            contentType(io.ktor.http.ContentType.Application.Json)
+        val response = httpClient.post(url) {
+            header("x-goog-api-key", apiKey)
+            contentType(ContentType.Application.Json)
             setBody(requestBody)
         }
-        
-        if (response.status != io.ktor.http.HttpStatusCode.OK) {
+
+        if (response.status != HttpStatusCode.OK) {
             val errorBody = response.bodyAsText()
-            throw RuntimeException("Gemini API call failed: ${response.status}\n$errorBody")
+            throw RuntimeException("Gemini API error ${response.status}: $errorBody")
         }
 
-        val responseBody = response.bodyAsText()
-        return extractJsonFromGeminiResponse(responseBody)
+        return extractTextFromGeminiResponse(response.bodyAsText())
     }
 
-    private fun buildGeminiRequest(systemPrompt: String, userPrompt: String): String {
-        // Simple Gemini content structure
-        return """
-            {
-              "system_instruction": {
-                "parts": { "text": ${Json.encodeToString(systemPrompt)} }
-              },
-              "contents": {
-                "parts": { "text": ${Json.encodeToString(userPrompt)} }
-              },
-              "generationConfig": {
-                "response_mime_type": "application/json"
-              }
+    private fun buildGeminiRequestBody(systemPrompt: String, userPrompt: String): String {
+        val body = buildJsonObject {
+            putJsonObject("system_instruction") {
+                putJsonObject("parts") {
+                    put("text", systemPrompt)
+                }
             }
-        """.trimIndent()
+            putJsonObject("contents") {
+                putJsonObject("parts") {
+                    put("text", userPrompt)
+                }
+            }
+            putJsonObject("generationConfig") {
+                put("response_mime_type", "application/json")
+            }
+        }
+        return json.encodeToString(JsonObject.serializer(), body)
     }
 
-    private fun extractJsonFromGeminiResponse(response: String): String {
-        // Gemini returns a complex JSON. We need to extract candidates[0].content.parts[0].text
-        val jsonElement = Json.parseToJsonElement(response)
-        return jsonElement.jsonObject["candidates"]
-            ?.jsonArray?.get(0)
+    private fun extractTextFromGeminiResponse(responseBody: String): String {
+        val root = json.parseToJsonElement(responseBody)
+        return root.jsonObject["candidates"]
+            ?.jsonArray?.getOrNull(0)
             ?.jsonObject?.get("content")
             ?.jsonObject?.get("parts")
-            ?.jsonArray?.get(0)
+            ?.jsonArray?.getOrNull(0)
             ?.jsonObject?.get("text")
-            ?.jsonPrimitive?.content ?: throw RuntimeException("Failed to extract text from Gemini response")
+            ?.jsonPrimitive?.content
+            ?: throw RuntimeException("Failed to extract text from Gemini response: $responseBody")
+    }
+}
+
+internal class OpenAILLMCaller(
+    private val httpClient: HttpClient,
+    private val apiKey: String,
+    private val model: String,
+    private val json: Json,
+) : LLMCaller {
+
+    override suspend fun call(systemPrompt: String, userPrompt: String): String {
+        val url = "https://api.openai.com/v1/chat/completions"
+        val requestBody = buildJsonObject {
+            put("model", model)
+            putJsonArray("messages") {
+                addJsonObject {
+                    put("role", "system")
+                    put("content", systemPrompt)
+                }
+                addJsonObject {
+                    put("role", "user")
+                    put("content", userPrompt)
+                }
+            }
+            putJsonObject("response_format") {
+                put("type", "json_object")
+            }
+        }
+
+        val response = httpClient.post(url) {
+            header("Authorization", "Bearer $apiKey")
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(JsonObject.serializer(), requestBody))
+        }
+
+        if (response.status != HttpStatusCode.OK) {
+            val errorBody = response.bodyAsText()
+            throw RuntimeException("OpenAI API error ${response.status}: $errorBody")
+        }
+
+        val root = json.parseToJsonElement(response.bodyAsText())
+        return root.jsonObject["choices"]
+            ?.jsonArray?.getOrNull(0)
+            ?.jsonObject?.get("message")
+            ?.jsonObject?.get("content")
+            ?.jsonPrimitive?.content
+            ?: throw RuntimeException("Failed to extract content from OpenAI response")
     }
 }

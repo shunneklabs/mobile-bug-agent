@@ -1,12 +1,17 @@
 *.iml
 .gradle
 /local.properties
+/.idea/
+/.kotlin/
 /.idea/caches
 /.idea/libraries
 /.idea/modules.xml
 /.idea/workspace.xml
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
+/.idea/misc.xml
+/.idea/gradle.xml
+/.idea/artifacts/
 .DS_Store
 /build
 /captures
@@ -19,3 +24,9 @@ local.properties
 /mba-android/build/
 /mba-core/build/
 /mba-notion/build/
+
+# Ignore build outputs for all modules
+**/build/
+
+# Agent local planning artifacts
+/.agent/

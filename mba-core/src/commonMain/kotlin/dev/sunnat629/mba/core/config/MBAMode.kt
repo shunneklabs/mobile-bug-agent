@@ -3,28 +3,36 @@ package dev.sunnat629.mba.core.config
 import dev.sunnat629.mba.core.ticket.TicketBackend
 
 /**
- * Key ownership model — the security boundary.
+ * Deployment mode — determines the security/key ownership boundary.
  *
- * - SdkOnly: developer provides ALL keys. MBA owns ZERO secrets.
- * - Saas:    developer gets ONE project key. We own backend keys.
- * - SelfHosted: same as Saas on their infrastructure.
+ * External devs pick ONE:
+ * ```kotlin
+ * // Open source: dev provides all keys
+ * mode = MBAMode.SdkOnly(llmApiKey = "...", ticketBackend = notionBackend)
+ *
+ * // SaaS: one project key, we handle the rest
+ * mode = MBAMode.Saas(projectKey = "proj_abc123")
+ *
+ * // Self-hosted: same as SaaS on their own infra
+ * mode = MBAMode.SelfHosted(projectKey = "proj_abc123", endpoint = "https://...")
+ * ```
  */
-sealed interface MBAMode {
+public sealed interface MBAMode {
 
-    /** Open source mode. Developer provides all keys. */
-    data class SdkOnly(
+    /** Open source mode. Developer provides all keys. MBA owns zero secrets. */
+    public data class SdkOnly(
         val llmApiKey: String,
         val ticketBackend: TicketBackend,
     ) : MBAMode
 
     /** MBA Cloud SaaS. One project key. All integrations server-side. */
-    data class Saas(
+    public data class Saas(
         val projectKey: String,
         val endpoint: String = "https://api.mobilebugagent.dev",
     ) : MBAMode
 
-    /** Self-hosted. Same as Saas on customer infrastructure. */
-    data class SelfHosted(
+    /** Self-hosted. Same as SaaS on customer infrastructure. */
+    public data class SelfHosted(
         val projectKey: String,
         val endpoint: String,
     ) : MBAMode

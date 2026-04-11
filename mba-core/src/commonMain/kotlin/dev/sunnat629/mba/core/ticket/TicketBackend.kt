@@ -8,22 +8,28 @@ import kotlinx.serialization.Serializable
 
 /**
  * Abstraction for bug ticket creation.
- * MVP: NotionTicketBackend. Later: GitHubIssuesBackend, JiraBackend, LinearBackend.
  *
- * Implementations must be thread-safe.
+ * **Public API** — external devs implement this to plug in custom backends.
+ * Built-in: NotionTicketBackend (in mba-notion module).
+ * Planned: GitHubIssuesBackend, JiraBackend, LinearBackend.
+ *
+ * Contract:
+ * - Implementations MUST be thread-safe (called from background threads).
+ * - MUST NOT throw — return [TicketResult.failure] instead.
  */
-interface TicketBackend {
-    val name: String
+public interface TicketBackend {
+    /** Human-readable name (e.g., "Notion", "Jira"). Used in logs and results. */
+    public val name: String
 
-    /** Create a new bug ticket. Returns result with ticket ID and URL. */
-    suspend fun createTicket(report: ProcessedCrashReport): TicketResult
+    /** Create a new bug ticket from a processed crash report. */
+    public suspend fun createTicket(report: ProcessedCrashReport): TicketResult
 
     /** Update an existing ticket (increment count, add device, etc.). */
-    suspend fun updateTicket(ticketId: String, update: TicketUpdate): TicketResult
+    public suspend fun updateTicket(ticketId: String, update: TicketUpdate): TicketResult
 }
 
 @Serializable
-data class TicketUpdate(
+public data class TicketUpdate(
     val addDevice: DeviceContext? = null,
     val incrementCount: Boolean = false,
     val newOccurrenceTime: Instant? = null,

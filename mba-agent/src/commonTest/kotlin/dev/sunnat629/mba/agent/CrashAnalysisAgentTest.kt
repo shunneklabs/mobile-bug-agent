@@ -1,0 +1,160 @@
+package dev.sunnat629.mba.agent
+
+import dev.sunnat629.mba.agent.model.CrashSummary
+import dev.sunnat629.mba.agent.model.ParsedStackTrace
+import dev.sunnat629.mba.agent.model.SeverityResult
+import dev.sunnat629.mba.core.model.DeviceContext
+import dev.sunnat629.mba.core.model.RawCrashReport
+import dev.sunnat629.mba.core.model.Severity
+import dev.sunnat629.mba.core.pii.PIISanitizer
+import dev.sunnat629.mba.core.store.LocalDedupCache
+import kotlinx.coroutines.test.runTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.hours
+
+class CrashAnalysisAgentTest {
+
+    private val testDevice = DeviceContext(
+        manufacturer = "Google",
+        model = "Pixel 8",
+        osVersion = "15",
+        sdkInt = 35,
+        locale = "en-US",
+        totalMemoryMb = 8192,
+        availableMemoryMb = 4096,
+    )
+
+    private val testReport = RawCrashReport(
+        id = "test-001",
+        exceptionType = "java.lang.NullPointerException",
+        message = "Attempt to invoke method on null for user@test.com",
+        stackTrace = """
+            java.lang.NullPointerException: Attempt to invoke virtual method
+            at com.example.app.CheckoutViewModel.processPayment(CheckoutViewModel.kt:87)
+            at com.example.app.CheckoutViewModel.onConfirm(CheckoutViewModel.kt:45)
+            at android.view.View.performClick(View.java:7448)
+        """.trimIndent(),
+        threadName = "main",
+        isFatal = true,
+        device = testDevice,
+        appVersion = "1.0.0",
+        buildType = "debug",
+        currentScreen = "CheckoutScreen",
+        breadcrumbs = listOf("opened cart", "tapped checkout"),
+    )
+
+    /** Mock executor that returns predictable results without LLM calls. */
+    private class FakeExecutor : CrashAnalysisExecutor {
+        var parseCallCount = 0
+        var classifyCallCount = 0
+        var summaryCallCount = 0
+
+        override suspend fun parseStackTrace(sanitizedTrace: String): ParsedStackTrace {
+            parseCallCount++
+            return ParsedStackTrace(
+                rootException = "java.lang.NullPointerException",
+                rootMessage = "Attempt to invoke virtual method",
+                crashFile = "CheckoutViewModel.kt",
+                crashLine = 87,
+                crashMethod = "processPayment",
+                isAppCode = true,
+            )
+        }
+
+        override suspend fun classifySeverity(
+            parsed: ParsedStackTrace,
+            device: DeviceContext,
+        ): SeverityResult {
+            classifyCallCount++
+            return SeverityResult(
+                severity = Severity.HIGH,
+                confidence = 0.9f,
+                reasoning = "Main thread crash in payment flow",
+            )
+        }
+
+        override suspend fun generateSummary(
+            parsed: ParsedStackTrace,
+            severity: SeverityResult,
+            screen: String?,
+            breadcrumbs: List<String>,
+            device: DeviceContext,
+        ): CrashSummary {
+            summaryCallCount++
+            return CrashSummary(
+                title = "Checkout crashes during payment",
+                description = "NPE in CheckoutViewModel.processPayment",
+                stepsToReproduce = "1. Open cart\n2. Tap checkout",
+                possibleCause = "Payment response is null",
+            )
+        }
+    }
+
+    /** Fake factory that returns the mock executor. */
+    private class FakeAgentFactory(private val executor: CrashAnalysisExecutor) {
+        fun create(): CrashAnalysisExecutor = executor
+    }
+
+    @Test
+    fun newCrashFlowsThroughFullPipeline() = runTest {
+        val executor = FakeExecutor()
+        val piiSanitizer = PIISanitizer()
+        val dedupCache = LocalDedupCache(maxSize = 100, ttl = 24.hours)
+
+        val agent = CrashAnalysisAgent(
+            agentFactory = object : AgentFactory(
+                llmConfig = dev.sunnat629.mba.core.config.LLMConfig.NONE
+            ) {
+                override fun create(): CrashAnalysisExecutor = executor
+            },
+            piiSanitizer = piiSanitizer,
+            dedupCache = dedupCache,
+        )
+
+        val result = agent.process(testReport)
+
+        assertIs<CrashAnalysisResult.New>(result)
+        assertEquals("Checkout crashes during payment", result.report.title)
+        assertEquals(Severity.HIGH, result.report.severity)
+        assertTrue(result.report.fingerprint.isNotEmpty())
+        assertEquals(1, executor.parseCallCount)
+        assertEquals(1, executor.classifyCallCount)
+        assertEquals(1, executor.summaryCallCount)
+
+        // PII should be scrubbed from message
+        assertTrue(!result.report.raw.message!!.contains("user@test.com"))
+    }
+
+    @Test
+    fun duplicateCrashSkipsLLM() = runTest {
+        val executor = FakeExecutor()
+        val piiSanitizer = PIISanitizer()
+        val dedupCache = LocalDedupCache(maxSize = 100, ttl = 24.hours)
+
+        val agent = CrashAnalysisAgent(
+            agentFactory = object : AgentFactory(
+                llmConfig = dev.sunnat629.mba.core.config.LLMConfig.NONE
+            ) {
+                override fun create(): CrashAnalysisExecutor = executor
+            },
+            piiSanitizer = piiSanitizer,
+            dedupCache = dedupCache,
+        )
+
+        // First call: new crash
+        val first = agent.process(testReport)
+        assertIs<CrashAnalysisResult.New>(first)
+
+        // Second call with same report: should be duplicate
+        val second = agent.process(testReport)
+        assertIs<CrashAnalysisResult.Duplicate>(second)
+
+        // LLM should only have been called once (first time)
+        assertEquals(1, executor.parseCallCount)
+        assertEquals(1, executor.classifyCallCount)
+        assertEquals(1, executor.summaryCallCount)
+    }
+}

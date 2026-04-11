@@ -4,120 +4,129 @@ import dev.sunnat629.mba.core.config.MBAConfig
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
 
-/**
- * Public API for the MBA SDK. Thread-safe.
- *
- * Two-phase initialization:
- *   1. install(crashDir) — sets crash handler (~2ms). Call early.
- *   2. configure(config) — AI + backend config. Any thread. DI-friendly.
- *
- * Or use init() for one-step convenience.
- */
-object MBA {
+public object MBA {
+
+    private const val TAG = "Core"
 
     @Volatile
     private var installed = false
+
     @Volatile
     private var configured = false
+
     private var config: MBAConfig? = null
 
     @Volatile
-    var currentScreen: String? = null
+    public var currentScreen: String? = null
         internal set
 
+    @get:JvmSynthetic
     internal lateinit var breadcrumbs: BreadcrumbTracker
         private set
 
+    @get:JvmSynthetic
     internal lateinit var crashDirPath: String
         private set
 
-    /**
-     * CoroutineExceptionHandler — add to your scope to capture coroutine crashes.
-     */
-    val exceptionHandler = CoroutineExceptionHandler { ctx, throwable ->
-        val coroutineName = ctx[CoroutineName]?.name
-        handleCrash(
-            throwable = throwable,
-            isFatal = false,
-            threadName = "Coroutine",
-            coroutineContext = coroutineName,
-        )
-    }
+    public val exceptionHandler: CoroutineExceptionHandler =
+        CoroutineExceptionHandler { ctx, throwable ->
+            val name = ctx[CoroutineName]?.name ?: "unnamed"
+            MBALog.w(TAG, "Coroutine exception: ${throwable::class.simpleName} in '$name'")
+            handleCrash(throwable, isFatal = false, threadName = "Coroutine", coroutineContext = name)
+        }
 
-    /**
-     * Phase 1: Install crash handler.
-     */
-    fun install(crashDir: String) {
-        if (installed) return
+    // ------------------------------------------------------------------ //
+    //  Phase 1: Install
+    // ------------------------------------------------------------------ //
+
+    public fun install(crashDir: String) {
+        if (installed) {
+            MBALog.d(TAG, "install() called again — skipping (already installed)")
+            return
+        }
         installed = true
-        this.crashDirPath = crashDir
-        this.breadcrumbs = BreadcrumbTracker()
+        crashDirPath = crashDir
+        breadcrumbs = BreadcrumbTracker()
+
+        MBALog.i(TAG, "✔ Installing crash handler. dir=$crashDir")
 
         PlatformInitializer.installCrashHandler { threadName, throwable ->
-            handleCrash(
-                throwable = throwable,
-                isFatal = true,
-                threadName = threadName,
-            )
+            MBALog.e(TAG, "💥 FATAL crash on '$threadName': ${throwable::class.simpleName}: ${throwable.message}")
+            handleCrash(throwable, isFatal = true, threadName = threadName)
         }
+
+        MBALog.i(TAG, "✔ Crash handler installed")
     }
 
-    /**
-     * Phase 2: Configure AI processing + backends.
-     */
-    fun configure(config: MBAConfig) {
+    // ------------------------------------------------------------------ //
+    //  Phase 2: Configure
+    // ------------------------------------------------------------------ //
+
+    public fun configure(config: MBAConfig) {
         check(installed) { "Call MBA.install(crashDir) before MBA.configure()" }
-        if (configured) return
+        if (configured) {
+            MBALog.d(TAG, "configure() called again — skipping (already configured)")
+            return
+        }
         configured = true
         this.config = config
+
+        // Enable logging AFTER config so the debug flag takes effect immediately
+        MBALog.enabled = config.debug
+
+        MBALog.i(TAG, "✔ Configured. debug=${config.debug}, mode=${config.mode::class.simpleName}, llm=${config.llm}")
     }
 
-    /**
-     * Convenience: install + configure in one call.
-     */
-    fun init(crashDir: String, block: MBAConfig.Builder.() -> Unit) {
+    public fun init(crashDir: String, block: MBAConfig.Builder.() -> Unit) {
         install(crashDir)
         configure(MBAConfig.Builder().apply(block).build())
     }
 
-    /** Set current screen name for crash context. */
-    fun setScreen(name: String) {
+    // ------------------------------------------------------------------ //
+    //  Runtime
+    // ------------------------------------------------------------------ //
+
+    public fun setScreen(name: String) {
+        MBALog.d(TAG, "Screen → '$name'")
         currentScreen = name
     }
 
-    /** Add a breadcrumb for crash context. Thread-safe. */
-    fun addBreadcrumb(message: String) {
-        if (installed) breadcrumbs.add(message)
+    public fun addBreadcrumb(message: String) {
+        if (!installed) return
+        MBALog.d(TAG, "Breadcrumb: '$message'")
+        breadcrumbs.add(message)
     }
 
-    /** Log a non-fatal error. Queued for background processing. */
-    fun logError(throwable: Throwable, threadName: String = "Unknown", metadata: Map<String, String> = emptyMap()) {
-        if (installed) {
-            handleCrash(
-                throwable = throwable,
-                isFatal = false,
-                threadName = threadName,
-                metadata = metadata,
-            )
-        }
+    public fun logError(
+        throwable: Throwable,
+        metadata: Map<String, String> = emptyMap(),
+    ) {
+        if (!installed) return
+        MBALog.w(TAG, "Non-fatal error logged: ${throwable::class.simpleName}: ${throwable.message}" +
+            if (metadata.isNotEmpty()) " metadata=$metadata" else "")
+        handleCrash(throwable, isFatal = false, threadName = Thread.currentThread().name, metadata = metadata)
     }
 
-    /** Get current config. Throws if not configured. */
+    // ------------------------------------------------------------------ //
+    //  Internal
+    // ------------------------------------------------------------------ //
+
+    @JvmSynthetic
     internal fun requireConfig(): MBAConfig =
         config ?: error("MBA not configured. Call MBA.configure() first.")
 
-    /** Check if configured (for optional features that degrade gracefully). */
+    @JvmSynthetic
     internal fun isConfigured(): Boolean = configured
 
-    // ---- Internal crash handling ----
-
-    fun handleCrash(
+    @JvmSynthetic
+    internal fun handleCrash(
         throwable: Throwable,
         isFatal: Boolean,
         threadName: String,
         coroutineContext: String? = null,
         metadata: Map<String, String> = emptyMap(),
     ) {
+        MBALog.d(TAG, "handleCrash: fatal=$isFatal, thread=$threadName, type=${throwable::class.simpleName}")
         try {
             CrashWriter.writeToDisk(
                 crashDir = crashDirPath,
@@ -129,27 +138,14 @@ object MBA {
                 breadcrumbs = breadcrumbs.snapshot(),
                 metadata = metadata,
             )
-        } catch (_: Throwable) {
+            MBALog.d(TAG, "Crash written to disk successfully")
+        } catch (e: Throwable) {
+            MBALog.e(TAG, "Failed to write crash to disk", e)
+            try { System.err.println("MBA: disk write failed: ${e.message}") } catch (_: Throwable) {}
         }
     }
 }
 
 internal expect object PlatformInitializer {
     fun installCrashHandler(onCrash: (String, Throwable) -> Unit)
-}
-
-/**
- * Internal interface for the disk crash writer.
- */
-internal expect object CrashWriter {
-    fun writeToDisk(
-        crashDir: String,
-        throwable: Throwable,
-        isFatal: Boolean,
-        threadName: String,
-        coroutineContext: String?,
-        currentScreen: String?,
-        breadcrumbs: List<String>,
-        metadata: Map<String, String>,
-    )
 }

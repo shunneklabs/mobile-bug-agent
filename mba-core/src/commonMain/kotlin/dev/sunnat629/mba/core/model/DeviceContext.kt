@@ -2,8 +2,14 @@ package dev.sunnat629.mba.core.model
 
 import kotlinx.serialization.Serializable
 
+/**
+ * Device information captured at crash time.
+ *
+ * **Public API** — external devs may construct this for custom integrations
+ * or read it from ticket results.
+ */
 @Serializable
-data class DeviceContext(
+public data class DeviceContext(
     val manufacturer: String,
     val model: String,
     val marketingName: String? = null,
@@ -17,7 +23,7 @@ data class DeviceContext(
     val orientation: String = "portrait",
 ) {
     /** "Samsung Galaxy S24 (Android 15, API 35)" */
-    val displayName: String
+    public val displayName: String
         get() = buildString {
             append(marketingName ?: "$manufacturer $model")
             append(" (Android $osVersion, API $sdkInt)")
