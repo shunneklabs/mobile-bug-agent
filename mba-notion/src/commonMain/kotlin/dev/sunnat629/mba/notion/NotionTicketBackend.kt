@@ -9,6 +9,7 @@ import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
@@ -36,13 +37,23 @@ public class NotionTicketBackend(
 
     override suspend fun createTicket(report: ProcessedCrashReport): TicketResult {
         return try {
-            val response: NotionPageResponse = httpClient.post("https://api.notion.com/v1/pages") {
+            val httpResponse = httpClient.post("https://api.notion.com/v1/pages") {
                 header("Authorization", "Bearer $apiKey")
                 header("Notion-Version", notionApiVersion)
                 contentType(ContentType.Application.Json)
                 setBody(mapReportToNotionRequest(report))
-            }.body()
+            }
 
+            // Check HTTP status BEFORE trying to deserialize
+            if (!httpResponse.status.isSuccess()) {
+                val errorBody = httpResponse.bodyAsText()
+                return TicketResult.failure(
+                    name,
+                    "Notion API ${httpResponse.status}: $errorBody"
+                )
+            }
+
+            val response: NotionPageResponse = httpResponse.body()
             TicketResult(
                 ticketId = response.id,
                 backendName = name,
@@ -56,7 +67,7 @@ public class NotionTicketBackend(
 
     override suspend fun updateTicket(ticketId: String, update: TicketUpdate): TicketResult {
         return try {
-            httpClient.patch("https://api.notion.com/v1/pages/$ticketId") {
+            val httpResponse = httpClient.patch("https://api.notion.com/v1/pages/$ticketId") {
                 header("Authorization", "Bearer $apiKey")
                 header("Notion-Version", notionApiVersion)
                 contentType(ContentType.Application.Json)
@@ -68,6 +79,15 @@ public class NotionTicketBackend(
                 }
                 setBody(mapOf("properties" to properties))
             }
+
+            if (!httpResponse.status.isSuccess()) {
+                val errorBody = httpResponse.bodyAsText()
+                return TicketResult.failure(
+                    name,
+                    "Notion API ${httpResponse.status}: $errorBody"
+                )
+            }
+
             TicketResult(ticketId = ticketId, backendName = name, success = true)
         } catch (e: Exception) {
             TicketResult.failure(name, e.message ?: "Unknown error updating Notion ticket")
