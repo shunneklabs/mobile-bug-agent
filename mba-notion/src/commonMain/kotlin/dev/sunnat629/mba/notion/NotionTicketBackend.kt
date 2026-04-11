@@ -28,6 +28,7 @@ public class NotionTicketBackend(
                 json(Json {
                     ignoreUnknownKeys = true
                     encodeDefaults = true
+                    explicitNulls = false  // <-- Notion wants absent fields, NOT "field": null
                 })
             }
         }
@@ -44,13 +45,9 @@ public class NotionTicketBackend(
                 setBody(mapReportToNotionRequest(report))
             }
 
-            // Check HTTP status BEFORE trying to deserialize
             if (!httpResponse.status.isSuccess()) {
                 val errorBody = httpResponse.bodyAsText()
-                return TicketResult.failure(
-                    name,
-                    "Notion API ${httpResponse.status}: $errorBody"
-                )
+                return TicketResult.failure(name, "Notion API ${httpResponse.status}: $errorBody")
             }
 
             val response: NotionPageResponse = httpResponse.body()
@@ -82,10 +79,7 @@ public class NotionTicketBackend(
 
             if (!httpResponse.status.isSuccess()) {
                 val errorBody = httpResponse.bodyAsText()
-                return TicketResult.failure(
-                    name,
-                    "Notion API ${httpResponse.status}: $errorBody"
-                )
+                return TicketResult.failure(name, "Notion API ${httpResponse.status}: $errorBody")
             }
 
             TicketResult(ticketId = ticketId, backendName = name, success = true)
