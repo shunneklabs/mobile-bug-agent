@@ -25,3 +25,6 @@ local.properties
 
 # Ignore build outputs for all modules
 **/build/
+
+# Agent local planning artifacts
+/.agent/
