@@ -22,13 +22,28 @@ android {
             useSupportLibrary = true
         }
 
-        // Read Notion keys from local.properties (not committed to git)
+        // ── Read keys from local.properties ──────────────────────── //
+        // Supports BOTH naming conventions:
+        //   NOTION_TOKEN=secret_...          OR  notion.api.key=secret_...
+        //   NOTION_CRASH_DB_ID_OR_URL=abc... OR  notion.db.id=abc...
+        //   GEMINI_API_KEY=AIza...
         val localProps = rootProject.file("local.properties")
         val props = Properties()
         if (localProps.exists()) props.load(localProps.inputStream())
 
-        buildConfigField("String", "NOTION_API_KEY", "\"${props.getProperty("notion.api.key", "")}\"")
-        buildConfigField("String", "NOTION_DB_ID", "\"${props.getProperty("notion.db.id", "")}\"")
+        val notionKey = props.getProperty("NOTION_TOKEN")
+            ?: props.getProperty("notion.api.key")
+            ?: ""
+        val notionDbId = props.getProperty("NOTION_CRASH_DB_ID_OR_URL")
+            ?: props.getProperty("notion.db.id")
+            ?: ""
+        val notionTicketDbId = props.getProperty("NOTION_TICKET_DB_ID_OR_URL") ?: ""
+        val geminiKey = props.getProperty("GEMINI_API_KEY") ?: ""
+
+        buildConfigField("String", "NOTION_API_KEY", "\"$notionKey\"")
+        buildConfigField("String", "NOTION_DB_ID", "\"$notionDbId\"")
+        buildConfigField("String", "NOTION_TICKET_DB_ID", "\"$notionTicketDbId\"")
+        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiKey\"")
     }
 
     buildTypes {
