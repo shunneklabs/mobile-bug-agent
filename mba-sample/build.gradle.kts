@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kotlin.compose)
 }
@@ -19,13 +20,18 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        // Read Notion keys from local.properties (not committed to git)
+        val localProps = rootProject.file("local.properties")
+        val props = java.util.Properties()
+        if (localProps.exists()) props.load(localProps.inputStream())
+
+        buildConfigField("String", "NOTION_API_KEY", "\"${props.getProperty("notion.api.key", "")}\"")
+        buildConfigField("String", "NOTION_DB_ID", "\"${props.getProperty("notion.db.id", "")}\"")
     }
 
     buildTypes {
         release {
-            // TODO: Enable for production builds:
-            // isMinifyEnabled = true
-            // isShrinkResources = true
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -41,6 +47,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
@@ -51,14 +58,13 @@ android {
 }
 
 dependencies {
-    // MBA SDK — only depend on the Android integration module.
-    // mba-android transitively brings in mba-core.
     implementation(project(":mba-android"))
-    // Notion backend — external devs would add this as a separate dependency.
     implementation(project(":mba-core"))
     implementation(project(":mba-notion"))
 
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.ktor.client.okhttp)
 
     // Compose
     implementation(platform(libs.androidx.compose.bom))
