@@ -16,80 +16,54 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        vectorDrawables {
-            useSupportLibrary = true
-        }
+        vectorDrawables { useSupportLibrary = true }
 
-        // ── Read keys from local.properties ──────────────────────── //
-        // Supports BOTH naming conventions:
-        //   NOTION_TOKEN=secret_...          OR  notion.api.key=secret_...
-        //   NOTION_CRASH_DB_ID_OR_URL=abc... OR  notion.db.id=abc...
-        //   GEMINI_API_KEY=AIza...
         val localProps = rootProject.file("local.properties")
         val props = Properties()
         if (localProps.exists()) props.load(localProps.inputStream())
 
-        val notionKey = props.getProperty("NOTION_TOKEN")
-            ?: props.getProperty("notion.api.key")
-            ?: ""
-        val notionDbId = props.getProperty("NOTION_CRASH_DB_ID_OR_URL")
-            ?: props.getProperty("notion.db.id")
-            ?: ""
-        val notionTicketDbId = props.getProperty("NOTION_TICKET_DB_ID_OR_URL") ?: ""
+        val notionKey = props.getProperty("NOTION_TOKEN") ?: props.getProperty("notion.api.key") ?: ""
+        val crashDbId = props.getProperty("NOTION_CRASH_DB_ID_OR_URL") ?: ""
+        val ticketDbId = props.getProperty("NOTION_TICKET_DB_ID_OR_URL") ?: ""
         val geminiKey = props.getProperty("GEMINI_API_KEY") ?: ""
 
         buildConfigField("String", "NOTION_API_KEY", "\"$notionKey\"")
-        buildConfigField("String", "NOTION_DB_ID", "\"$notionDbId\"")
-        buildConfigField("String", "NOTION_TICKET_DB_ID", "\"$notionTicketDbId\"")
+        buildConfigField("String", "NOTION_CRASH_DB_ID", "\"$crashDbId\"")
+        buildConfigField("String", "NOTION_TICKET_DB_ID", "\"$ticketDbId\"")
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiKey\"")
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro",
-            )
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-
     buildFeatures {
         compose = true
         buildConfig = true
     }
-
-    packaging {
-        resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        }
-    }
+    packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
 }
 
 dependencies {
     implementation(project(":mba-android"))
     implementation(project(":mba-core"))
     implementation(project(":mba-notion"))
-
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.ktor.client.okhttp)
-
-    // Compose
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
