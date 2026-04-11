@@ -28,7 +28,7 @@ public class NotionTicketBackend(
                 json(Json {
                     ignoreUnknownKeys = true
                     encodeDefaults = true
-                    explicitNulls = false  // <-- Notion wants absent fields, NOT "field": null
+                    explicitNulls = false
                 })
             }
         }
@@ -70,7 +70,7 @@ public class NotionTicketBackend(
                 contentType(ContentType.Application.Json)
                 val properties = mutableMapOf<String, NotionProperty>()
                 update.addDevice?.let { device ->
-                    properties[fieldMapping.device] = NotionProperty.RichText(
+                    properties[fieldMapping.affectedDevices] = NotionProperty.RichText(
                         listOf(NotionRichText(text = NotionTextContent(device.displayName)))
                     )
                 }
@@ -94,29 +94,118 @@ public class NotionTicketBackend(
 
     private fun mapReportToNotionRequest(report: ProcessedCrashReport): NotionPageRequest {
         val properties = mutableMapOf<String, NotionProperty>()
+
+        // Title (title property)
         properties[fieldMapping.title] = NotionProperty.Title(
             listOf(NotionRichText(text = NotionTextContent(report.title)))
         )
+
+        // Severity (select)
         properties[fieldMapping.severity] = NotionProperty.Select(
             NotionSelectItem(name = report.severity.name)
         )
+
+        // Fingerprint (text)
         properties[fieldMapping.fingerprint] = NotionProperty.RichText(
             listOf(NotionRichText(text = NotionTextContent(report.fingerprint)))
         )
-        properties[fieldMapping.device] = NotionProperty.RichText(
+
+        // Affected Devices (text)
+        properties[fieldMapping.affectedDevices] = NotionProperty.RichText(
             listOf(NotionRichText(text = NotionTextContent(report.raw.device.displayName)))
         )
-        properties[fieldMapping.rootCause] = NotionProperty.RichText(
-            listOf(NotionRichText(text = NotionTextContent(report.possibleCause ?: "Unknown")))
+
+        // Stack Trace (text)
+        properties[fieldMapping.stackTrace] = NotionProperty.RichText(
+            listOf(NotionRichText(text = NotionTextContent(
+                report.sanitizedStackTrace.take(2000) // Notion text limit
+            )))
         )
 
+        // Exception Type (select)
+        val exceptionShort = report.raw.exceptionType
+            .substringAfterLast(".")
+            .let { type ->
+                // Map to one of the DB's select options
+                when {
+                    type.contains("NullPointer") -> "NullPointerException"
+                    type.contains("IllegalState") -> "IllegalStateException"
+                    type.contains("OutOfMemory") -> "OutOfMemoryError"
+                    type.contains("Security") -> "SecurityException"
+                    else -> "Other"
+                }
+            }
+        properties[fieldMapping.exceptionType] = NotionProperty.Select(
+            NotionSelectItem(name = exceptionShort)
+        )
+
+        // Crash File (text)
+        report.crashFile?.let { file ->
+            properties[fieldMapping.crashFile] = NotionProperty.RichText(
+                listOf(NotionRichText(text = NotionTextContent(file)))
+            )
+        }
+
+        // Crash Line (number)
+        report.crashLine?.let { line ->
+            properties[fieldMapping.crashLine] = NotionProperty.Number(line.toDouble())
+        }
+
+        // AI Confidence (number — percent format)
+        properties[fieldMapping.aiConfidence] = NotionProperty.Number(
+            report.confidence.toDouble()
+        )
+
+        // App Version (text)
+        properties[fieldMapping.appVersion] = NotionProperty.RichText(
+            listOf(NotionRichText(text = NotionTextContent(report.raw.appVersion)))
+        )
+
+        // OS Versions (text)
+        properties[fieldMapping.osVersions] = NotionProperty.RichText(
+            listOf(NotionRichText(text = NotionTextContent(
+                "Android ${report.raw.device.osVersion} (API ${report.raw.device.sdkInt})"
+            )))
+        )
+
+        // Occurrence Count (number)
+        properties[fieldMapping.occurrenceCount] = NotionProperty.Number(1.0)
+
+        // Status (status) — new crashes start as "New"
+        // Note: Status properties use a different API format, skip for now
+
+        // Content blocks (page body)
         val children = mutableListOf<NotionBlock>()
+
+        // Description paragraph
         children.add(NotionBlock(
             type = "paragraph",
             paragraph = NotionParagraphBlock(
                 listOf(NotionRichText(text = NotionTextContent(report.description)))
             )
         ))
+
+        // Possible cause
+        report.possibleCause?.let { cause ->
+            children.add(NotionBlock(
+                type = "paragraph",
+                paragraph = NotionParagraphBlock(
+                    listOf(NotionRichText(text = NotionTextContent("Possible cause: $cause")))
+                )
+            ))
+        }
+
+        // Steps to reproduce
+        report.stepsToReproduce?.let { steps ->
+            children.add(NotionBlock(
+                type = "paragraph",
+                paragraph = NotionParagraphBlock(
+                    listOf(NotionRichText(text = NotionTextContent("Steps to reproduce:\n$steps")))
+                )
+            ))
+        }
+
+        // Stack trace code block
         children.add(NotionBlock(
             type = "code",
             code = NotionCodeBlock(
@@ -133,10 +222,25 @@ public class NotionTicketBackend(
     }
 }
 
+/**
+ * Mapping from MBA fields to Notion database property names.
+ *
+ * Defaults match the MBA Crash Reports DB schema:
+ *   Title, Severity, Fingerprint, Affected Devices, Stack Trace,
+ *   Exception Type, Crash File, Crash Line, AI Confidence,
+ *   App Version, OS Versions, Occurrence Count
+ */
 public data class NotionFieldMapping(
-    val title: String = "Name",
+    val title: String = "Title",
     val severity: String = "Severity",
     val fingerprint: String = "Fingerprint",
-    val device: String = "Device",
-    val rootCause: String = "Root Cause",
+    val affectedDevices: String = "Affected Devices",
+    val stackTrace: String = "Stack Trace",
+    val exceptionType: String = "Exception Type",
+    val crashFile: String = "Crash File",
+    val crashLine: String = "Crash Line",
+    val aiConfidence: String = "AI Confidence",
+    val appVersion: String = "App Version",
+    val osVersions: String = "OS Versions",
+    val occurrenceCount: String = "Occurrence Count",
 )
