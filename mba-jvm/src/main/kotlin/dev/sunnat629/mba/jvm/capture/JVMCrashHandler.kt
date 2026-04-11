@@ -1,21 +1,19 @@
 package dev.sunnat629.mba.jvm.capture
 
 import dev.sunnat629.mba.core.MBA
-import java.io.PrintWriter
-import java.io.StringWriter
 
 /**
  * JVM-specific crash handler integration.
  * Although MBA.install() sets the default handler, this class can provide
  * extra JVM-specific context or manual triggers.
  */
-object JVMCrashHandler : Thread.UncaughtExceptionHandler {
+internal object JVMCrashHandler : Thread.UncaughtExceptionHandler {
     private var defaultHandler: Thread.UncaughtExceptionHandler? = null
 
     /**
      * Install the JVM crash handler.
      */
-    fun install(crashDirPath: String) {
+    internal fun install(crashDirPath: String) {
         MBA.install(crashDirPath)
         defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler(this)
@@ -25,6 +23,7 @@ object JVMCrashHandler : Thread.UncaughtExceptionHandler {
         try {
             // JVM-specific context can be added as metadata
             val metadata = mapOf(
+                "thread.name" to t.name,
                 "jvm.version" to System.getProperty("java.version"),
                 "jvm.vendor" to System.getProperty("java.vendor"),
                 "os.name" to System.getProperty("os.name"),
@@ -32,12 +31,7 @@ object JVMCrashHandler : Thread.UncaughtExceptionHandler {
                 "os.version" to System.getProperty("os.version")
             )
 
-            MBA.handleCrash(
-                throwable = e,
-                isFatal = true,
-                threadName = t.name,
-                metadata = metadata
-            )
+            MBA.logError(throwable = e, metadata = metadata)
         } catch (ex: Exception) {
             System.err.println("Error capturing JVM crash: ${ex.message}")
         } finally {

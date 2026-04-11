@@ -1,6 +1,7 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kotlin.compose)
 }
@@ -23,7 +24,7 @@ android {
 
         // Read Notion keys from local.properties (not committed to git)
         val localProps = rootProject.file("local.properties")
-        val props = java.util.Properties()
+        val props = Properties()
         if (localProps.exists()) props.load(localProps.inputStream())
 
         buildConfigField("String", "NOTION_API_KEY", "\"${props.getProperty("notion.api.key", "")}\"")

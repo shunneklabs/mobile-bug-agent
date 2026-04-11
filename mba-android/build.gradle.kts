@@ -20,8 +20,5 @@ kotlin {
             implementation(libs.androidx.work.runtime)
             implementation(libs.androidx.startup)
         }
-        commonTest.dependencies {
-            implementation(kotlin("test"))
-        }
     }
 }
