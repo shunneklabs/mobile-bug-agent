@@ -5,7 +5,6 @@ plugins {
 }
 
 kotlin {
-    explicitApi()
 
     android {
         namespace = "dev.sunnat629.mba.notion"

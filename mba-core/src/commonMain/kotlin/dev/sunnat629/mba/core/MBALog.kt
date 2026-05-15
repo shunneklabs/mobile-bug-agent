@@ -20,13 +20,13 @@ import co.touchlab.kermit.Severity as KermitSeverity
  *
  * Tag convention: `MBA/<component>` (e.g. `MBA/Agent`, `MBA/Notion`)
  */
-internal object MBALog {
+public object MBALog {
 
     private const val PREFIX = "MBA"
 
     /** Whether debug logging is enabled. Set by [MBA.configure]. */
     @Volatile
-    var enabled: Boolean = false
+    public var enabled: Boolean = false
 
     private fun tag(component: String) = "$PREFIX/$component"
 
@@ -35,25 +35,25 @@ internal object MBALog {
     // ──────────────────────────────────────────────────────────────── //
 
     /** Verbose internal state, pipeline steps, timing. */
-    fun d(component: String, message: String) {
+    public fun d(component: String, message: String) {
         if (!enabled) return
         Logger.d(tag(component)) { message }
     }
 
     /** Key lifecycle events: install, configure, ticket created. */
-    fun i(component: String, message: String) {
+    public fun i(component: String, message: String) {
         if (!enabled) return
         Logger.i(tag(component)) { message }
     }
 
     /** Recoverable issues: dedup hit, fallback triggered. */
-    fun w(component: String, message: String) {
+    public fun w(component: String, message: String) {
         if (!enabled) return
         Logger.w(tag(component)) { message }
     }
 
     /** Failures: LLM error, disk write failure, ticket creation failed. */
-    fun e(component: String, message: String, throwable: Throwable? = null) {
+    public fun e(component: String, message: String, throwable: Throwable? = null) {
         if (!enabled) return
         if (throwable != null) {
             Logger.e(throwable, tag(component)) { message }

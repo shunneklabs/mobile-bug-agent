@@ -10,7 +10,7 @@ import java.io.StringWriter
 import java.util.UUID
 import kotlin.time.Clock
 
-internal actual object CrashWriter {
+public actual object CrashWriter {
 
     private val json = Json {
         ignoreUnknownKeys = true

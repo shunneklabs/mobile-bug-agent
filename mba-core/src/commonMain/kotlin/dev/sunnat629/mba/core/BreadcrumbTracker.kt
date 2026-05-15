@@ -1,6 +1,6 @@
 package dev.sunnat629.mba.core
 
-internal class BreadcrumbTracker(
+public class BreadcrumbTracker(
     private val maxSize: Int = 50,
 ) {
     private val buffer: ArrayDeque<String> = ArrayDeque(maxSize)

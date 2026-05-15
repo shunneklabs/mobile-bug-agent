@@ -1,29 +1,31 @@
 plugins {
-    alias(libs.plugins.android.kmp.library)
-    alias(libs.plugins.kotlin.multiplatform)
+    id("com.android.library")
     alias(libs.plugins.kotlin.serialization)
 }
 
-kotlin {
-    explicitApi()
+android {
+    namespace = "dev.sunnat629.mba.android"
+    compileSdk = libs.versions.android.compileSdk.get().toInt()
 
-    android {
-        namespace = "dev.sunnat629.mba.android"
-        compileSdk = libs.versions.android.compileSdk.get().toInt()
+    defaultConfig {
         minSdk = libs.versions.android.minSdk.get().toInt()
     }
 
-    sourceSets {
-        commonMain.dependencies {
-            implementation(project(":mba-core"))
-            implementation(project(":mba-notion"))
-            implementation(libs.kotlinx.serialization.json)
-            implementation(libs.ktor.client.core)
-        }
-        androidMain.dependencies {
-            implementation(libs.androidx.work.runtime)
-            implementation(libs.androidx.startup)
-            implementation(libs.ktor.client.okhttp)
-        }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
+
+    buildFeatures {
+        buildConfig = true
+    }
+}
+
+dependencies {
+    implementation(project(":mba-core"))
+    implementation(project(":mba-notion"))
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.ktor.client.okhttp)
+    implementation(libs.androidx.work.runtime)
+    implementation(libs.androidx.startup)
 }

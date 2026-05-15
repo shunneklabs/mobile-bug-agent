@@ -12,7 +12,7 @@ package dev.sunnat629.mba.core
  * - androidMain → DiskCrashWriter (writes JSON to app-internal files dir)
  * - jvmMain → JVMCrashHandler (writes to temp dir)
  */
-internal expect object CrashWriter {
+public expect object CrashWriter {
     fun writeToDisk(
         crashDir: String,
         throwable: Throwable,
