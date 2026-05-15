@@ -3,7 +3,7 @@ package dev.sunnat629.mba.agent.model
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class DuplicateCheckResult(
+internal data class DuplicateCheckResult(
     val isDuplicate: Boolean,
     val matchType: String? = null,
     val matchedCrashId: String? = null,

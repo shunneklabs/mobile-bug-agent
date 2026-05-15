@@ -31,7 +31,7 @@ internal data class CombinedCrashAnalysis(
     val possibleCause: String? = null,
 ) {
     fun toParsedStackTrace() = ParsedStackTrace(
-        rootException = rootException,
+        rootException = rootException ?: "Unknown",
         rootMessage = rootMessage,
         crashFile = crashFile,
         crashLine = crashLine,

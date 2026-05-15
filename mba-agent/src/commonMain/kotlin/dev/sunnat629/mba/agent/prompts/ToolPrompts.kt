@@ -1,8 +1,8 @@
 package dev.sunnat629.mba.agent.prompts
 
-object ToolPrompts {
+internal object ToolPrompts {
 
-    val STACK_TRACE_PARSER = """
+    val STACK_TRACE_PARSER: String = """
         Analyze this Android stack trace. Return JSON:
         {
           "rootException": "java.lang.NullPointerException",
@@ -18,7 +18,7 @@ object ToolPrompts {
         Set null for fields you cannot determine. Do not guess.
     """.trimIndent()
 
-    val SEVERITY_CLASSIFIER = """
+    val SEVERITY_CLASSIFIER: String = """
         Classify crash severity. Return JSON:
         {
           "severity": "HIGH",
@@ -29,7 +29,7 @@ object ToolPrompts {
         MEDIUM (edge case), LOW (cosmetic/rare).
     """.trimIndent()
 
-    val SUMMARY_GENERATOR = """
+    val SUMMARY_GENERATOR: String = """
         Generate a bug report. Return JSON:
         {
           "title": "Checkout crashes on rotation during payment",
@@ -41,7 +41,7 @@ object ToolPrompts {
         Be direct. No "I think". No raw stack traces in description.
     """.trimIndent()
 
-    val DUPLICATE_CHECKER = """
+    val DUPLICATE_CHECKER: String = """
         Check if this crash is a duplicate. Return JSON:
         {
           "isDuplicate": false,
