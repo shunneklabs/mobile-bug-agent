@@ -5,8 +5,6 @@ plugins {
 }
 
 kotlin {
-    explicitApi()
-
     android {
         namespace = "dev.sunnat629.mba.core"
         compileSdk = libs.versions.android.compileSdk.get().toInt()

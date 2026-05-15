@@ -119,7 +119,7 @@ public object MBA {
     internal fun isConfigured(): Boolean = configured
 
     @JvmSynthetic
-    internal fun handleCrash(
+    public fun handleCrash(
         throwable: Throwable,
         isFatal: Boolean,
         threadName: String,
@@ -146,6 +146,6 @@ public object MBA {
     }
 }
 
-internal expect object PlatformInitializer {
+public expect object PlatformInitializer {
     fun installCrashHandler(onCrash: (String, Throwable) -> Unit)
 }

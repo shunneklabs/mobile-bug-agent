@@ -4,12 +4,12 @@ import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.model.RawCrashReport
 import org.kotlincrypto.hash.sha2.SHA256
 
-internal object CrashFingerprint {
+public object CrashFingerprint {
 
     private const val DEFAULT_TOP_FRAMES = 5
     private val LINE_NUMBER_REGEX = Regex(":\\d+\\)")
 
-    fun compute(
+    public fun compute(
         exceptionType: String,
         stackTrace: String,
         topFrames: Int = DEFAULT_TOP_FRAMES,
@@ -32,7 +32,7 @@ internal object CrashFingerprint {
         return hash
     }
 
-    fun compute(report: RawCrashReport): String =
+    public fun compute(report: RawCrashReport): String =
         compute(exceptionType = report.exceptionType, stackTrace = report.stackTrace)
 
     private fun sha256Hex(input: String): String {

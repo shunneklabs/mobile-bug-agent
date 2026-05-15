@@ -34,7 +34,7 @@ internal object PendingCrashProcessor {
             return emptyList()
         }
 
-        val crashFiles = dir.listFiles { file ->
+        val crashFiles = dir.listFiles()?.filter { file ->
             file.isFile && file.name.startsWith("mba_crash_") && file.name.endsWith(".json")
         } ?: emptyList()
 

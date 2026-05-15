@@ -6,14 +6,14 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
 
-internal class LocalDedupCache(
+public class LocalDedupCache(
     private val maxSize: Int = 100,
     private val ttl: Duration = 24.hours,
 ) {
     private val cache = LinkedHashMap<String, Instant>(maxSize, 0.75f, true)
 
     @Synchronized
-    fun contains(fingerprint: String): Boolean {
+    public fun contains(fingerprint: String): Boolean {
         evictExpired()
         val hit = cache.containsKey(fingerprint)
         MBALog.d("DedupCache", "contains(${fingerprint.take(12)}...) = $hit (size=${cache.size})")
@@ -21,7 +21,7 @@ internal class LocalDedupCache(
     }
 
     @Synchronized
-    fun put(fingerprint: String) {
+    public fun put(fingerprint: String) {
         evictExpired()
         cache[fingerprint] = Clock.System.now()
         while (cache.size > maxSize) {
@@ -33,7 +33,7 @@ internal class LocalDedupCache(
     }
 
     @Synchronized
-    fun touch(fingerprint: String) {
+    public fun touch(fingerprint: String) {
         if (cache.containsKey(fingerprint)) {
             cache[fingerprint] = Clock.System.now()
             MBALog.d("DedupCache", "touch(${fingerprint.take(12)}...) — updated timestamp")
@@ -41,19 +41,19 @@ internal class LocalDedupCache(
     }
 
     @Synchronized
-    fun size(): Int {
+    public fun size(): Int {
         evictExpired()
         return cache.size
     }
 
     @Synchronized
-    fun clear(): Unit = cache.clear()
+    public fun clear(): Unit = cache.clear()
 
     @Synchronized
-    fun snapshot(): Map<String, Instant> = cache.toMap()
+    public fun snapshot(): Map<String, Instant> = cache.toMap()
 
     @Synchronized
-    fun restore(data: Map<String, Instant>) {
+    public fun restore(data: Map<String, Instant>) {
         cache.clear()
         cache.putAll(data)
         evictExpired()

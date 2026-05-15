@@ -2,7 +2,7 @@ package dev.sunnat629.mba.core.pii
 
 import dev.sunnat629.mba.core.MBALog
 
-internal class PIISanitizer(
+public class PIISanitizer(
     customPatterns: List<Regex> = emptyList(),
     private val replacement: String = "[REDACTED]",
 ) {
@@ -16,7 +16,7 @@ internal class PIISanitizer(
         addAll(customPatterns)
     }
 
-    fun scrub(input: String): String {
+    public fun scrub(input: String): String {
         var result = input
         var redactionCount = 0
         for (pattern in patterns) {
@@ -30,6 +30,6 @@ internal class PIISanitizer(
         return result
     }
 
-    fun containsPII(input: String): Boolean =
+    public fun containsPII(input: String): Boolean =
         patterns.any { it.containsMatchIn(input) }
 }
