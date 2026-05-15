@@ -51,6 +51,8 @@ public actual object CrashWriter {
                 orientation = "unknown",
             )
 
+            val cfg = runCatching { if (MBA.isConfigured()) MBA.requireConfig() else null }.getOrNull()
+
             val report = RawCrashReport(
                 id = UUID.randomUUID().toString(),
                 timestamp = Clock.System.now(),
@@ -66,7 +68,9 @@ public actual object CrashWriter {
                 breadcrumbs = breadcrumbs,
                 customMetadata = metadata + mapOf(
                     "mba.coroutine_context" to (coroutineContext ?: "")
-                )
+                ),
+                autoFix = cfg?.autoFix ?: false,
+                skipNotion = cfg?.skipNotion ?: false,
             )
 
             val filename = "mba_crash_${report.id}_${report.timestamp.toString().replace(':', '-')}.json"

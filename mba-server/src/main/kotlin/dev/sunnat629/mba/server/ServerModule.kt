@@ -6,7 +6,9 @@ import dev.sunnat629.mba.core.config.LLM
 import dev.sunnat629.mba.core.config.LLMConfig
 import dev.sunnat629.mba.core.pii.PIISanitizer
 import dev.sunnat629.mba.core.store.LocalDedupCache
+import dev.sunnat629.mba.github.GitHubAutoFixOpener
 import dev.sunnat629.mba.notion.NotionTicketBackend
+import dev.sunnat629.mba.server.orchestration.SeverityRouter
 import dev.sunnat629.mba.server.persistence.JobStore
 import dev.sunnat629.mba.server.queue.CrashProcessingQueue
 import io.ktor.server.application.*
@@ -26,6 +28,10 @@ class ServerModule(
     val serverApiKey: String,
     val dedupCachePath: String,
     val dataDir: String = "data",
+    val githubToken: String = "",
+    val githubOwner: String = "",
+    val githubRepo: String = "",
+    val githubBaseBranch: String = "main",
 ) {
     private companion object {
         private val logger = LoggerFactory.getLogger("ServerModule")
@@ -45,7 +51,42 @@ class ServerModule(
 
     val analysisAgent = CrashAnalysisAgent(agentFactory, piiSanitizer, dedupCache)
 
-    val notionBackend = NotionTicketBackend(notionApiKey, notionDatabaseId)
+    /**
+     * Notion backend — `null` when `NOTION_API_KEY`/`NOTION_DATABASE_ID` are not
+     * set. Lets the server run in GitHub-only / dry-run modes.
+     */
+    val notionBackend: NotionTicketBackend? =
+        if (notionApiKey.isNotBlank() && notionDatabaseId.isNotBlank()) {
+            NotionTicketBackend(notionApiKey, notionDatabaseId)
+        } else {
+            logger.warn("NOTION_API_KEY / NOTION_DATABASE_ID not set — Notion ticketing disabled.")
+            null
+        }
+
+    /**
+     * GitHub auto-fix opener — `null` unless all three of `GITHUB_TOKEN`,
+     * `GITHUB_OWNER`, `GITHUB_REPO` are set. Used by the orchestrator when a
+     * crash report arrives with `autoFix=true` and severity ∈ {HIGH, CRITICAL}.
+     */
+    val githubAutoFixOpener: GitHubAutoFixOpener? =
+        if (githubToken.isNotBlank() && githubOwner.isNotBlank() && githubRepo.isNotBlank()) {
+            GitHubAutoFixOpener(
+                token = githubToken,
+                owner = githubOwner,
+                repo = githubRepo,
+                baseBranch = githubBaseBranch,
+            )
+        } else {
+            logger.info("GitHub auto-fix disabled — set GITHUB_TOKEN/GITHUB_OWNER/GITHUB_REPO to enable.")
+            null
+        }
+
+    /**
+     * Severity gate for the auto-fix path. `MBA_AUTOFIX_ENABLED` master switch
+     * is honoured by the legacy `route()` method; the new path uses
+     * [SeverityRouter.shouldAutoFix] which gates purely on severity.
+     */
+    val severityRouter = SeverityRouter()
 
     val jobStore = JobStore(dataDir)
 
@@ -55,14 +96,20 @@ class ServerModule(
 
     init {
         FileDedupPersistence.restore(dedupCache, dedupCachePath)
-        logger.info("ServerModule initialized — dedup cache restored, queue ready")
+        logger.info(
+            "ServerModule initialized — Notion={}, GitHubAutoFix={}, baseBranch={}",
+            if (notionBackend != null) "enabled" else "disabled",
+            if (githubAutoFixOpener != null) "enabled" else "disabled",
+            githubBaseBranch,
+        )
     }
 
     fun shutdown() {
         logger.info("Shutting down ServerModule...")
         FileDedupPersistence.save(dedupCache, dedupCachePath)
         agentFactory.close()
-        notionBackend.close()
+        notionBackend?.close()
+        githubAutoFixOpener?.close()
         scope.cancel()
     }
 }
@@ -81,6 +128,10 @@ fun Application.installServerModule(
     serverApiKey: String,
     dedupCachePath: String,
     dataDir: String = "data",
+    githubToken: String = "",
+    githubOwner: String = "",
+    githubRepo: String = "",
+    githubBaseBranch: String = "main",
 ): ServerModule {
     val module = ServerModule(
         geminiApiKey = geminiApiKey,
@@ -89,6 +140,10 @@ fun Application.installServerModule(
         serverApiKey = serverApiKey,
         dedupCachePath = dedupCachePath,
         dataDir = dataDir,
+        githubToken = githubToken,
+        githubOwner = githubOwner,
+        githubRepo = githubRepo,
+        githubBaseBranch = githubBaseBranch,
     )
     attributes.put(ServerModuleKey, module)
     return module

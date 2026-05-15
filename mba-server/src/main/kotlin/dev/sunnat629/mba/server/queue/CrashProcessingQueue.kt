@@ -82,6 +82,38 @@ class CrashProcessingQueue(
         emitEvent(jobId, JobStatus.PR_OPENED, prUrl, message = "Pull request opened")
     }
 
+    /**
+     * Emit a fine-grained progress event inside one of the lifecycle stages
+     * (`analyzing`, `notion_ticket`, `github_pr`).
+     *
+     * Does NOT change the job's persisted [JobStatus] — those transitions
+     * still happen via [startProcessing] / [complete] / [prOpened] / [fail].
+     * This is purely a booth-visibility helper for the long invisible gaps
+     * (PII / fingerprint / dedup / Gemini call / Notion sub-calls / GitHub steps).
+     */
+    suspend fun progress(
+        jobId: String,
+        message: String,
+        stage: String = "analyzing",
+        level: String = "info",
+        metadata: Map<String, String> = emptyMap(),
+    ) {
+        eventChannel.send(
+            SseEvent(
+                jobId = jobId,
+                status = JobStatus.ANALYZING,
+                type = "progress",
+                stage = stage,
+                message = message,
+                level = level,
+                timestamp = System.currentTimeMillis(),
+                artifactUrl = null,
+                metadata = metadata,
+            )
+        )
+        logger.info("Job $jobId [$stage] $message")
+    }
+
     /** Mark a job as failed. */
     suspend fun fail(jobId: String, errorMessage: String) {
         jobStore.updateStatus(jobId, JobStatus.FAILED, errorMessage = errorMessage)
