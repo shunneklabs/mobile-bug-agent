@@ -30,6 +30,7 @@ include(
     ":mba-jvm",
     ":mba-agent",
     ":mba-notion",
+    ":mba-github",
     ":mba-server",
     ":mba-sample"
 )
