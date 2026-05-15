@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MBA — Live Event Feed</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0a0f;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+        .banner {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            padding: 20px 40px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .banner h1 { font-size: 28px; font-weight: 700; color: white; }
+        .banner .tagline { font-size: 16px; color: rgba(255,255,255,0.85); margin-top: 4px; }
+        .banner .repo { font-size: 14px; color: rgba(255,255,255,0.7); }
+        .container { max-width: 1200px; margin: 0 auto; padding: 30px 40px; }
+        .status-bar {
+            display: flex; gap: 20px; margin-bottom: 30px;
+        }
+        .status-card {
+            background: #1a1a2e; border-radius: 12px; padding: 20px 30px;
+            flex: 1; text-align: center;
+        }
+        .status-card .number { font-size: 36px; font-weight: 700; color: #6366f1; }
+        .status-card .label { font-size: 14px; color: #888; margin-top: 4px; }
+        .timeline { display: flex; flex-direction: column; gap: 12px; }
+        .event-card {
+            background: #1a1a2e; border-radius: 10px; padding: 16px 24px;
+            display: flex; align-items: center; gap: 16px;
+            border-left: 4px solid #333;
+            animation: slideIn 0.3s ease-out;
+        }
+        .event-card.status-QUEUED { border-left-color: #6b7280; }
+        .event-card.status-ANALYZING { border-left-color: #f59e0b; }
+        .event-card.status-TICKET_CREATED { border-left-color: #10b981; }
+        .event-card.status-PR_OPENED { border-left-color: #6366f1; }
+        .event-card.status-FAILED { border-left-color: #ef4444; }
+        .event-card.pr-opened {
+            animation: pulse 1s ease-in-out 3, slideIn 0.3s ease-out;
+            box-shadow: 0 0 30px rgba(99, 102, 241, 0.3);
+        }
+        .event-time { font-size: 13px; color: #666; min-width: 80px; }
+        .event-stage {
+            font-size: 14px; font-weight: 600; min-width: 140px;
+            text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .event-job { font-size: 13px; color: #888; font-family: monospace; }
+        .event-link { margin-left: auto; }
+        .event-link a {
+            color: #6366f1; text-decoration: none; font-size: 14px;
+        }
+        .event-link a:hover { text-decoration: underline; }
+        .confetti { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100; }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0%, 100% { box-shadow: 0 0 30px rgba(99,102,241,0.3); } 50% { box-shadow: 0 0 60px rgba(99,102,241,0.6); } }
+    </style>
+</head>
+<body>
+    <div class="banner">
+        <div>
+            <h1>Mobile Bug Agent</h1>
+            <div class="tagline">Crashlytics catches your crashes. MBA fixes them.</div>
+        </div>
+        <div class="repo">github.com/shunneklabs/mobile-bug-agent</div>
+    </div>
+    <div class="container">
+        <div class="status-bar">
+            <div class="status-card"><div class="number" id="totalJobs">0</div><div class="label">Total Jobs</div></div>
+            <div class="status-card"><div class="number" id="queuedJobs">0</div><div class="label">Queued</div></div>
+            <div class="status-card"><div class="number" id="completedJobs">0</div><div class="label">Completed</div></div>
+            <div class="status-card"><div class="number" id="failedJobs">0</div><div class="label">Failed</div></div>
+        </div>
+        <div class="timeline" id="timeline"></div>
+    </div>
+    <script>
+        const timeline = document.getElementById('timeline');
+        const statusLabels = {
+            QUEUED: 'Queued', ANALYZING: 'Analyzing', TICKET_CREATED: 'Ticket Created',
+            PR_OPENED: 'PR Opened', FAILED: 'Failed'
+        };
+        let stats = { total: 0, queued: 0, completed: 0, failed: 0 };
+
+        function formatTime(ts) {
+            return new Date(ts).toLocaleTimeString('en-US', { hour12: false });
+        }
+
+        function addEvent(event) {
+            const card = document.createElement('div');
+            card.className = 'event-card status-' + event.status + (event.status === 'PR_OPENED' ? ' pr-opened' : '');
+            card.innerHTML = `
+                <div class="event-time">${formatTime(event.timestamp)}</div>
+                <div class="event-stage">${statusLabels[event.status] || event.status}</div>
+                <div class="event-job">${event.jobId.substring(0, 12)}...</div>
+                ${event.artifactUrl ? `<div class="event-link"><a href="${event.artifactUrl}" target="_blank">Open ↗</a></div>` : ''}
+            `;
+            timeline.insertBefore(card, timeline.firstChild);
+            if (event.status === 'PR_OPENED') {
+                document.querySelector('.banner').style.background = 'linear-gradient(135deg, #10b981, #6366f1)';
+                setTimeout(() => { document.querySelector('.banner').style.background = 'linear-gradient(135deg, #6366f1, #8b5cf6)'; }, 3000);
+            }
+        }
+
+        function updateStats(data) {
+            stats = data;
+            document.getElementById('totalJobs').textContent = data.total;
+            document.getElementById('queuedJobs').textContent = data.queued;
+            document.getElementById('completedJobs').textContent = data.completed;
+            document.getElementById('failedJobs').textContent = data.failed;
+        }
+
+        const evtSource = new EventSource('/events');
+        evtSource.onmessage = (e) => {
+            const event = JSON.parse(e.data);
+            addEvent(event);
+            fetch('/stats').then(r => r.json()).then(updateStats);
+        };
+
+        fetch('/stats').then(r => r.json()).then(updateStats);
+    </script>
+</body>
+</html>
