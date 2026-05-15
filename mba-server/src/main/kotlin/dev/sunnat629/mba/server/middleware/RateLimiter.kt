@@ -3,8 +3,6 @@ package dev.sunnat629.mba.server.middleware
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.response.*
-import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.*
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Clock

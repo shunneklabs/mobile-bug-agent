@@ -1,28 +1,27 @@
 package dev.sunnat629.mba.server
 
-import dev.sunnat629.mba.agent.AgentFactory
-import dev.sunnat629.mba.agent.CrashAnalysisAgent
 import dev.sunnat629.mba.agent.CrashAnalysisResult
-import dev.sunnat629.mba.core.config.LLM
-import dev.sunnat629.mba.core.config.LLMConfig
 import dev.sunnat629.mba.core.model.RawCrashReport
-import dev.sunnat629.mba.core.pii.PIISanitizer
-import dev.sunnat629.mba.core.store.LocalDedupCache
-import dev.sunnat629.mba.notion.NotionTicketBackend
+import dev.sunnat629.mba.server.middleware.rateLimiter
+import dev.sunnat629.mba.server.middleware.RateLimiter
+import dev.sunnat629.mba.server.model.ServerStats
+import dev.sunnat629.mba.server.model.ServerVersion
+import dev.sunnat629.mba.server.queue.CrashJob
+import dev.sunnat629.mba.server.sse.sseEvents
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.plugins.cors.routing.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
-import kotlin.time.Duration.Companion.hours
+import java.util.*
 
 private val logger = LoggerFactory.getLogger("MBAServer")
 
@@ -37,6 +36,7 @@ private object EnvConfig {
     val serverApiKey: String = requireEnv("MBA_SERVER_API_KEY")
     val port: Int = System.getenv("PORT")?.toIntOrNull() ?: 8080
     val dedupCachePath: String = System.getenv("MBA_DEDUP_CACHE_PATH") ?: "data/dedup-cache.json"
+    val dataDir: String = System.getenv("MBA_DATA_DIR") ?: "data"
 
     private fun requireEnv(name: String): String =
         System.getenv(name)
@@ -58,28 +58,38 @@ fun Application.module() {
         })
     }
 
-    // ---- Initialize dependencies ---- //
-    val llmConfig = LLMConfig(
-        provider = LLM.Provider.GEMINI,
-        model = "gemini-2.0-flash",
-        apiKey = EnvConfig.geminiApiKey,
+    install(CORS) {
+        allowHost("localhost:3000", schemes = listOf("http"))
+        allowHost("localhost:8080", schemes = listOf("http"))
+        allowHost("localhost:63342", schemes = listOf("http"))
+        anyHost()
+    }
+
+    // ---- Initialize dependency graph ---- //
+    val serverModule = installServerModule(
+        geminiApiKey = EnvConfig.geminiApiKey,
+        notionApiKey = EnvConfig.notionApiKey,
+        notionDatabaseId = EnvConfig.notionDatabaseId,
+        serverApiKey = EnvConfig.serverApiKey,
+        dedupCachePath = EnvConfig.dedupCachePath,
+        dataDir = EnvConfig.dataDir,
     )
 
-    val agentFactory = AgentFactory(llmConfig)
-    val piiSanitizer = PIISanitizer()
-    val dedupCache = LocalDedupCache(maxSize = 1000, ttl = 24.hours)
-    val analysisAgent = CrashAnalysisAgent(agentFactory, piiSanitizer, dedupCache)
-    val notionBackend = NotionTicketBackend(EnvConfig.notionApiKey, EnvConfig.notionDatabaseId)
+    // ---- Rate limiter (10 req/s) ---- //
+    val rateLimiter = RateLimiter(maxRequests = 10)
+    rateLimiter(rateLimiter)
 
-    // ---- Restore dedup cache from disk ---- //
-    FileDedupPersistence.restore(dedupCache, EnvConfig.dedupCachePath)
+    // ---- Background queue consumer ---- //
+    serverModule.scope.launch {
+        for (job in serverModule.queue.jobs) {
+            processJob(serverModule, job)
+        }
+    }
 
     // ---- Clean up resources on shutdown ---- //
     environment.monitor.subscribe(ApplicationStopped) {
-        logger.info("Shutting down — saving dedup cache and closing resources...")
-        FileDedupPersistence.save(dedupCache, EnvConfig.dedupCachePath)
-        agentFactory.close()
-        notionBackend.close()
+        logger.info("Shutting down — saving state and closing resources...")
+        serverModule.shutdown()
     }
 
     routing {
@@ -90,68 +100,103 @@ fun Application.module() {
         get("/health") {
             call.respond(mapOf(
                 "status" to "healthy",
-                "dedupCacheSize" to dedupCache.size(),
+                "dedupCacheSize" to serverModule.dedupCache.size(),
+            ))
+        }
+
+        get("/version") {
+            call.respond(ServerVersion())
+        }
+
+        get("/stats") {
+            val stats = serverModule.jobStore.getStats()
+            call.respond(ServerStats(
+                totalJobs = stats.total,
+                queuedJobs = stats.queued,
+                completedJobs = stats.completed,
+                failedJobs = stats.failed,
+                dedupCacheSize = serverModule.dedupCache.size(),
             ))
         }
 
         // ---- Authenticated crash report endpoint ---- //
         post("/report") {
-            // Basic API key auth
-            val apiKey = call.request.header("X-MBA-API-Key")
-            if (apiKey != EnvConfig.serverApiKey) {
-                call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Invalid or missing API key"))
-                return@post
+            val rawReport = call.receive<RawCrashReport>()
+            logger.info("Received crash report: ${rawReport.id}")
+
+            val jobId = UUID.randomUUID().toString()
+            serverModule.queue.enqueue(jobId, rawReport)
+
+            call.respond(HttpStatusCode.Accepted, mapOf(
+                "jobId" to jobId,
+                "status" to "queued",
+            ))
+        }
+
+        // ---- Job status endpoint ---- //
+        get("/jobs/{id}") {
+            val jobId = call.parameters["id"]
+                ?: return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing job id"))
+
+            val job = serverModule.jobStore.getJob(jobId)
+                ?: return@get call.respond(HttpStatusCode.NotFound, mapOf("error" to "Job not found: $jobId"))
+
+            call.respond(job)
+        }
+
+        // ---- SSE event feed ---- //
+        sseEvents(serverModule.queue)
+    }
+}
+
+/**
+ * Background job processor.
+ * Runs on IO dispatcher, updates queue state as it goes.
+ */
+private suspend fun processJob(serverModule: ServerModule, job: CrashJob) {
+    try {
+        serverModule.queue.startProcessing(job.jobId)
+
+        val result = withContext(Dispatchers.IO) {
+            serverModule.analysisAgent.process(job.report)
+        }
+
+        when (result) {
+            is CrashAnalysisResult.New -> {
+                logger.info("Job ${job.jobId}: New crash analyzed. Creating Notion ticket...")
+                val ticketResult = withContext(Dispatchers.IO) {
+                    serverModule.notionBackend.createTicket(result.report)
+                }
+                if (ticketResult.success) {
+                    logger.info("Job ${job.jobId}: Ticket created: ${ticketResult.url}")
+                    serverModule.queue.complete(job.jobId, ticketResult.url ?: "notion://created")
+                } else {
+                    logger.error("Job ${job.jobId}: Failed to create ticket: ${ticketResult.errorMessage}")
+                    serverModule.queue.fail(job.jobId, ticketResult.errorMessage ?: "Unknown error")
+                }
+                FileDedupPersistence.save(serverModule.dedupCache, EnvConfig.dedupCachePath)
             }
 
-            try {
-                val rawReport = call.receive<RawCrashReport>()
-                logger.info("Received crash report: ${rawReport.id}")
+            is CrashAnalysisResult.Duplicate -> {
+                logger.info("Job ${job.jobId}: Duplicate crash detected: ${result.report.fingerprint}")
+                serverModule.queue.complete(job.jobId, "duplicate://${result.report.fingerprint}")
+            }
 
-                // Process on IO dispatcher — don't block Netty event loop
-                val result = withContext(Dispatchers.IO) {
-                    analysisAgent.process(rawReport)
+            is CrashAnalysisResult.Fallback -> {
+                logger.warn("Job ${job.jobId}: AI analysis failed, creating fallback ticket...", result.error)
+                val ticketResult = withContext(Dispatchers.IO) {
+                    serverModule.notionBackend.createTicket(result.report)
                 }
-
-                when (result) {
-                    is CrashAnalysisResult.New -> {
-                        logger.info("New crash analyzed. Creating Notion ticket...")
-                        val ticketResult = withContext(Dispatchers.IO) {
-                            notionBackend.createTicket(result.report)
-                        }
-                        if (ticketResult.success) {
-                            logger.info("Ticket created: ${ticketResult.url}")
-                        } else {
-                            logger.error("Failed to create ticket: ${ticketResult.errorMessage}")
-                        }
-                        // Persist cache after new crash processed
-                        FileDedupPersistence.save(dedupCache, EnvConfig.dedupCachePath)
-                        call.respond(ticketResult)
-                    }
-
-                    is CrashAnalysisResult.Duplicate -> {
-                        logger.info("Duplicate crash detected: ${result.report.fingerprint}")
-                        call.respond(mapOf(
-                            "status" to "duplicate",
-                            "fingerprint" to result.report.fingerprint,
-                        ))
-                    }
-
-                    is CrashAnalysisResult.Fallback -> {
-                        logger.warn("AI analysis failed, creating fallback ticket...", result.error)
-                        val ticketResult = withContext(Dispatchers.IO) {
-                            notionBackend.createTicket(result.report)
-                        }
-                        FileDedupPersistence.save(dedupCache, EnvConfig.dedupCachePath)
-                        call.respond(ticketResult)
-                    }
+                if (ticketResult.success) {
+                    serverModule.queue.complete(job.jobId, ticketResult.url ?: "notion://fallback")
+                } else {
+                    serverModule.queue.fail(job.jobId, ticketResult.errorMessage ?: "Fallback ticket failed")
                 }
-            } catch (e: Exception) {
-                logger.error("Error processing crash report", e)
-                call.respond(
-                    HttpStatusCode.InternalServerError,
-                    mapOf("error" to (e.message ?: "Internal server error")),
-                )
+                FileDedupPersistence.save(serverModule.dedupCache, EnvConfig.dedupCachePath)
             }
         }
+    } catch (e: Exception) {
+        logger.error("Job ${job.jobId}: Processing failed", e)
+        serverModule.queue.fail(job.jobId, e.message ?: "Unknown error")
     }
 }
