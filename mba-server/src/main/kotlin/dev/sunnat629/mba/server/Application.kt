@@ -33,7 +33,7 @@ private object EnvConfig {
     val geminiApiKey: String = requireEnv("GEMINI_API_KEY")
     val notionApiKey: String = requireEnv("NOTION_API_KEY")
     val notionDatabaseId: String = requireEnv("NOTION_DATABASE_ID")
-    val serverApiKey: String = requireEnv("MBA_SERVER_API_KEY")
+    val serverApiKey: String = System.getenv("MBA_SERVER_API_KEY") ?: ""
     val port: Int = System.getenv("PORT")?.toIntOrNull() ?: 8080
     val dedupCachePath: String = System.getenv("MBA_DEDUP_CACHE_PATH") ?: "data/dedup-cache.json"
     val dataDir: String = System.getenv("MBA_DATA_DIR") ?: "data"

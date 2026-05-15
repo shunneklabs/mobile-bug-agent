@@ -2,10 +2,12 @@ package dev.sunnat629.mba.server.middleware
 
 import io.ktor.http.*
 import io.ktor.server.application.*
+import io.ktor.server.request.*
 import io.ktor.server.response.*
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Clock
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -15,7 +17,7 @@ import kotlin.time.Duration.Companion.seconds
  */
 class RateLimiter(
     private val maxRequests: Int = 10,
-    private val window: kotlinx.time.Duration = 1.seconds,
+    private val window: Duration = 1.seconds,
 ) {
     private companion object {
         private val logger = LoggerFactory.getLogger("RateLimiter")
@@ -47,7 +49,7 @@ class RateLimiter(
  */
 fun Application.rateLimiter(limiter: RateLimiter) {
     intercept(ApplicationCallPipeline.Call) {
-        val key = call.request.header("X-MBA-API-Key") ?: call.request.origin.remoteHost
+        val key = call.request.header("X-MBA-API-Key") ?: call.request.local.remoteHost
         if (!limiter.isAllowed(key)) {
             call.respond(HttpStatusCode.TooManyRequests, mapOf("error" to "Rate limit exceeded"))
             finish()

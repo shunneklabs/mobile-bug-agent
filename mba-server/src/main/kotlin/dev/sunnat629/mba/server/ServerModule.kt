@@ -10,6 +10,7 @@ import dev.sunnat629.mba.notion.NotionTicketBackend
 import dev.sunnat629.mba.server.persistence.JobStore
 import dev.sunnat629.mba.server.queue.CrashProcessingQueue
 import io.ktor.server.application.*
+import io.ktor.util.AttributeKey
 import kotlinx.coroutines.*
 import org.slf4j.LoggerFactory
 import kotlin.time.Duration.Companion.hours
