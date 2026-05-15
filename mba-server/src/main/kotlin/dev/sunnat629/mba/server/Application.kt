@@ -12,6 +12,7 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
+import io.ktor.server.http.content.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.plugins.cors.routing.*
@@ -19,6 +20,7 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.coroutines.*
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import java.util.*
@@ -93,14 +95,24 @@ fun Application.module() {
     }
 
     routing {
+        staticResources("/booth-assets", "booth")
+
         get("/") {
             call.respondText("Mobile Bug Agent (MBA) Server is running!")
+        }
+
+        get("/booth") {
+            val html = this::class.java.classLoader
+                .getResource("booth/booth.html")
+                ?.readText()
+                ?: return@get call.respond(HttpStatusCode.NotFound, "booth.html not found")
+            call.respondText(html, ContentType.Text.Html)
         }
 
         get("/health") {
             call.respond(mapOf(
                 "status" to "healthy",
-                "dedupCacheSize" to serverModule.dedupCache.size(),
+                "dedupCacheSize" to serverModule.dedupCache.size().toString(),
             ))
         }
 
@@ -117,6 +129,76 @@ fun Application.module() {
                 failedJobs = stats.failed,
                 dedupCacheSize = serverModule.dedupCache.size(),
             ))
+        }
+
+        get("/booth/pending-decisions") {
+            val pending = serverModule.jobStore.getAllJobs()
+                .filter {
+                    it.status.name == "QUEUED" ||
+                        it.status.name == "ANALYZING" ||
+                        it.status.name == "TICKET_CREATED"
+                }
+                .take(20)
+                .map {
+                    PendingDecisionJob(
+                        jobId = it.id,
+                        status = it.status.name,
+                        updatedAt = it.updatedAt,
+                        artifactUrl = it.artifactUrl,
+                    )
+                }
+            call.respond(pending)
+        }
+
+        post("/booth/force-decision") {
+            if (!call.isLocalOperatorCall()) {
+                return@post call.respond(HttpStatusCode.Forbidden, mapOf("error" to "Operator action only"))
+            }
+
+            val request = call.receive<ForceDecisionRequest>()
+            val normalizedDecision = request.decision.trim().lowercase()
+            if (normalizedDecision !in setOf("notify", "autofix", "fallback")) {
+                return@post call.respond(
+                    HttpStatusCode.BadRequest,
+                    mapOf("error" to "decision must be notify|autofix|fallback"),
+                )
+            }
+
+            val job = serverModule.jobStore.getJob(request.jobId)
+                ?: return@post call.respond(HttpStatusCode.NotFound, mapOf("error" to "Unknown job id"))
+
+            serverModule.queue.publishBoothEvent(
+                type = "operator_decision",
+                message = "Operator chose ${normalizedDecision.uppercase()} for ${request.jobId.take(8)}",
+                metadata = mapOf("decision" to normalizedDecision, "jobId" to request.jobId),
+                jobId = request.jobId,
+            )
+
+            call.respond(
+                BoothActionResponse(
+                    ok = true,
+                    message = "Decision accepted",
+                    jobId = job.id,
+                )
+            )
+        }
+
+        post("/booth/reset") {
+            if (!call.isLocalOperatorCall()) {
+                return@post call.respond(HttpStatusCode.Forbidden, mapOf("error" to "Operator action only"))
+            }
+
+            val existingJobs = serverModule.jobStore.getAllJobs().size
+            serverModule.jobStore.clearAll()
+
+            serverModule.queue.publishBoothEvent(
+                type = "dashboard_reset",
+                message = "Dashboard reset by operator",
+                level = "warning",
+                metadata = mapOf("clearedJobs" to existingJobs.toString()),
+            )
+
+            call.respond(BoothActionResponse(ok = true, message = "Dashboard reset", clearedJobs = existingJobs))
         }
 
         // ---- Authenticated crash report endpoint ---- //
@@ -148,6 +230,33 @@ fun Application.module() {
         sseEvents(serverModule.queue)
     }
 }
+
+private fun ApplicationCall.isLocalOperatorCall(): Boolean {
+    val remote = request.local.remoteHost.lowercase()
+    return remote == "localhost" || remote == "127.0.0.1" || remote == "::1" || remote.endsWith(".local")
+}
+
+@Serializable
+private data class ForceDecisionRequest(
+    val jobId: String,
+    val decision: String,
+)
+
+@Serializable
+private data class BoothActionResponse(
+    val ok: Boolean,
+    val message: String,
+    val jobId: String? = null,
+    val clearedJobs: Int? = null,
+)
+
+@Serializable
+private data class PendingDecisionJob(
+    val jobId: String,
+    val status: String,
+    val updatedAt: Long,
+    val artifactUrl: String?,
+)
 
 /**
  * Background job processor.

@@ -85,6 +85,13 @@ class JobStore(private val dataDir: String = "data") {
         }
     }
 
+    suspend fun clearAll() {
+        mutex.withLock {
+            jobs.clear()
+            persist()
+        }
+    }
+
     private fun persist() {
         try {
             val data = JobStoreData(
