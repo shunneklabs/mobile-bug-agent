@@ -157,4 +157,33 @@ class CrashAnalysisAgentTest {
         assertEquals(1, executor.classifyCallCount)
         assertEquals(1, executor.summaryCallCount)
     }
+
+    @Test
+    fun koogPathIsDefault() = runTest {
+        val executor = FakeExecutor()
+
+        val factory = object : AgentFactory(
+            llmConfig = dev.sunnat629.mba.core.config.LLMConfig.NONE,
+        ) {
+            override fun create(): CrashAnalysisExecutor = executor
+        }
+
+        val created = factory.create()
+        assertEquals(executor, created)
+    }
+
+    @Test
+    fun legacyPathCanBeEnabled() = runTest {
+        val executor = FakeExecutor()
+
+        val factory = object : AgentFactory(
+            llmConfig = dev.sunnat629.mba.core.config.LLMConfig.NONE,
+            useKoog = false,
+        ) {
+            override fun create(): CrashAnalysisExecutor = executor
+        }
+
+        val created = factory.create()
+        assertEquals(executor, created)
+    }
 }

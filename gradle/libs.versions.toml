@@ -7,6 +7,7 @@ kotlinx-datetime = "0.8.0"
 kotlinx-io = "0.9.0"
 kotlinx-atomicfu = "0.32.1"
 kotlincrypto-sha2 = "0.8.0"
+koog = "0.8.0"
 uuid = "0.8.4"
 kermit = "2.1.0"
 logback = "1.5.32"
@@ -42,6 +43,9 @@ kotlinx-atomicfu = { module = "org.jetbrains.kotlinx:atomicfu", version.ref = "k
 
 # Logging
 kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }
+
+# Koog
+koog-agents = { module = "ai.koog:koog-agents", version.ref = "koog" }
 
 # Community
 kotlincrypto-sha2 = { module = "org.kotlincrypto.hash:sha2", version.ref = "kotlincrypto-sha2" }

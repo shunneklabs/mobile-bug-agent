@@ -24,7 +24,6 @@ public object MBALog {
 
     private const val PREFIX = "MBA"
 
-    /** Whether debug logging is enabled. Set by [MBA.configure]. */
     @Volatile
     public var enabled: Boolean = false
 

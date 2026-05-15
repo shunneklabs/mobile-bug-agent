@@ -26,32 +26,38 @@ import java.io.Closeable
  *
  * Owns a shared [HttpClient] — call [close] when done (e.g., in server shutdown).
  *
- * Defaults to [SinglePromptExecutor] (1 LLM call) for optimal latency.
+ * Defaults to Koog runtime. Set [useKoog] = false to fall back to legacy HTTP callers.
  * Set [useMultiStep] = true to use 3 separate LLM calls (useful for debugging).
  */
 internal open class AgentFactory(
     private val llmConfig: LLMConfig,
     private val useMultiStep: Boolean = false,
+    private val useKoog: Boolean = true,
     private val json: Json = Json {
         ignoreUnknownKeys = true
         isLenient = true
     },
 ) : Closeable {
 
-    // Single shared HttpClient — reused across all LLM calls.
+    // Single shared HttpClient — reused across all LLM calls (legacy path only).
     private val httpClient = HttpClient {
         install(ContentNegotiation) {
             json(Json { ignoreUnknownKeys = true })
         }
     }
 
-    // Lazily created, reused executor. Stateless (except SinglePromptExecutor cache).
+    // Lazily created, reused executor.
     private val executor: CrashAnalysisExecutor by lazy {
-        val llmCaller = createLLMCaller(llmConfig)
-        if (useMultiStep) {
-            KoogCrashAnalysisExecutor(llmCaller, json)
+        if (useKoog) {
+            val koogFactory = KoogAgentFactory(llmConfig, json)
+            koogFactory.create()
         } else {
-            SinglePromptExecutor(llmCaller, json)
+            val llmCaller = createLLMCaller(llmConfig)
+            if (useMultiStep) {
+                LegacyMultiStepExecutor(llmCaller, json)
+            } else {
+                SinglePromptExecutor(llmCaller, json)
+            }
         }
     }
 
@@ -110,10 +116,10 @@ internal interface LLMCaller {
 }
 
 /**
- * Multi-step executor (original 3-call approach).
- * Kept as fallback / for debugging when you want to see each step separately.
+ * Multi-step executor (legacy 3-call approach).
+ * Kept behind [useKoog] = false flag for rollback.
  */
-internal class KoogCrashAnalysisExecutor(
+internal class LegacyMultiStepExecutor(
     private val llm: LLMCaller,
     private val json: Json,
 ) : CrashAnalysisExecutor {

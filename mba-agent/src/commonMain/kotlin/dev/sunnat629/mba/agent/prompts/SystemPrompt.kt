@@ -1,7 +1,7 @@
 package dev.sunnat629.mba.agent.prompts
 
-object SystemPrompt {
-    val CRASH_ANALYST = """
+internal object SystemPrompt {
+    val CRASH_ANALYST: String = """
         You are an expert Android crash analyst embedded in a mobile SDK.
         Your job is to analyze raw crash data from Android applications and
         produce structured, actionable bug reports that developers can

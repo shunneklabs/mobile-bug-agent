@@ -5,7 +5,6 @@ import dev.sunnat629.mba.agent.model.CrashSummary
 import dev.sunnat629.mba.agent.model.ParsedStackTrace
 import dev.sunnat629.mba.agent.model.SeverityResult
 import dev.sunnat629.mba.agent.prompts.SystemPrompt
-import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.model.DeviceContext
 import kotlinx.serialization.json.Json
 
@@ -13,10 +12,6 @@ internal class SinglePromptExecutor(
     private val llm: LLMCaller,
     private val json: Json,
 ) : CrashAnalysisExecutor {
-
-    private companion object {
-        const val TAG = "SinglePrompt"
-    }
 
     private var lastTrace: String? = null
     private var lastAnalysis: CombinedCrashAnalysis? = null
@@ -34,7 +29,7 @@ internal class SinglePromptExecutor(
             ?: SeverityResult(
                 severity = dev.sunnat629.mba.core.model.Severity.MEDIUM,
                 confidence = 0.5f,
-                reasoning = "Fallback \u2014 single prompt cache miss",
+                reasoning = "Fallback — single prompt cache miss",
             )
     }
 
@@ -51,12 +46,8 @@ internal class SinglePromptExecutor(
 
     private suspend fun analyze(sanitizedTrace: String): CombinedCrashAnalysis {
         if (sanitizedTrace == lastTrace && lastAnalysis != null) {
-            MBALog.d(TAG, "Cache hit \u2014 reusing previous analysis")
             return lastAnalysis!!
         }
-
-        MBALog.d(TAG, "Sending combined analysis prompt (${sanitizedTrace.length} chars)...")
-        val startTime = System.currentTimeMillis()
 
         val userPrompt = buildString {
             appendLine(COMBINED_PROMPT)
@@ -70,14 +61,10 @@ internal class SinglePromptExecutor(
             userPrompt = userPrompt,
         )
 
-        val elapsed = System.currentTimeMillis() - startTime
-        MBALog.i(TAG, "LLM responded in ${elapsed}ms (${response.length} chars)")
-
         val analysis = json.decodeFromString<CombinedCrashAnalysis>(response)
         lastTrace = sanitizedTrace
         lastAnalysis = analysis
 
-        MBALog.d(TAG, "Parsed: severity=${analysis.severity}, title='${analysis.title}'")
         return analysis
     }
 
@@ -100,7 +87,7 @@ internal class SinglePromptExecutor(
               "stepsToReproduce": "1. Open checkout\n2. Start payment\n3. Rotate device",
               "possibleCause": "Payment coroutine outlives ViewModel lifecycle"
             }
-            
+
             Severity levels: CRITICAL (data loss/security), HIGH (main flow), MEDIUM (edge case), LOW (cosmetic).
             Title format: "[Screen] [what happens] [trigger]".
             Focus on app code frames (not android.*, java.*, kotlin.*).
