@@ -30,3 +30,4 @@ local.properties
 
 # Agent local planning artifacts
 /.agent/
+/issues
