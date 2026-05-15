@@ -12,9 +12,7 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
-import io.ktor.util.*
 import kotlinx.serialization.json.Json
-import org.kotlincrypto.hash.sha2.SHA256
 
 /**
  * GitHub Issues implementation of [TicketBackend].
@@ -88,8 +86,9 @@ public class GitHubIssueBackend(
             val issueNumber = ticketId.toIntOrNull()
                 ?: return TicketResult.failure(name, "Invalid ticket id: $ticketId (expected GitHub issue number)")
 
-            val body = buildMutableMapOf<String, Any>()
-            if (update.addDevice != null) {
+            val body = mutableMapOf<String, Any>()
+            val addDevice = update.addDevice
+            if (addDevice != null) {
                 val existingIssue = getIssue(issueNumber)
                 val updatedBody = buildString {
                     append(existingIssue?.body ?: "")
@@ -97,7 +96,7 @@ public class GitHubIssueBackend(
                     appendLine()
                     append("---")
                     appendLine()
-                    append("**Additional device:** ${update.addDevice.displayName}")
+                    append("**Additional device:** ${addDevice.displayName}")
                 }
                 body["body"] = updatedBody
             }
