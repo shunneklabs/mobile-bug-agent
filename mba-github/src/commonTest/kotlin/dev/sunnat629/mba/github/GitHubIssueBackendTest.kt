@@ -14,7 +14,6 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class GitHubIssueBackendTest {
@@ -90,7 +89,6 @@ class GitHubIssueBackendTest {
         val backend = GitHubIssueBackend("fake-token", "test-owner", "test-repo", httpClient)
         val result = backend.createTicket(testReport)
 
-        assertIs<TicketResult>(result)
         assertTrue(result.success)
         assertEquals("42", result.ticketId)
         assertEquals("https://github.com/test/test/issues/42", result.url)

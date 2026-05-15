@@ -1,6 +1,24 @@
+
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.serialization)
+    application
+}
+
+val localProps = Properties()
+rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { localProps.load(it) }
+
+application {
+    mainClass.set("dev.sunnat629.mba.server.ApplicationKt")
+}
+
+tasks.named<JavaExec>("run") {
+    environment("GEMINI_API_KEY", localProps.getProperty("GEMINI_API_KEY", ""))
+    environment("NOTION_API_KEY", localProps.getProperty("NOTION_TOKEN", ""))
+    environment("NOTION_DATABASE_ID", localProps.getProperty("NOTION_CRASH_DB_ID_OR_URL", ""))
+    environment("MBA_SERVER_API_KEY", localProps.getProperty("MBA_SERVER_API_KEY", ""))
 }
 
 dependencies {

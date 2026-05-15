@@ -29,7 +29,7 @@ import java.io.Closeable
  * Defaults to Koog runtime. Set [useKoog] = false to fall back to legacy HTTP callers.
  * Set [useMultiStep] = true to use 3 separate LLM calls (useful for debugging).
  */
-internal open class AgentFactory(
+open class AgentFactory(
     private val llmConfig: LLMConfig,
     private val useMultiStep: Boolean = false,
     private val useKoog: Boolean = true,
@@ -62,7 +62,7 @@ internal open class AgentFactory(
     }
 
     /** Returns a reusable executor. */
-    open fun create(): CrashAnalysisExecutor = executor
+    internal open fun create(): CrashAnalysisExecutor = executor
 
     /** Release the shared HttpClient and its connection pool. */
     override fun close() {

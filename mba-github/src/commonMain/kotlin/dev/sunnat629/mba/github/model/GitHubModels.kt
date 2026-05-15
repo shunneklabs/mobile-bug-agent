@@ -23,6 +23,7 @@ data class GitHubIssueResponse(
     val html_url: String,
     val title: String,
     val state: String,
+    val body: String? = null,
 )
 
 /**
@@ -84,6 +85,7 @@ data class GitHubFileCreateRequest(
     val message: String,
     val content: String, // base64 encoded
     val sha: String? = null, // required if updating existing file
+    val branch: String? = null,
 )
 
 /**
@@ -170,4 +172,12 @@ data class GitHubAuthor(
 @Serializable
 data class GitHubLabelsRequest(
     val labels: List<String>,
+)
+
+/**
+ * Request body for assigning reviewers to a pull request.
+ */
+@Serializable
+data class GitHubReviewersRequest(
+    val reviewers: List<String>,
 )

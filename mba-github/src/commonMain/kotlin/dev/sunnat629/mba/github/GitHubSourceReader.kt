@@ -50,7 +50,7 @@ public class GitHubSourceReader(
         val response = getFileResponse(path) ?: return null
         val content = response.content ?: return null
 
-        val decoded = decodeBase64(content.replaceWhitespace())
+        val decoded = content.replaceWhitespace().decodeBase64String()
 
         return if (lineRange != null) {
             val lines = decoded.lineSequence().toList()
@@ -74,7 +74,7 @@ public class GitHubSourceReader(
         val response = getFileResponse(path) ?: return null
         val content = response.content ?: return null
 
-        val decoded = decodeBase64(content.replaceWhitespace())
+        val decoded = content.replaceWhitespace().decodeBase64String()
         val lines = decoded.lineSequence().toList()
 
         val idx = line - 1

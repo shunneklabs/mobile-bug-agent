@@ -9,7 +9,7 @@ import dev.sunnat629.mba.core.model.*
 import dev.sunnat629.mba.core.pii.PIISanitizer
 import dev.sunnat629.mba.core.store.LocalDedupCache
 
-internal class CrashAnalysisAgent(
+class CrashAnalysisAgent(
     private val agentFactory: AgentFactory,
     private val piiSanitizer: PIISanitizer,
     private val dedupCache: LocalDedupCache,
@@ -112,7 +112,7 @@ internal class CrashAnalysisAgent(
     }
 }
 
-internal sealed class CrashAnalysisResult {
+sealed class CrashAnalysisResult {
     data class New(val report: ProcessedCrashReport) : CrashAnalysisResult()
     data class Duplicate(val report: DuplicateCrashReport) : CrashAnalysisResult()
     data class Fallback(val report: ProcessedCrashReport, val error: Exception) : CrashAnalysisResult()

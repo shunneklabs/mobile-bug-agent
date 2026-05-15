@@ -131,6 +131,10 @@ public class GitHubPullRequestCreator(
         // Add labels
         addLabels(pr.number, listOf("mba/ai-generated", "do-not-merge-yet"))
 
+        // Best effort reviewer assignment from git history on target file
+        val suggestedReviewer = suggestReviewerLogin(file, base, oldLines, newLines)
+        assignReviewer(pr.number, suggestedReviewer)
+
         return PRResult.Success(pr.html_url, pr.number, branchName)
     }
 
@@ -160,8 +164,8 @@ public class GitHubPullRequestCreator(
             Regex("""<dependency>"""),
             Regex("""import .*\.R\.""") // Android R import changes
         )
-        val oldDeps = depPatterns.flatMap { oldContent.findAll(it).map { m -> m.value } }.toSet()
-        val newDeps = depPatterns.flatMap { newContent.findAll(it).map { m -> m.value } }.toSet()
+        val oldDeps = depPatterns.flatMap { pattern -> pattern.findAll(oldContent).map { match -> match.value } }.toSet()
+        val newDeps = depPatterns.flatMap { pattern -> pattern.findAll(newContent).map { match -> match.value } }.toSet()
         return (newDeps - oldDeps).isNotEmpty()
     }
 
@@ -172,8 +176,8 @@ public class GitHubPullRequestCreator(
             Regex("""^\s*fun\s+\w+""", RegexOption.MULTILINE),
             Regex("""^\s*(class|interface|object)\s+\w+""", RegexOption.MULTILINE),
         )
-        val oldPublic = publicApiPatterns.sumOf { oldContent.findAll(it).count() }
-        val newPublic = publicApiPatterns.sumOf { newContent.findAll(it).count() }
+        val oldPublic = publicApiPatterns.sumOf { pattern -> pattern.findAll(oldContent).count() }
+        val newPublic = publicApiPatterns.sumOf { pattern -> pattern.findAll(newContent).count() }
         return oldPublic != newPublic
     }
 
@@ -231,12 +235,12 @@ public class GitHubPullRequestCreator(
         message: String,
     ): Boolean {
         return try {
-            val encoded = encodeBase64(content.encodeToByteArray())
+            val encoded = content.encodeToByteArray().encodeBase64()
             val response = httpClient.put("$BASE_URL/repos/$owner/$repo/contents/$path") {
                 header("Authorization", "Bearer $token")
                 header("Accept", "application/vnd.github.v3+json")
                 contentType(ContentType.Application.Json)
-                setBody(GitHubFileCreateRequest(message, encoded, sha))
+                setBody(GitHubFileCreateRequest(message, encoded, sha, branch = branch))
             }
             response.status.isSuccess()
         } catch (_: Exception) {
@@ -273,6 +277,66 @@ public class GitHubPullRequestCreator(
             }
         } catch (_: Exception) {
             // Best effort — don't fail PR creation if labels fail
+        }
+    }
+
+    private suspend fun suggestReviewerLogin(
+        path: String,
+        base: String,
+        oldLines: List<String>,
+        newLines: List<String>,
+    ): String? {
+        findFirstChangedLine(oldLines, newLines)
+        val commits = getFileCommits(path, base)
+        if (commits.isEmpty()) return null
+
+        // GitHub REST does not expose line-level blame ranges directly.
+        // We use file commit history as a best-effort blame-oriented heuristic.
+        return commits.firstNotNullOfOrNull { commit ->
+            commit.author?.login
+                ?: commit.commit.author.login
+        }
+    }
+
+    private fun findFirstChangedLine(oldLines: List<String>, newLines: List<String>): Int? {
+        val maxLen = maxOf(oldLines.size, newLines.size)
+        for (i in 0 until maxLen) {
+            val old = oldLines.getOrElse(i) { "" }
+            val new = newLines.getOrElse(i) { "" }
+            if (old != new) {
+                return i + 1
+            }
+        }
+        return null
+    }
+
+    private suspend fun getFileCommits(path: String, base: String): List<GitHubCommitResponse> {
+        return try {
+            val response = httpClient.get("$BASE_URL/repos/$owner/$repo/commits") {
+                header("Authorization", "Bearer $token")
+                header("Accept", "application/vnd.github.v3+json")
+                parameter("path", path)
+                parameter("sha", base)
+                parameter("per_page", 20)
+            }
+            if (response.status.isSuccess()) response.body() else emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private suspend fun assignReviewer(prNumber: Int, reviewerLogin: String?) {
+        if (reviewerLogin.isNullOrBlank()) return
+
+        try {
+            httpClient.post("$BASE_URL/repos/$owner/$repo/pulls/$prNumber/requested_reviewers") {
+                header("Authorization", "Bearer $token")
+                header("Accept", "application/vnd.github.v3+json")
+                contentType(ContentType.Application.Json)
+                setBody(GitHubReviewersRequest(reviewers = listOf(reviewerLogin)))
+            }
+        } catch (_: Exception) {
+            // Best effort — don't fail PR creation if reviewer assignment fails
         }
     }
 
