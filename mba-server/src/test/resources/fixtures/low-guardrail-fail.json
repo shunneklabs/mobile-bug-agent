@@ -1,0 +1,25 @@
+{
+  "id": "low-guardrail-fail",
+  "timestamp": "2026-05-17T18:26:00Z",
+  "exceptionType": "java.lang.NullPointerException",
+  "message": "Guardrail failure fixture",
+  "stackTrace": "java.lang.NullPointerException\n\tat dev.sunnat629.mba.sample.CrashTestScreenKt.CrashTestScreen(CrashTestScreen.kt:154)",
+  "threadName": "main",
+  "isFatal": true,
+  "device": {
+    "manufacturer": "Google",
+    "model": "Pixel 9",
+    "osVersion": "15",
+    "sdkInt": 35,
+    "locale": "en_US",
+    "totalMemoryMb": 8192,
+    "availableMemoryMb": 4096
+  },
+  "appVersion": "0.1.0-kotlinconf",
+  "buildType": "debug",
+  "currentScreen": "CrashTestScreen",
+  "breadcrumbs": ["Opened crash test screen", "Tapped: NPE"],
+  "customMetadata": { "fixture": "low-guardrail-fail" },
+  "autoFix": true,
+  "skipNotion": false
+}

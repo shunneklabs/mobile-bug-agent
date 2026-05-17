@@ -104,15 +104,15 @@ class DemoOrchestrator(
             ),
         )
 
-        val severityOk = severityRouter.shouldAutoFix(processed.severity)
+        val severityOk = severityRouter.route(processed.severity) == RoutingDecision.AutoFix
         val wantGitHub = raw.autoFix && severityOk && githubAutoFixTool != null
         val wantNotion = !raw.skipNotion && notionBackend != null
 
         if (raw.autoFix && !severityOk) {
-            MBALog.w(TAG, "Job $jobId: autoFix ignored because severity ${processed.severity} is below gate")
+            MBALog.w(TAG, "Job $jobId: autoFix ignored because severity ${processed.severity} is not eligible or auto-fix is disabled")
             eventSink.progress(
                 jobId,
-                "autoFix=true ignored — severity ${processed.severity} below auto-fix gate",
+                "autoFix=true ignored — severity ${processed.severity} is notify-only or MBA_AUTOFIX_ENABLED=false",
                 level = "warning",
             )
         }

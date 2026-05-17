@@ -1,0 +1,25 @@
+{
+  "id": "critical-crash",
+  "timestamp": "2026-05-17T18:26:00Z",
+  "exceptionType": "java.lang.IllegalStateException",
+  "message": "Payment state corrupted",
+  "stackTrace": "java.lang.IllegalStateException: Payment state corrupted\n\tat dev.sunnat629.mba.sample.Checkout.submit(Checkout.kt:88)",
+  "threadName": "main",
+  "isFatal": true,
+  "device": {
+    "manufacturer": "Google",
+    "model": "Pixel 9",
+    "osVersion": "15",
+    "sdkInt": 35,
+    "locale": "en_US",
+    "totalMemoryMb": 8192,
+    "availableMemoryMb": 4096
+  },
+  "appVersion": "0.1.0-kotlinconf",
+  "buildType": "release",
+  "currentScreen": "Checkout",
+  "breadcrumbs": ["Checkout opened", "Pay tapped"],
+  "customMetadata": { "fixture": "critical-crash" },
+  "autoFix": true,
+  "skipNotion": false
+}

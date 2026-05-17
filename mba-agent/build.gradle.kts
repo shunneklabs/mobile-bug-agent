@@ -16,6 +16,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(project(":mba-core"))
+            implementation(project(":mba-github"))
             implementation(libs.koog.agents)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.ktor.client.core)

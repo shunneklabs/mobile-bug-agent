@@ -15,8 +15,11 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
 
 class DemoOrchestratorTest {
+    private val json = Json { ignoreUnknownKeys = true }
+
     @Test
     fun `dry run completes analysis when Notion skipped and GitHub not requested`() {
         runBlocking {
@@ -38,46 +41,91 @@ class DemoOrchestratorTest {
     }
 
     @Test
-    fun `medium severity auto fix opens GitHub and then creates Notion ticket`() {
+    fun `demo npe low route opens github when kill switch enabled and guardrails pass`() {
         runBlocking {
             val sink = RecordingDemoEventSink()
-            val raw = rawReport(autoFix = true, skipNotion = false)
-            val processed = processedReport(raw, severity = Severity.MEDIUM)
-            val notion = RecordingTicketBackend()
+            val raw = rawFixture("demo-npe-low.json")
+            val processed = processedReport(raw, severity = Severity.LOW)
 
             orchestrator(
                 sink = sink,
                 analysisResult = CrashAnalysisResult.New(processed),
-                notionBackend = notion,
+                severityRouter = SeverityRouter(autoFixEnabled = true),
+                notionBackend = null,
                 githubTool = GitHubAutoFixTool { AutoFixResult.Success(7, "https://github.test/issues/7", "autofix/7") },
             ).process("job-2", raw)
 
             assertTrue(sink.events.any { it.type == "pr" && it.message == "https://github.test/issues/7" })
             assertTrue(sink.events.any { it.stage == "github_pr" && it.message.contains("Issue #7 opened") })
-            assertEquals(1, notion.createdReports.size)
-            assertEquals("https://notion.test/ticket-1", sink.events.last().message)
+            assertFalse(sink.events.any { it.type == "fail" })
         }
     }
 
     @Test
-    fun `high severity auto fix opens GitHub and then creates Notion ticket`() {
+    fun `critical crash route creates notify artifact only and no pr`() {
         runBlocking {
             val sink = RecordingDemoEventSink()
-            val raw = rawReport(autoFix = true, skipNotion = false)
+            val raw = rawFixture("critical-crash.json")
             val processed = processedReport(raw, severity = Severity.CRITICAL)
             val notion = RecordingTicketBackend()
 
             orchestrator(
                 sink = sink,
                 analysisResult = CrashAnalysisResult.New(processed),
+                severityRouter = SeverityRouter(autoFixEnabled = true),
                 notionBackend = notion,
                 githubTool = GitHubAutoFixTool { AutoFixResult.Success(42, "https://github.test/issues/42", "autofix/42-crash") },
             ).process("job-3", raw)
 
-            assertTrue(sink.events.any { it.type == "pr" && it.message == "https://github.test/issues/42" })
-            assertTrue(sink.events.any { it.stage == "github_pr" && it.message.contains("Issue #42 opened") })
+            assertFalse(sink.events.any { it.type == "pr" })
+            assertTrue(sink.events.any { it.level == "warning" && it.message.contains("notify-only") })
             assertEquals(1, notion.createdReports.size)
             assertEquals("https://notion.test/ticket-1", sink.events.last().message)
+        }
+    }
+
+    @Test
+    fun `low route falls back to notify path when guardrail prevents github pr`() {
+        runBlocking {
+            val sink = RecordingDemoEventSink()
+            val raw = rawFixture("low-guardrail-fail.json")
+            val processed = processedReport(raw, severity = Severity.LOW)
+            val notion = RecordingTicketBackend()
+
+            orchestrator(
+                sink = sink,
+                analysisResult = CrashAnalysisResult.New(processed),
+                severityRouter = SeverityRouter(autoFixEnabled = true),
+                notionBackend = notion,
+                githubTool = GitHubAutoFixTool { AutoFixResult.Failure("Guardrail failed: base branch 'master' is protected") },
+            ).process("job-guardrail", raw)
+
+            assertFalse(sink.events.any { it.type == "pr" })
+            assertTrue(sink.events.any { it.stage == "github_pr" && it.message.contains("Guardrail failed") })
+            assertEquals(1, notion.createdReports.size)
+            assertEquals("https://notion.test/ticket-1", sink.events.last().message)
+        }
+    }
+
+    @Test
+    fun `kill switch disabled prevents pr creation even for low severity`() {
+        runBlocking {
+            val sink = RecordingDemoEventSink()
+            val raw = rawFixture("demo-npe-low.json").copy(skipNotion = false)
+            val processed = processedReport(raw, severity = Severity.LOW)
+            val notion = RecordingTicketBackend()
+
+            orchestrator(
+                sink = sink,
+                analysisResult = CrashAnalysisResult.New(processed),
+                severityRouter = SeverityRouter(autoFixEnabled = false),
+                notionBackend = notion,
+                githubTool = GitHubAutoFixTool { AutoFixResult.Success(99, "https://github.test/issues/99", "autofix/99") },
+            ).process("job-kill-switch", raw)
+
+            assertFalse(sink.events.any { it.type == "pr" })
+            assertTrue(sink.events.any { it.level == "warning" && it.message.contains("MBA_AUTOFIX_ENABLED=false") })
+            assertEquals(1, notion.createdReports.size)
         }
     }
 
@@ -108,16 +156,22 @@ class DemoOrchestratorTest {
     private fun orchestrator(
         sink: RecordingDemoEventSink,
         analysisResult: CrashAnalysisResult,
+        severityRouter: SeverityRouter = SeverityRouter(autoFixEnabled = false),
         notionBackend: TicketBackend?,
         githubTool: GitHubAutoFixTool?,
     ): DemoOrchestrator = DemoOrchestrator(
         analysisTool = CrashAnalysisTool { analysisResult },
         eventSink = sink,
-        severityRouter = SeverityRouter(),
+        severityRouter = severityRouter,
         notionBackend = notionBackend,
         githubAutoFixTool = githubTool,
         ioDispatcher = Dispatchers.Unconfined,
     )
+
+    private fun rawFixture(name: String): RawCrashReport {
+        val resource = javaClass.classLoader.getResource("fixtures/$name") ?: error("Missing fixture $name")
+        return json.decodeFromString<RawCrashReport>(resource.readText())
+    }
 
     private fun rawReport(autoFix: Boolean, skipNotion: Boolean): RawCrashReport = RawCrashReport(
         id = "crash-1",
