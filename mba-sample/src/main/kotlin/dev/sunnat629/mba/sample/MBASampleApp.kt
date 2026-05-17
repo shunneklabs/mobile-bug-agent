@@ -19,6 +19,7 @@ class MBASampleApp : Application() {
         MBALog.d(TAG, "NOTION_API_KEY:      ${if (BuildConfig.NOTION_API_KEY.isNotBlank()) "loaded" else "!! EMPTY !!" }")
         MBALog.d(TAG, "NOTION_TICKET_DB_ID: ${if (BuildConfig.NOTION_TICKET_DB_ID.isNotBlank()) "loaded" else "!! EMPTY !!" }")
         MBALog.d(TAG, "NOTION_CRASH_DB_ID:  ${if (BuildConfig.NOTION_CRASH_DB_ID.isNotBlank()) "loaded" else "!! EMPTY !!" }")
+        MBALog.d(TAG, "MBA_BACKEND_ENDPOINT: ${BuildConfig.MBA_BACKEND_ENDPOINT}")
         MBALog.d(TAG, "========================================")
 
         // Phase 1: Install crash handler + enqueue WorkManager
@@ -42,13 +43,14 @@ class MBASampleApp : Application() {
         )
 
         // Phase 3: Save Notion + local backend config for WorkManager worker.
-        // Emulator localhost points at the emulator, so use 10.0.2.2 for host machine port 8080.
+        // Emulator default is 10.0.2.2. Physical devices must use the Mac LAN URL,
+        // for example MBA_SAMPLE_BACKEND_ENDPOINT=http://192.168.1.42:8080.
         MBAAndroid.saveConfig(
             context = this,
             notionApiKey = BuildConfig.NOTION_API_KEY,
             notionTicketDbId = BuildConfig.NOTION_TICKET_DB_ID,
             notionCrashDbId = BuildConfig.NOTION_CRASH_DB_ID.ifBlank { null },
-            backendEndpoint = "http://10.0.2.2:8080",
+            backendEndpoint = BuildConfig.MBA_BACKEND_ENDPOINT,
             projectKey = "sample-app-debug",
             sendToBackend = true,
             debug = true,

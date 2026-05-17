@@ -12,6 +12,47 @@ LOG_DIR="${ROOT_DIR}/build/mba-local-demo"
 SERVER_LOG="${LOG_DIR}/server.log"
 INSTALLED_SERVER="${ROOT_DIR}/mba-server/build/install/mba-server/bin/mba-server"
 
+detect_lan_ip() {
+  local iface ip
+
+  for iface in en0 en1; do
+    ip="$(ipconfig getifaddr "${iface}" 2>/dev/null || true)"
+    if [[ -n "${ip}" ]]; then
+      printf '%s' "${ip}"
+      return 0
+    fi
+  done
+
+  iface="$(route get default 2>/dev/null | awk '/interface:/{print $2; exit}' || true)"
+  if [[ -n "${iface}" ]]; then
+    ip="$(ipconfig getifaddr "${iface}" 2>/dev/null || true)"
+    if [[ -n "${ip}" ]]; then
+      printf '%s' "${ip}"
+      return 0
+    fi
+  fi
+
+  printf '%s' "<your-mac-lan-ip>"
+}
+
+has_physical_android_device() {
+  adb devices 2>/dev/null | awk 'NR>1 && $2=="device" && $1 !~ /^emulator-/ { found=1 } END { exit(found ? 0 : 1) }'
+}
+
+sample_backend_endpoint() {
+  if [[ -n "${MBA_SAMPLE_BACKEND_ENDPOINT:-}" ]]; then
+    printf '%s' "${MBA_SAMPLE_BACKEND_ENDPOINT}"
+    return 0
+  fi
+
+  if command -v adb >/dev/null 2>&1 && has_physical_android_device; then
+    printf 'http://%s:%s' "$(detect_lan_ip)" "${PORT}"
+    return 0
+  fi
+
+  printf 'http://10.0.2.2:%s' "${PORT}"
+}
+
 usage() {
   cat <<EOF
 Usage: scripts/run-local-demo.sh [command]
@@ -27,6 +68,8 @@ Commands:
 Environment:
   MBA_SERVER_PORT   Server port for local runs (default: 8080)
   PORT              Server port used by packaged/deployed server (default: MBA_SERVER_PORT)
+  MBA_SAMPLE_BACKEND_ENDPOINT
+                   Backend URL baked into mba-sample; use http://<mac-lan-ip>:8080 for phones
 
 Deploy notes:
   - Local demo uses Gradle :mba-server:run, which injects secrets from local.properties.
@@ -37,6 +80,9 @@ EOF
 }
 
 print_operator_commands() {
+  local lan_ip="$(detect_lan_ip)"
+  local sample_endpoint="$(sample_backend_endpoint)"
+
   cat <<EOF
 
 🪨 Useful commands
@@ -66,12 +112,26 @@ Check backend health/report/booth from terminal:
   curl -N http://localhost:${PORT}/events
   open http://localhost:${PORT}/booth?debug=1
 
+Physical device on same Wi-Fi:
+  Mac LAN backend URL: http://${lan_ip}:${PORT}
+  Build/install sample with that URL:
+    MBA_SAMPLE_BACKEND_ENDPOINT=http://${lan_ip}:${PORT} ./gradlew :mba-sample:installDebug
+  Open booth from Mac browser:
+    open http://localhost:${PORT}/booth?debug=1
+  If phone cannot upload, check macOS Firewall allows incoming Java/Ktor traffic on port ${PORT}.
+
+Current sample backend endpoint for install:
+  ${sample_endpoint}
+
 Watch Android SDK / worker logs:
   adb logcat -c
   adb logcat -v time -s MBAAndroid CrashUploadWorker ServerReportUploader PendingCrashProcessor MBACrashHandler MBA WorkManager
 
 Check emulator can reach host backend:
   adb shell 'toybox nc -vz 10.0.2.2 ${PORT} || true'
+
+Check physical device can reach same-Wi-Fi backend:
+  adb shell 'toybox nc -vz ${lan_ip} ${PORT} || true'
 
 If booth says SSE disconnected:
   curl -i http://localhost:${PORT}/health
@@ -224,6 +284,7 @@ fi
 echo "🌐 Booth dashboard: http://localhost:${PORT}/booth"
 echo "🛠️  Operator dashboard: http://localhost:${PORT}/booth?debug=1"
 echo "📬 Crash ingest endpoint: http://localhost:${PORT}/report"
+echo "📱 Physical-device ingest endpoint: http://$(detect_lan_ip):${PORT}/report"
 echo "🪵 Logs now: tail -f ${SERVER_LOG}"
 
 if [[ "${COMMAND}" == "server" || "${COMMAND}" == "deploy-local" ]]; then
@@ -234,6 +295,8 @@ if [[ "${COMMAND}" == "server" || "${COMMAND}" == "deploy-local" ]]; then
 fi
 
 echo "📦 Installing Android sample app (:mba-sample:installDebug)..."
+export MBA_SAMPLE_BACKEND_ENDPOINT="$(sample_backend_endpoint)"
+echo "📡 Sample backend endpoint: ${MBA_SAMPLE_BACKEND_ENDPOINT}"
 (
   cd "${ROOT_DIR}"
   "${GRADLEW}" :mba-sample:installDebug
