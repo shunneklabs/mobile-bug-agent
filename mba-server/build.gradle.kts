@@ -19,12 +19,18 @@ tasks.named<JavaExec>("run") {
     environment("NOTION_API_KEY", localProps.getProperty("NOTION_TOKEN", ""))
     environment("NOTION_DATABASE_ID", localProps.getProperty("NOTION_CRASH_DB_ID_OR_URL", ""))
     environment("MBA_SERVER_API_KEY", localProps.getProperty("MBA_SERVER_API_KEY", ""))
+    // GitHub auto-fix path (optional — only required when a client sends autoFix=true)
+    environment("GITHUB_TOKEN", localProps.getProperty("GITHUB_TOKEN", ""))
+    environment("GITHUB_OWNER", localProps.getProperty("GITHUB_OWNER", ""))
+    environment("GITHUB_REPO", localProps.getProperty("GITHUB_REPO", ""))
+    environment("GITHUB_BASE_BRANCH", localProps.getProperty("GITHUB_BASE_BRANCH", "main"))
 }
 
 dependencies {
     implementation(project(":mba-core"))
     implementation(project(":mba-agent"))
     implementation(project(":mba-notion"))
+    implementation(project(":mba-github"))
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.ktor.server.core)

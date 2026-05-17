@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MBA Booth Dashboard</title>
+    <link rel="stylesheet" href="/booth-assets/booth.css">
+</head>
+<body>
+<header class="hero" id="hero">
+    <div>
+        <h1>Mobile Bug Agent</h1>
+        <p>Crashlytics catches your crashes. MBA fixes them.</p>
+    </div>
+    <div class="hero-right">
+        <div class="repo">github.com/shunneklabs/mobile-bug-agent</div>
+        <div class="qr-strip">
+            <span class="qr-label">Scan to try</span>
+            <div class="qr-placeholder" aria-label="Demo QR placeholder">QR</div>
+        </div>
+    </div>
+</header>
+
+<section class="stats" id="stats"></section>
+
+<main class="layout">
+    <section class="panel">
+        <h2>Pipeline</h2>
+        <div class="pipeline" id="pipeline"></div>
+    </section>
+
+    <section class="panel">
+        <h2>Terminal</h2>
+        <div class="terminal" id="terminal"></div>
+    </section>
+
+    <section class="panel">
+        <h2>Timeline</h2>
+        <div class="timeline" id="timeline"></div>
+    </section>
+</main>
+
+<section class="panel operator" id="operatorPanel" hidden>
+    <h2>Operator Controls (debug)</h2>
+    <div id="pendingDecisions"></div>
+    <button id="holdReset" class="danger">Hold 2s to reset dashboard</button>
+</section>
+
+<div id="ticker" class="ticker">MBA booth mode active · waiting for events…</div>
+<script src="/booth-assets/booth.js"></script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 package dev.sunnat629.mba.jvm.capture
 
 import dev.sunnat629.mba.core.MBA
+import dev.sunnat629.mba.core.MBALog
 
 /**
  * JVM-specific crash handler integration.
@@ -33,7 +34,7 @@ internal object JVMCrashHandler : Thread.UncaughtExceptionHandler {
 
             MBA.logError(throwable = e, metadata = metadata)
         } catch (ex: Exception) {
-            System.err.println("Error capturing JVM crash: ${ex.message}")
+            MBALog.e("JVMCrashHandler", "Error capturing JVM crash: ${ex.message}", ex)
         } finally {
             // Forward to default handler
             defaultHandler?.uncaughtException(t, e)

@@ -11,8 +11,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            MBASampleTheme {
-                CrashTestScreen()
+            MBASampleTheme(darkTheme = true, dynamicColor = false) {
+                BoothCrashScreen()
             }
         }
     }

@@ -17,6 +17,22 @@ public class MBAConfig internal constructor(
     internal val piiSanitizer: PIISanitizer,
     internal val agentConfig: AgentConfig,
     public val debug: Boolean,
+    /**
+     * When true, every captured crash is flagged for the server's GitHub
+     * auto-fix path (issue → branch → patch → draft PR). The server still
+     * gates the actual PR on crash severity (HIGH/CRITICAL only).
+     *
+     * Default: `false`.
+     */
+    public val autoFix: Boolean = false,
+    /**
+     * When true, the server will skip creating a Notion ticket for crashes
+     * captured by this SDK instance. Combine with [autoFix] for a GitHub-only
+     * pipeline, or use alone for a "dry-run" pipeline (analysis only).
+     *
+     * Default: `false`.
+     */
+    public val skipNotion: Boolean = false,
 ) {
 
     internal data class AgentConfig(
@@ -46,6 +62,18 @@ public class MBAConfig internal constructor(
 
         /** Enable debug logging. Default false. */
         public var debug: Boolean = false
+
+        /**
+         * Opt in to the server-side GitHub auto-fix path. Default `false`.
+         * Server still gates the actual PR on crash severity (HIGH/CRITICAL).
+         */
+        public var autoFix: Boolean = false
+
+        /**
+         * Skip Notion ticket creation server-side. Default `false`.
+         * Combine with [autoFix] for a GitHub-only pipeline.
+         */
+        public var skipNotion: Boolean = false
 
         private var piiPatterns: MutableList<Regex> = mutableListOf()
         private var agentConfig = AgentConfig()
@@ -83,6 +111,8 @@ public class MBAConfig internal constructor(
                 piiSanitizer = PIISanitizer(customPatterns = piiPatterns),
                 agentConfig = agentConfig,
                 debug = debug,
+                autoFix = autoFix,
+                skipNotion = skipNotion,
             )
         }
     }

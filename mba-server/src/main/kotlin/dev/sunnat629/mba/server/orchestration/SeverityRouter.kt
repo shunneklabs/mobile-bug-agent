@@ -28,6 +28,20 @@ class SeverityRouter(
         }
     }
 
+    /**
+     * Returns true when a crash is eligible for the GitHub auto-fix path
+     * (issue → branch → patch → draft PR).
+     *
+     * Gate: HIGH or CRITICAL severity. LOW/MEDIUM are too noisy to auto-fix.
+     * Independent of [autoFixEnabled] / `MBA_AUTOFIX_ENABLED` — the per-crash
+     * `RawCrashReport.autoFix` flag is the on/off switch for the new path,
+     * this helper just enforces the severity guardrail.
+     */
+    fun shouldAutoFix(severity: Severity): Boolean = when (severity) {
+        Severity.CRITICAL, Severity.HIGH -> true
+        Severity.MEDIUM, Severity.LOW -> false
+    }
+
     companion object {
         internal fun isAutoFixEnabledFromEnv(): Boolean =
             System.getenv("MBA_AUTOFIX_ENABLED")

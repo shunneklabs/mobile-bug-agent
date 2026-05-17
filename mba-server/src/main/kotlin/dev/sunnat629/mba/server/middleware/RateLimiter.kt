@@ -4,7 +4,7 @@ import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
-import org.slf4j.LoggerFactory
+import dev.sunnat629.mba.core.MBALog
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Clock
 import kotlin.time.Duration
@@ -20,7 +20,7 @@ class RateLimiter(
     private val window: Duration = 1.seconds,
 ) {
     private companion object {
-        private val logger = LoggerFactory.getLogger("RateLimiter")
+        private const val TAG = "RateLimiter"
     }
 
     private val buckets = ConcurrentHashMap<String, MutableList<Long>>()
@@ -34,7 +34,7 @@ class RateLimiter(
         synchronized(bucket) {
             bucket.removeAll { it < windowStart }
             if (bucket.size >= maxRequests) {
-                logger.warn("Rate limit exceeded for key=$key (${bucket.size}/$maxRequests in window)")
+                MBALog.w(TAG, "Rate limit exceeded for key=$key (${bucket.size}/$maxRequests in window)")
                 return false
             }
             bucket.add(now)

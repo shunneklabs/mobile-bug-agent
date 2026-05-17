@@ -28,6 +28,7 @@ See `mba-agent/src/commonMain/kotlin/dev/sunnat629/mba/agent/KoogAgentFactory.kt
 | `mba-android` | Android SDK entry point, WorkManager integration |
 | `mba-jvm` | JVM SDK entry point |
 | `mba-notion` | Notion ticket backend |
+| `mba-github` | GitHub ticket backend + auto-fix opener + guard-railed PR creator |
 | `mba-server` | Ktor server for crash ingestion and SSE feed |
 | `mba-sample` | Demo app with crash button |
 
@@ -41,6 +42,21 @@ Look for issues labeled `good first issue` on our [issue tracker](https://github
 - Follow existing naming conventions
 - Run `./gradlew allTests` before submitting PRs
 
+## Reporting Issues
+
+- Search [existing issues](https://github.com/shunneklabs/mobile-bug-agent/issues) first.
+- For bugs: include MBA version, target platform (Android API level / JVM), repro steps, expected vs actual, and a minimal stack trace if relevant.
+- For security issues: **do not open a public issue.** Email the maintainer or use GitHub's private security advisory.
+
+## Pull Requests
+
+1. Fork and create a feature branch off `main`.
+2. Keep PRs focused — one logical change per PR.
+3. Add or update tests for behavior changes.
+4. Run `./gradlew allTests` locally; CI must be green.
+5. Reference the issue number in the PR description (e.g. `Fixes #123`).
+6. By submitting, you agree your contribution is licensed under Apache 2.0.
+
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE).
+Apache 2.0 — see [LICENSE](LICENSE). All contributions are licensed under the same terms.

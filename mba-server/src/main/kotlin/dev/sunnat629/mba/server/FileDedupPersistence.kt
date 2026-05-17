@@ -1,14 +1,14 @@
 package dev.sunnat629.mba.server
 
+import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.store.LocalDedupCache
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import org.slf4j.LoggerFactory
 import java.io.File
 import kotlin.time.Instant
 
-private val logger = LoggerFactory.getLogger("FileDedupPersistence")
+private const val TAG = "FileDedupPersistence"
 
 /**
  * Persists [LocalDedupCache] state to a JSON file on disk.
@@ -39,9 +39,9 @@ object FileDedupPersistence {
             val file = File(filePath)
             file.parentFile?.mkdirs()
             file.writeText(json.encodeToString(data))
-            logger.info("Saved ${snapshot.size} dedup entries to $filePath")
+            MBALog.i(TAG, "Saved ${snapshot.size} dedup entries to $filePath")
         } catch (e: Exception) {
-            logger.error("Failed to save dedup cache to $filePath", e)
+            MBALog.e(TAG, "Failed to save dedup cache to $filePath", e)
         }
     }
 
@@ -53,7 +53,7 @@ object FileDedupPersistence {
         try {
             val file = File(filePath)
             if (!file.exists()) {
-                logger.info("No dedup cache file found at $filePath — starting fresh")
+                MBALog.i(TAG, "No dedup cache file found at $filePath — starting fresh")
                 return
             }
 
@@ -62,9 +62,9 @@ object FileDedupPersistence {
                 Instant.parse(timestamp)
             }
             cache.restore(entries)
-            logger.info("Restored ${entries.size} dedup entries from $filePath")
+            MBALog.i(TAG, "Restored ${entries.size} dedup entries from $filePath")
         } catch (e: Exception) {
-            logger.error("Failed to restore dedup cache from $filePath — starting fresh", e)
+            MBALog.e(TAG, "Failed to restore dedup cache from $filePath — starting fresh", e)
         }
     }
 }

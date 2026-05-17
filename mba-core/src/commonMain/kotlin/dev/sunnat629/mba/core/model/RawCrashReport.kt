@@ -26,4 +26,21 @@ public data class RawCrashReport(
     val currentScreen: String? = null,
     val breadcrumbs: List<String> = emptyList(),
     val customMetadata: Map<String, String> = emptyMap(),
+    /**
+     * When true, the server will attempt to open a GitHub auto-fix PR
+     * (issue → branch → patch → draft PR) for this crash, gated by severity.
+     *
+     * Default: `false` (Notion-only path).
+     */
+    val autoFix: Boolean = false,
+    /**
+     * When true, the server will skip creating a Notion ticket for this crash.
+     *
+     * Combined with [autoFix]:
+     *  - `autoFix=true,  skipNotion=false` → both Notion ticket + GitHub PR.
+     *  - `autoFix=true,  skipNotion=true`  → GitHub PR only.
+     *  - `autoFix=false, skipNotion=false` → Notion ticket only (today's path).
+     *  - `autoFix=false, skipNotion=true`  → analysis only, no external ticket (dry-run).
+     */
+    val skipNotion: Boolean = false,
 )
