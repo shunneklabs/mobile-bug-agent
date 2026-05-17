@@ -81,6 +81,29 @@ class DemoOrchestratorTest {
         }
     }
 
+    @Test
+    fun `notion failure does not hide completed analysis from booth`() {
+        runBlocking {
+            val sink = RecordingDemoEventSink()
+            val raw = rawReport(autoFix = true, skipNotion = false)
+            val processed = processedReport(raw, severity = Severity.MEDIUM)
+            val notion = RecordingTicketBackend(
+                result = TicketResult.failure("Recording", "Notion API 400 : schema mismatch"),
+            )
+
+            orchestrator(
+                sink = sink,
+                analysisResult = CrashAnalysisResult.New(processed),
+                notionBackend = notion,
+                githubTool = null,
+            ).process("job-4", raw)
+
+            assertFalse(sink.events.any { it.type == "fail" })
+            assertTrue(sink.events.any { it.level == "warning" && it.message.contains("Notion ticket failed") })
+            assertEquals("analysis://fingerprint-1", sink.events.last().message)
+        }
+    }
+
     private fun orchestrator(
         sink: RecordingDemoEventSink,
         analysisResult: CrashAnalysisResult,
@@ -163,18 +186,20 @@ class DemoOrchestratorTest {
         }
     }
 
-    private class RecordingTicketBackend : TicketBackend {
+    private class RecordingTicketBackend(
+        private val result: TicketResult = TicketResult(
+            ticketId = "ticket-1",
+            backendName = "Recording",
+            url = "https://notion.test/ticket-1",
+        ),
+    ) : TicketBackend {
         val createdReports = mutableListOf<ProcessedCrashReport>()
 
         override val name: String = "Recording"
 
         override suspend fun createTicket(report: ProcessedCrashReport): TicketResult {
             createdReports += report
-            return TicketResult(
-                ticketId = "ticket-1",
-                backendName = name,
-                url = "https://notion.test/ticket-1",
-            )
+            return result
         }
 
         override suspend fun updateTicket(ticketId: String, update: TicketUpdate): TicketResult = TicketResult(

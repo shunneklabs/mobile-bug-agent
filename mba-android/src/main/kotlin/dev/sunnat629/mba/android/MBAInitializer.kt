@@ -2,6 +2,7 @@ package dev.sunnat629.mba.android
 
 import android.content.Context
 import androidx.startup.Initializer
+import androidx.work.WorkManagerInitializer
 
 /**
  * AndroidX Startup entry point.
@@ -14,5 +15,5 @@ class MBAInitializer : Initializer<Unit> {
         MBAAndroid.install(context)
     }
 
-    override fun dependencies(): List<Class<out Initializer<*>>> = emptyList()
+    override fun dependencies(): List<Class<out Initializer<*>>> = listOf(WorkManagerInitializer::class.java)
 }

@@ -19,8 +19,8 @@ import kotlin.time.Duration.Companion.hours
  * 3. For each file:
  *    a. Build ProcessedCrashReport (PII scrub, fingerprint, basic title — no AI)
  *    b. Dedup check (skip if fingerprint already seen)
- *    c. Push to Notion (Bug Tickets + Crash Reports DBs)
- *    d. Push raw crash to MBA backend `/report` when configured
+ *    c. Push raw crash to MBA backend `/report` when configured
+ *    d. Push to Notion (Bug Tickets + Crash Reports DBs)
  *    e. Delete file only when configured destinations succeed
  * 4. Returns Result.success() or Result.retry()
  *
@@ -110,17 +110,6 @@ internal class CrashUploadWorker(
                     continue
                 }
 
-                // Push to Notion
-                MBALog.d(TAG, "Uploading to Notion: '${report.title}'")
-                val notionResult = backend.createTicket(report)
-
-                if (notionResult.success) {
-                    MBALog.i(TAG, "✅ Notion uploaded: ${file.name} → ticket=${notionResult.ticketId.take(12)}...")
-                    dedupCache.put(report.fingerprint)
-                } else {
-                    MBALog.e(TAG, "❌ Notion upload failed for ${file.name}: ${notionResult.errorMessage}")
-                }
-
                 val serverUploaded = if (serverUploader != null) {
                     MBALog.d(TAG, "Uploading raw crash to backend: $backendEndpoint/report")
                     when (val backendResult = serverUploader.upload(rawReport)) {
@@ -135,6 +124,17 @@ internal class CrashUploadWorker(
                     }
                 } else {
                     true
+                }
+
+                // Push to Notion after local backend so booth can update without waiting on cloud calls.
+                MBALog.d(TAG, "Uploading to Notion: '${report.title}'")
+                val notionResult = backend.createTicket(report)
+
+                if (notionResult.success) {
+                    MBALog.i(TAG, "✅ Notion uploaded: ${file.name} → ticket=${notionResult.ticketId.take(12)}...")
+                    dedupCache.put(report.fingerprint)
+                } else {
+                    MBALog.e(TAG, "❌ Notion upload failed for ${file.name}: ${notionResult.errorMessage}")
                 }
 
                 if (notionResult.success && serverUploaded) {

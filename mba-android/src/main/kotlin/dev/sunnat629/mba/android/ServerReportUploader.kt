@@ -14,6 +14,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -24,11 +25,12 @@ internal class ServerReportUploader(
     private val httpClient: HttpClient = defaultClient(),
 ) {
     suspend fun upload(rawReport: RawCrashReport): BackendUploadResult {
+        val payload = Json.encodeToString(rawReport)
         val response: HttpResponse = httpClient.post("${endpoint.trimEnd('/')}/report") {
             contentType(ContentType.Application.Json)
             projectKey?.takeIf { it.isNotBlank() }?.let { header("X-MBA-Project-Key", it) }
             serverApiKey?.takeIf { it.isNotBlank() }?.let { header(HttpHeaders.Authorization, "Bearer $it") }
-            setBody(rawReport)
+            setBody(payload)
         }
 
         return if (response.status == HttpStatusCode.Accepted) {

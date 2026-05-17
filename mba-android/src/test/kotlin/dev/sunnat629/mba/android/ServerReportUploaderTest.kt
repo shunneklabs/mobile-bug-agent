@@ -9,8 +9,11 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.OutgoingContent
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
+import io.ktor.utils.io.readRemaining
+import io.ktor.utils.io.core.readText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -25,6 +28,11 @@ class ServerReportUploaderTest {
                 assertEquals("http://localhost:8080/report", request.url.toString())
                 assertEquals("sample-app-debug", request.headers["X-MBA-Project-Key"])
                 assertEquals("Bearer test-token", request.headers[HttpHeaders.Authorization])
+                val body = request.body.readText()
+                assertTrue(body.contains("\"id\":\"crash-1\""), body)
+                assertTrue(body.contains("\"exceptionType\":\"java.lang.IllegalStateException\""), body)
+                assertTrue(body.contains("\"device\":{"), body)
+                assertTrue(!body.contains("\"report\":{"), body)
                 respond(
                     content = """{"jobId":"job-123","status":"queued"}""",
                     status = HttpStatusCode.Accepted,
@@ -70,6 +78,12 @@ class ServerReportUploaderTest {
         install(ContentNegotiation) {
             json(Json { ignoreUnknownKeys = true })
         }
+    }
+
+    private suspend fun OutgoingContent.readText(): String = when (this) {
+        is OutgoingContent.ByteArrayContent -> bytes().decodeToString()
+        is OutgoingContent.ReadChannelContent -> readFrom().readRemaining().readText()
+        else -> toString()
     }
 
     private fun rawReport(): RawCrashReport = RawCrashReport(

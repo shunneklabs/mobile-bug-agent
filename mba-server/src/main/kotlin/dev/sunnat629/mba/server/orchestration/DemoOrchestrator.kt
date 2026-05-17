@@ -189,9 +189,15 @@ class DemoOrchestrator(
             val msg = ticket.errorMessage ?: "Unknown Notion error"
             MBALog.e(TAG, "Job $jobId: Notion failed: $msg")
             if (prOpened) {
-                eventSink.progress(jobId, "Notion ticket failed: $msg", stage = notionStage, level = "error")
+                eventSink.progress(jobId, "Notion ticket failed: $msg", stage = notionStage, level = "warning")
             } else {
-                eventSink.fail(jobId, msg)
+                eventSink.progress(
+                    jobId,
+                    "Notion ticket failed: $msg — keeping analysis result visible",
+                    stage = notionStage,
+                    level = "warning",
+                )
+                eventSink.complete(jobId, "analysis://${processed.fingerprint}")
             }
         }
     }
