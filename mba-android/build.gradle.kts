@@ -25,6 +25,7 @@ dependencies {
     implementation(project(":mba-core"))
     implementation(project(":mba-agent"))
     implementation(project(":mba-notion"))
+    implementation(project(":mba-github"))
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.json)

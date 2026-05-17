@@ -21,6 +21,9 @@ import dev.sunnat629.mba.core.MBALog
  * - mba_llm_api_key
  * - mba_llm_model
  * - mba_skip_git_issue
+ * - mba_github_token
+ * - mba_github_owner
+ * - mba_github_repo
  * - mba_debug
  */
 internal object MBAPreferences {
@@ -40,6 +43,9 @@ internal object MBAPreferences {
     private const val KEY_LLM_API_KEY = "mba_llm_api_key"
     private const val KEY_LLM_MODEL = "mba_llm_model"
     private const val KEY_SKIP_GIT_ISSUE = "mba_skip_git_issue"
+    private const val KEY_GITHUB_TOKEN = "mba_github_token"
+    private const val KEY_GITHUB_OWNER = "mba_github_owner"
+    private const val KEY_GITHUB_REPO = "mba_github_repo"
     private const val KEY_DEBUG = "mba_debug"
 
     fun save(
@@ -56,6 +62,9 @@ internal object MBAPreferences {
         llmApiKey: String?,
         llmModel: String?,
         skipGitIssue: Boolean,
+        githubToken: String?,
+        githubOwner: String?,
+        githubRepo: String?,
         debug: Boolean,
     ) {
         prefs(context).edit()
@@ -71,6 +80,9 @@ internal object MBAPreferences {
             .putString(KEY_LLM_API_KEY, llmApiKey ?: "")
             .putString(KEY_LLM_MODEL, llmModel ?: "")
             .putBoolean(KEY_SKIP_GIT_ISSUE, skipGitIssue)
+            .putString(KEY_GITHUB_TOKEN, githubToken ?: "")
+            .putString(KEY_GITHUB_OWNER, githubOwner ?: "")
+            .putString(KEY_GITHUB_REPO, githubRepo ?: "")
             .putBoolean(KEY_DEBUG, debug)
             .apply()
         MBALog.i(TAG, "Config saved to SharedPreferences")
@@ -111,6 +123,15 @@ internal object MBAPreferences {
 
     fun loadSkipGitIssue(context: Context): Boolean =
         prefs(context).getBoolean(KEY_SKIP_GIT_ISSUE, true)
+
+    fun loadGithubToken(context: Context): String? =
+        prefs(context).getString(KEY_GITHUB_TOKEN, null)?.ifBlank { null }
+
+    fun loadGithubOwner(context: Context): String? =
+        prefs(context).getString(KEY_GITHUB_OWNER, null)?.ifBlank { null }
+
+    fun loadGithubRepo(context: Context): String? =
+        prefs(context).getString(KEY_GITHUB_REPO, null)?.ifBlank { null }
 
     fun loadDebug(context: Context): Boolean =
         prefs(context).getBoolean(KEY_DEBUG, false)

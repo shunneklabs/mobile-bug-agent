@@ -17,6 +17,7 @@ import dev.sunnat629.mba.core.model.TicketResult
 import dev.sunnat629.mba.core.pii.PIISanitizer
 import dev.sunnat629.mba.core.store.LocalDedupCache
 import dev.sunnat629.mba.core.ticket.TicketUpdate
+import dev.sunnat629.mba.github.GitHubIssueBackend
 import dev.sunnat629.mba.notion.NotionTicketBackend
 import java.io.File
 import kotlin.time.Duration.Companion.hours
@@ -67,6 +68,9 @@ internal class CrashUploadWorker(
         val sendToBackend = MBAPreferences.loadSendToBackend(context)
         val llmConfig = loadLlmConfig(context)
         val skipGitIssue = MBAPreferences.loadSkipGitIssue(context)
+        val githubToken = MBAPreferences.loadGithubToken(context)
+        val githubOwner = MBAPreferences.loadGithubOwner(context)
+        val githubRepo = MBAPreferences.loadGithubRepo(context)
         val debug = MBAPreferences.loadDebug(context)
 
         MBALog.enabled = debug
@@ -107,6 +111,11 @@ internal class CrashUploadWorker(
                 )
             }
         val dedupCache = LocalDedupCache(maxSize = 500, ttl = 24.hours)
+        val githubBackend = if (!skipGitIssue && !githubToken.isNullOrBlank() && !githubOwner.isNullOrBlank() && !githubRepo.isNullOrBlank()) {
+            GitHubIssueBackend(githubToken, githubOwner, githubRepo)
+        } else {
+            null
+        }
         val sdkOnlyOrchestrator = llmConfig?.let { config ->
             val factory = AgentFactory(config)
             SdkOnlyCrashOrchestrator(
@@ -121,7 +130,7 @@ internal class CrashUploadWorker(
                 ),
                 callback = MBAAndroid.agentCallback,
                 notionSink = backend?.let(::NotionSdkOnlySink),
-                githubSink = null,
+                githubSink = githubBackend?.let(::GitHubSdkOnlySink),
                 skipNotion = backend == null,
                 skipGitIssue = skipGitIssue,
             )
@@ -205,6 +214,7 @@ internal class CrashUploadWorker(
         }
 
         backend?.close()
+        githubBackend?.close()
         serverUploader?.close()
 
         MBALog.i(TAG, "Done: $successCount uploaded, $failCount failed out of ${pendingCrashes.size}")
@@ -257,6 +267,24 @@ internal class CrashUploadWorker(
                 backend.createTicket(event.report).toSinkResult(created = true)
             }
         }
+
+        private fun TicketResult.toSinkResult(created: Boolean): MBAAgentSinkResult =
+            MBAAgentSinkResult(
+                ticketId = ticketId.takeIf { it.isNotBlank() },
+                url = url,
+                created = created,
+                success = success,
+                errorMessage = errorMessage,
+            )
+    }
+
+    private class GitHubSdkOnlySink(
+        private val backend: GitHubIssueBackend,
+    ) : MBAAgentSink {
+        override val name: String = "GitHub"
+
+        override suspend fun sync(event: MBAAgentEvent): MBAAgentSinkResult =
+            backend.createTicket(event.report).toSinkResult(created = true)
 
         private fun TicketResult.toSinkResult(created: Boolean): MBAAgentSinkResult =
             MBAAgentSinkResult(

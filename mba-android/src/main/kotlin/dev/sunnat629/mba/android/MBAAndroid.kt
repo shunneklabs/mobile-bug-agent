@@ -109,6 +109,9 @@ public object MBAAndroid {
         sendToBackend: Boolean = backendEndpoint != null,
         llm: LLMConfig? = null,
         skipGitIssue: Boolean = true,
+        githubToken: String? = null,
+        githubOwner: String? = null,
+        githubRepo: String? = null,
         callback: MBAAgentCallback? = null,
         debug: Boolean = false,
     ) {
@@ -129,6 +132,9 @@ public object MBAAndroid {
             llmApiKey = llm?.apiKey,
             llmModel = llm?.model,
             skipGitIssue = skipGitIssue,
+            githubToken = githubToken,
+            githubOwner = githubOwner,
+            githubRepo = githubRepo,
             debug = debug,
         )
         agentCallback = callback
