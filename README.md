@@ -1,8 +1,15 @@
 # 🐛 Mobile Bug Agent (MBA)
 
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.3.20-7F52FF?logo=kotlin)](https://kotlinlang.org)
+[![Platform](https://img.shields.io/badge/platform-Android%20%7C%20JVM-brightgreen)]()
+[![Status](https://img.shields.io/badge/status-alpha-orange)]()
+
 An AI-powered crash reporting SDK for **Kotlin Multiplatform (KMP)** and **Android**.
 
-Captures crashes → analyzes with AI → creates structured bug tickets in Notion (more backends coming).
+Captures crashes → analyzes with AI → creates structured bug tickets in Notion (or opens GitHub issues + PRs).
+
+> **Status:** Alpha. Public API surface is small (`MBA`, `MBAConfig.Builder`, `MBAMode`, `LLM`, `TicketBackend`, `Severity`, `DeviceContext`, `TicketResult`, `NotionTicketBackend`) but may evolve before `1.0`. Pin a tag for stability.
 
 ## ✨ What it does
 
@@ -18,6 +25,7 @@ Deduplicated → AI analyzes (Gemini/OpenAI) → Bug ticket created in Notion
 | `mba-core` | KMP shared library — models, config, crash capture, PII sanitizer, fingerprinting, dedup cache |
 | `mba-agent` | KMP shared — AI crash analysis pipeline (LLM callers, prompts, single-prompt executor) |
 | `mba-notion` | KMP shared — Notion API integration (dual-DB: Bug Tickets + Crash Reports) |
+| `mba-github` | KMP shared — GitHub backend: ticket backend + auto-fix issue/branch opener + guard-railed PR creator |
 | `mba-android` | Android-specific — UncaughtExceptionHandler, WorkManager, AndroidX Startup |
 | `mba-jvm` | JVM-specific — crash handler for server/desktop |
 | `mba-server` | Ktor server — receives crash reports, runs AI, creates tickets |
@@ -117,6 +125,20 @@ val scope = CoroutineScope(Dispatchers.IO + MBA.exceptionHandler)
 | Compose BOM | 2026.03.01 |
 | Targets | Android (API 26+), JVM |
 
+## 🤝 Contributing
+
+Contributions welcome — issues, PRs, and discussions. See [CONTRIBUTING.md](CONTRIBUTING.md) and look for `good first issue` labels on the [issue tracker](https://github.com/sunnat629/mobile-bug-agent/issues).
+
 ## 📄 License
 
-TBD
+Apache License 2.0 — see [LICENSE](LICENSE).
+
+```
+Copyright 2025 Mohi Us Sunnat and Mobile Bug Agent contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+```

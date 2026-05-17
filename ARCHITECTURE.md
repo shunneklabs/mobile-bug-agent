@@ -201,3 +201,14 @@ mba-notion/src/commonTest/
 ```
 
 Run: `./gradlew allTests`
+
+## Optional Modules
+
+- **`mba-github`** — alternative `TicketBackend` (`GitHubIssueBackend`) plus the auto-fix path:
+  - `GitHubAutoFixOpener.openAutoFix` — opens a tracking issue and a `autofix/issue-N-<slug>` branch off `GITHUB_BASE_BRANCH`.
+  - `GitHubPullRequestCreator.openFix` — guard-railed PR creator (≤20 diff lines, no new deps, no public-API changes, refuses `main`/`master` base, labels `mba/ai-generated` + `do-not-merge-yet`).
+  - Gated on the server by `RawCrashReport.autoFix`, severity (HIGH/CRITICAL only), and `GITHUB_*` env vars. See README §"Routing truth table" for full matrix.
+
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE).
