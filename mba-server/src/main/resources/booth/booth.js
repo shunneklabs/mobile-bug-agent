@@ -17,6 +17,7 @@ const operatorPanelEl = document.getElementById("operatorPanel");
 const pendingDecisionsEl = document.getElementById("pendingDecisions");
 
 let latestStage = "queued";
+let sseWasOpen = false;
 
 function renderPipeline(active) {
   pipelineEl.innerHTML = "";
@@ -171,7 +172,19 @@ async function bootstrap() {
     setInterval(loadPendingDecisions, 5000);
   }
 
+  connectEvents();
+}
+
+function connectEvents() {
   const source = new EventSource("/events");
+  source.onopen = () => {
+    if (!sseWasOpen) {
+      addLine(terminalEl, "SSE connected — waiting for crash reports", "info");
+    } else {
+      addLine(terminalEl, "SSE reconnected", "info");
+    }
+    sseWasOpen = true;
+  };
   source.onmessage = async (msg) => {
     const event = JSON.parse(msg.data);
     renderEvent(event);
@@ -179,7 +192,7 @@ async function bootstrap() {
   };
 
   source.onerror = () => {
-    addLine(terminalEl, "SSE disconnected, retrying…", "warning");
+    addLine(terminalEl, "SSE disconnected, retrying… Check server still running and /events reachable.", "warning");
   };
 }
 

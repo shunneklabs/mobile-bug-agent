@@ -63,6 +63,9 @@ public object MBAAndroid {
      *     notionApiKey = "secret_...",
      *     notionTicketDbId = "...",
      *     notionCrashDbId = "...",
+     *     backendEndpoint = "http://10.0.2.2:8080",
+     *     projectKey = "sample-app-debug",
+     *     sendToBackend = true,
      *     debug = true,
      * )
      * ```
@@ -72,6 +75,10 @@ public object MBAAndroid {
         notionApiKey: String,
         notionTicketDbId: String,
         notionCrashDbId: String? = null,
+        backendEndpoint: String? = null,
+        projectKey: String? = null,
+        serverApiKey: String? = null,
+        sendToBackend: Boolean = backendEndpoint != null,
         debug: Boolean = false,
     ) {
         val appContext = context.applicationContext
@@ -83,10 +90,14 @@ public object MBAAndroid {
             notionApiKey = notionApiKey,
             notionTicketDbId = notionTicketDbId,
             notionCrashDbId = notionCrashDbId,
+            backendEndpoint = backendEndpoint,
+            projectKey = projectKey,
+            serverApiKey = serverApiKey,
+            sendToBackend = sendToBackend,
             debug = debug,
         )
 
-        MBALog.i(TAG, "Notion config saved to SharedPreferences for WorkManager")
+        MBALog.i(TAG, "Notion/backend config saved to SharedPreferences for WorkManager")
     }
 
     private fun enqueueCrashUploadWorker(context: Context) {

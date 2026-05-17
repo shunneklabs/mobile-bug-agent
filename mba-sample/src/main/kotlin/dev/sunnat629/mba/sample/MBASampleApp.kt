@@ -41,16 +41,19 @@ class MBASampleApp : Application() {
             }.build()
         )
 
-        // Phase 3: Save Notion config for WorkManager worker
-        // The worker runs in a separate context and needs these credentials.
+        // Phase 3: Save Notion + local backend config for WorkManager worker.
+        // Emulator localhost points at the emulator, so use 10.0.2.2 for host machine port 8080.
         MBAAndroid.saveConfig(
             context = this,
             notionApiKey = BuildConfig.NOTION_API_KEY,
             notionTicketDbId = BuildConfig.NOTION_TICKET_DB_ID,
             notionCrashDbId = BuildConfig.NOTION_CRASH_DB_ID.ifBlank { null },
+            backendEndpoint = "http://10.0.2.2:8080",
+            projectKey = "sample-app-debug",
+            sendToBackend = true,
             debug = true,
         )
 
-        MBALog.d(TAG, "MBA SDK initialized. Crashes will auto-push to Notion on next launch.")
+        MBALog.d(TAG, "MBA SDK initialized. Crashes will auto-push to Notion and local backend on next launch.")
     }
 }
