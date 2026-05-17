@@ -4,9 +4,6 @@ import dev.sunnat629.mba.core.model.ProcessedCrashReport
 import dev.sunnat629.mba.core.model.Severity
 import dev.sunnat629.mba.core.model.TicketResult
 import dev.sunnat629.mba.core.ticket.TicketBackend
-import dev.sunnat629.mba.github.GitHubPullRequestCreator
-import dev.sunnat629.mba.github.GitHubSourceReader
-import dev.sunnat629.mba.github.PRResult
 
 public data class ToolFailure(
     val code: String,
@@ -105,15 +102,6 @@ public class ReadSourceFileTool(private val reader: SourceFileReader) {
         )
     }
 
-    public companion object {
-        public fun github(reader: GitHubSourceReader): ReadSourceFileTool = ReadSourceFileTool { input ->
-            val range = when {
-                input.startLine != null && input.endLine != null -> input.startLine..input.endLine
-                else -> null
-            }
-            reader.readFile(input.path, range)
-        }
-    }
 }
 
 public data class SuggestFixInput(
@@ -234,26 +222,32 @@ public data class OpenPullRequestOutput(
     val humanReviewRequired: Boolean = true,
 )
 
-public class OpenPullRequestTool(private val creator: GitHubPullRequestCreator) {
+public fun interface PullRequestCreator {
+    public suspend fun openFix(input: OpenPullRequestInput): PullRequestCreationResult
+}
+
+public sealed class PullRequestCreationResult {
+    public data class Success(
+        val prUrl: String,
+        val prNumber: Int,
+        val branch: String,
+    ) : PullRequestCreationResult()
+
+    public data class Failure(val reason: String) : PullRequestCreationResult()
+}
+
+public class OpenPullRequestTool(private val creator: PullRequestCreator) {
     public suspend fun execute(input: OpenPullRequestInput): ToolOutcome<OpenPullRequestOutput> {
         val guardedBody = input.body.withHumanReviewWarning()
-        return when (val result = creator.openFix(
-            branch = input.branch,
-            base = input.baseBranch,
-            file = input.proposal.file,
-            oldContent = input.proposal.oldContent,
-            newContent = input.proposal.newContent,
-            title = input.title,
-            body = guardedBody,
-        )) {
-            is PRResult.Success -> ToolOutcome.success(
+        return when (val result = creator.openFix(input.copy(body = guardedBody))) {
+            is PullRequestCreationResult.Success -> ToolOutcome.success(
                 OpenPullRequestOutput(
                     prUrl = result.prUrl,
                     prNumber = result.prNumber,
                     branch = result.branch,
                 )
             )
-            is PRResult.Failure -> ToolOutcome.failure("pr_failed", result.reason)
+            is PullRequestCreationResult.Failure -> ToolOutcome.failure("pr_failed", result.reason)
         }
     }
 }
