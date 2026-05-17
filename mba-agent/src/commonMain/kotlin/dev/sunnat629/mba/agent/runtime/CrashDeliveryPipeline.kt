@@ -6,6 +6,7 @@ import dev.sunnat629.mba.core.model.TicketResult
 import dev.sunnat629.mba.core.processing.CrashReportBuilder
 import dev.sunnat629.mba.core.store.LocalDedupCache
 import dev.sunnat629.mba.core.ticket.TicketBackend
+import kotlinx.coroutines.CancellationException
 
 /**
  * Platform-neutral crash delivery flow used by SDK adapters.
@@ -23,14 +24,20 @@ public class CrashDeliveryPipeline(
     public suspend fun process(rawReport: RawCrashReport): CrashDeliveryResult {
         rawUploader?.let { uploader ->
             MBALog.d(TAG, "Uploading raw crash to backend")
-            when (val result = uploader.upload(rawReport)) {
-                is RawCrashUploadResult.Accepted -> {
-                    MBALog.i(TAG, "Backend accepted crash: job=${result.jobId.take(12)} (${result.status})")
-                    return CrashDeliveryResult.backendAccepted(result.jobId, result.status)
+            try {
+                when (val result = uploader.upload(rawReport)) {
+                    is RawCrashUploadResult.Accepted -> {
+                        MBALog.i(TAG, "Backend accepted crash: job=${result.jobId.take(12)} (${result.status})")
+                        return CrashDeliveryResult.backendAccepted(result.jobId, result.status)
+                    }
+                    is RawCrashUploadResult.Rejected -> {
+                        MBALog.e(TAG, "Backend rejected crash: HTTP ${result.statusCode} ${result.reason}")
+                    }
                 }
-                is RawCrashUploadResult.Rejected -> {
-                    MBALog.e(TAG, "Backend rejected crash: HTTP ${result.statusCode} ${result.reason}")
-                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                MBALog.e(TAG, "Backend upload failed; falling back to SDKOnly/local processing", error)
             }
         }
 

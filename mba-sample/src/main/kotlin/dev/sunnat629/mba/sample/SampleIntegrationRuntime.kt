@@ -1,5 +1,6 @@
 package dev.sunnat629.mba.sample
 
+import android.content.Context
 import dev.sunnat629.mba.android.MBAAndroid
 import dev.sunnat629.mba.github.GitHubIssueBackend
 import dev.sunnat629.mba.notion.NotionTicketBackend
@@ -8,6 +9,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 object SampleIntegrationRuntime {
+    private const val PREFS_NAME = "mba_sample_integrations"
+    private const val KEY_MODE = "integration_mode"
+
     private val _mode = MutableStateFlow(SampleIntegrationMode.CALLBACK_ONLY)
     val mode: StateFlow<SampleIntegrationMode> = _mode.asStateFlow()
 
@@ -43,7 +47,24 @@ object SampleIntegrationRuntime {
         }
     }
 
-    fun select(mode: SampleIntegrationMode): SampleIntegrationMode {
+    fun restore(context: Context): SampleIntegrationMode {
+        val saved = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_MODE, SampleIntegrationMode.CALLBACK_ONLY.name)
+            ?.let { value -> SampleIntegrationMode.entries.firstOrNull { it.name == value } }
+            ?: SampleIntegrationMode.CALLBACK_ONLY
+        return apply(saved)
+    }
+
+    fun select(context: Context, mode: SampleIntegrationMode): SampleIntegrationMode {
+        val applied = apply(mode)
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_MODE, applied.name)
+            .apply()
+        return applied
+    }
+
+    private fun apply(mode: SampleIntegrationMode): SampleIntegrationMode {
         val applied = when (mode) {
             SampleIntegrationMode.CALLBACK_ONLY -> mode
             SampleIntegrationMode.NOTION -> if (hasNotionConfig) mode else SampleIntegrationMode.CALLBACK_ONLY

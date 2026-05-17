@@ -31,6 +31,21 @@ class CrashDeliveryPipelineTest {
     }
 
     @Test
+    fun backendExceptionFallsBackToLocalTicketCreation() = runTest {
+        val ticketBackend = RecordingTicketBackend()
+        val pipeline = CrashDeliveryPipeline(
+            rawUploader = ThrowingRawUploader(),
+            fallbackTicketBackend = ticketBackend,
+        )
+
+        val result = pipeline.process(rawReport())
+
+        assertTrue(result.success)
+        assertEquals(CrashDeliveryChannel.FALLBACK_TICKET, result.channel)
+        assertEquals(1, ticketBackend.createdCount)
+    }
+
+    @Test
     fun fallbackTicketDedupsRepeatedCrash() = runTest {
         val ticketBackend = RecordingTicketBackend()
         val pipeline = CrashDeliveryPipeline(
@@ -50,6 +65,11 @@ class CrashDeliveryPipelineTest {
         private val result: RawCrashUploadResult,
     ) : RawCrashUploader {
         override suspend fun upload(rawReport: RawCrashReport): RawCrashUploadResult = result
+    }
+
+    private class ThrowingRawUploader : RawCrashUploader {
+        override suspend fun upload(rawReport: RawCrashReport): RawCrashUploadResult =
+            error("backend unavailable")
     }
 
     private class RecordingTicketBackend : TicketBackend {

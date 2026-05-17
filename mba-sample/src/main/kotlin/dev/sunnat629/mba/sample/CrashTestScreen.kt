@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -48,6 +49,7 @@ fun CrashTestScreen() {
     }
 
     var status by remember { mutableStateOf("Ready. Fatal scenarios close the app; reopen it to let WorkManager process the saved crash.") }
+    val context = LocalContext.current
     val mode = SampleRuntime.deliveryMode
     val integrationMode by SampleIntegrationRuntime.mode.collectAsState()
     val scenarios = remember { sampleScenarios() }
@@ -76,7 +78,7 @@ fun CrashTestScreen() {
             IntegrationCard(
                 selected = integrationMode,
                 onSelect = { requested ->
-                    val applied = SampleIntegrationRuntime.select(requested)
+                    val applied = SampleIntegrationRuntime.select(context, requested)
                     status = "Integration route: ${applied.label}. Trigger a crash to test this app-layer setup."
                 },
             )

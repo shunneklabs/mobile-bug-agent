@@ -34,9 +34,6 @@ class MBASampleApp : Application() {
         MBALog.d(TAG, "MBA_SAMPLE_MODE: ${BuildConfig.MBA_SAMPLE_MODE}")
         MBALog.d(TAG, "========================================")
 
-        // Phase 1: Install crash handler + enqueue WorkManager
-        MBAAndroid.install(this)
-
         val mode = sampleDeliveryMode
 
         MBA.configure(
@@ -51,9 +48,10 @@ class MBASampleApp : Application() {
             }.build()
         )
 
-        SampleIntegrationRuntime.select(SampleIntegrationMode.CALLBACK_ONLY)
+        // Restore app-layer integrations before WorkManager processes pending crashes.
+        val integrationMode = SampleIntegrationRuntime.restore(this)
 
-        // Phase 3: Save local processing/backend config for WorkManager worker.
+        // Save local processing/backend config before enqueueing WorkManager.
         // Emulator default is 10.0.2.2. Physical devices must use the Mac LAN URL,
         // for example MBA_SAMPLE_BACKEND_ENDPOINT=http://192.168.1.42:8080.
         MBAAndroid.saveConfig(
@@ -73,7 +71,10 @@ class MBASampleApp : Application() {
             debug = true,
         )
 
-        MBALog.d(TAG, "MBA SDK initialized in ${mode.label}. Crashes are processed on next launch.")
+        // Install crash handler + enqueue WorkManager after config and sinks are ready.
+        MBAAndroid.install(this)
+
+        MBALog.d(TAG, "MBA SDK initialized in ${mode.label} with ${integrationMode.label}. Crashes are processed on next launch.")
     }
 }
 
