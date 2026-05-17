@@ -21,8 +21,8 @@ interface DemoEventSink {
         level: String = "info",
         metadata: Map<String, String> = emptyMap(),
     )
-    suspend fun complete(jobId: String, artifactUrl: String)
-    suspend fun prOpened(jobId: String, prUrl: String)
+    suspend fun complete(jobId: String, artifactUrl: String, artifactType: String = "artifact")
+    suspend fun prOpened(jobId: String, prUrl: String, artifactType: String = "pull_request")
     suspend fun fail(jobId: String, errorMessage: String)
 }
 
@@ -60,7 +60,7 @@ class DemoOrchestrator(
                         "Duplicate crash (fingerprint=${result.report.fingerprint.take(8)}…) — skipping LLM",
                     )
                     MBALog.i(TAG, "Job $jobId: Duplicate: ${result.report.fingerprint}")
-                    eventSink.complete(jobId, "duplicate://${result.report.fingerprint}")
+                    eventSink.complete(jobId, "duplicate://${result.report.fingerprint}", artifactType = "duplicate")
                 }
 
                 is CrashAnalysisResult.New -> {
@@ -146,7 +146,7 @@ class DemoOrchestrator(
                     "Issue #${ghResult.issueNumber} opened — branch '${ghResult.branch}' ready for agent patch",
                     stage = "github_pr",
                 )
-                eventSink.prOpened(jobId, ghResult.issueUrl)
+                eventSink.prOpened(jobId, ghResult.issueUrl, artifactType = "github_issue")
                 true
             }
             is AutoFixResult.IssueOnly -> {
@@ -156,7 +156,7 @@ class DemoOrchestrator(
                     stage = "github_pr",
                     level = "warning",
                 )
-                eventSink.prOpened(jobId, ghResult.issueUrl)
+                eventSink.prOpened(jobId, ghResult.issueUrl, artifactType = "github_issue")
                 true
             }
             is AutoFixResult.Failure -> {
@@ -186,7 +186,7 @@ class DemoOrchestrator(
         val ticket = withContext(ioDispatcher) { notionBackend!!.createTicket(processed) }
         if (ticket.success) {
             MBALog.i(TAG, "Job $jobId: Notion ticket created: ${ticket.url}")
-            eventSink.complete(jobId, ticket.url ?: "notion://created")
+            eventSink.complete(jobId, ticket.url ?: "notion://created", artifactType = "notion_ticket")
         } else {
             val msg = ticket.errorMessage ?: "Unknown Notion error"
             MBALog.e(TAG, "Job $jobId: Notion failed: $msg")
@@ -199,7 +199,7 @@ class DemoOrchestrator(
                     stage = notionStage,
                     level = "warning",
                 )
-                eventSink.complete(jobId, "analysis://${processed.fingerprint}")
+                eventSink.complete(jobId, "analysis://${processed.fingerprint}", artifactType = "analysis")
             }
         }
     }
@@ -216,6 +216,6 @@ class DemoOrchestrator(
             else -> "no backend ran"
         }
         eventSink.progress(jobId, "Skipping ticket creation ($reason)")
-        eventSink.complete(jobId, "analysis://${processed.fingerprint}")
+        eventSink.complete(jobId, "analysis://${processed.fingerprint}", artifactType = "analysis")
     }
 }

@@ -127,12 +127,12 @@ class ServerModule(
             queue.progress(jobId, message, stage, level, metadata)
         }
 
-        override suspend fun complete(jobId: String, artifactUrl: String) {
-            queue.complete(jobId, artifactUrl)
+        override suspend fun complete(jobId: String, artifactUrl: String, artifactType: String) {
+            queue.complete(jobId, artifactUrl, artifactType)
         }
 
-        override suspend fun prOpened(jobId: String, prUrl: String) {
-            queue.prOpened(jobId, prUrl)
+        override suspend fun prOpened(jobId: String, prUrl: String, artifactType: String) {
+            queue.prOpened(jobId, prUrl, artifactType)
         }
 
         override suspend fun fail(jobId: String, errorMessage: String) {

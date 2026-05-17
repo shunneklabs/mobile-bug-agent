@@ -31,4 +31,12 @@ class RateLimiterTest {
         assertTrue(limiter.isAllowed("203.0.113.10"))
         assertFalse(limiter.isAllowed("203.0.113.10"))
     }
+
+    @Test
+    fun `rate limiting is scoped to report endpoint`() {
+        assertTrue(shouldRateLimitPath("/report"))
+        assertFalse(shouldRateLimitPath("/stats"))
+        assertFalse(shouldRateLimitPath("/events"))
+        assertFalse(shouldRateLimitPath("/booth"))
+    }
 }

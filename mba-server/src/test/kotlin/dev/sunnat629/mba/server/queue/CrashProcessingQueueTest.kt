@@ -28,6 +28,7 @@ class CrashProcessingQueueTest {
             assertEquals("job-123", event.jobId)
             assertEquals("job", event.type)
             assertEquals("queued", event.stage)
+            assertEquals("queued", event.step)
             assertEquals("Crash report queued", event.message)
             assertEquals("info", event.level)
             assertNotNull(event.timestamp)
@@ -55,6 +56,7 @@ class CrashProcessingQueueTest {
 
             assertEquals("operator_decision", event.type)
             assertEquals("operator_decision", event.stage)
+            assertEquals("operator_decision", event.step)
             assertEquals("notify", event.metadata["decision"])
             assertEquals("job-42", event.jobId)
 
@@ -95,10 +97,40 @@ class CrashProcessingQueueTest {
 
             assertEquals("job-replay", event.jobId)
             assertEquals("queued", event.stage)
+            assertEquals("queued", event.step)
             assertEquals("Crash report queued", event.message)
 
             dataDir.deleteRecursively()
         }
+    }
+
+    @Test
+    fun `complete emits artifact type and url`() {
+        runBlocking {
+            val dataDir = createTempDataDir("mba-booth-artifact-test")
+            val queue = CrashProcessingQueue(jobStore = JobStore(dataDir.absolutePath))
+
+            val event = coroutineScope {
+                val eventDeferred = async { queue.events.first() }
+                queue.complete("job-artifact", "https://github.com/shunneklabs/mobile-bug-agent/issues/60")
+                eventDeferred.await()
+            }
+
+            assertEquals("github_issue", event.artifactType)
+            assertEquals("https://github.com/shunneklabs/mobile-bug-agent/issues/60", event.artifactUrl)
+            assertEquals("notion_ticket", event.step)
+
+            dataDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `classifies artifact types from known urls`() {
+        assertEquals("github_issue", artifactTypeForUrl("https://github.com/shunneklabs/mobile-bug-agent/issues/60"))
+        assertEquals("pull_request", artifactTypeForUrl("https://github.com/shunneklabs/mobile-bug-agent/pull/61"))
+        assertEquals("notion_ticket", artifactTypeForUrl("https://www.notion.so/example"))
+        assertEquals("duplicate", artifactTypeForUrl("duplicate://abc"))
+        assertEquals("analysis", artifactTypeForUrl("analysis://abc"))
     }
 
     private fun demoReport(id: String): RawCrashReport = RawCrashReport(

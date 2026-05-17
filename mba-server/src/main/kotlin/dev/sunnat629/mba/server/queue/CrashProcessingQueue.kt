@@ -19,9 +19,11 @@ data class SseEvent(
     val status: JobStatus,
     val type: String = "job",
     val stage: String,
+    val step: String = stage,
     val message: String,
     val level: String = "info",
     val timestamp: Long,
+    val artifactType: String? = null,
     val artifactUrl: String?,
     val metadata: Map<String, String> = emptyMap(),
 )
@@ -75,15 +77,15 @@ class CrashProcessingQueue(
     }
 
     /** Mark a job as completed with an artifact URL. */
-    suspend fun complete(jobId: String, artifactUrl: String) {
+    suspend fun complete(jobId: String, artifactUrl: String, artifactType: String = artifactTypeForUrl(artifactUrl)) {
         jobStore.updateStatus(jobId, JobStatus.TICKET_CREATED, artifactUrl = artifactUrl)
-        emitEvent(jobId, JobStatus.TICKET_CREATED, artifactUrl, message = "Notion ticket created")
+        emitEvent(jobId, JobStatus.TICKET_CREATED, artifactUrl, artifactType, message = completionMessageFor(artifactType))
     }
 
     /** Mark a job as PR opened. */
-    suspend fun prOpened(jobId: String, prUrl: String) {
+    suspend fun prOpened(jobId: String, prUrl: String, artifactType: String = "pull_request") {
         jobStore.updateStatus(jobId, JobStatus.PR_OPENED, artifactUrl = prUrl)
-        emitEvent(jobId, JobStatus.PR_OPENED, prUrl, message = "Pull request opened")
+        emitEvent(jobId, JobStatus.PR_OPENED, prUrl, artifactType, message = completionMessageFor(artifactType))
     }
 
     /**
@@ -151,6 +153,7 @@ class CrashProcessingQueue(
         jobId: String,
         status: JobStatus,
         artifactUrl: String? = null,
+        artifactType: String? = artifactUrl?.let(::artifactTypeForUrl),
         message: String,
         level: String = "info",
     ) {
@@ -169,8 +172,28 @@ class CrashProcessingQueue(
                 message = message,
                 level = level,
                 timestamp = System.currentTimeMillis(),
+                artifactType = artifactType,
                 artifactUrl = artifactUrl,
             )
         )
     }
+}
+
+internal fun artifactTypeForUrl(url: String): String = when {
+    url.startsWith("https://github.com/") && "/pull/" in url -> "pull_request"
+    url.startsWith("https://github.com/") && "/issues/" in url -> "github_issue"
+    url.startsWith("https://www.notion.so/") || url.startsWith("https://notion.so/") -> "notion_ticket"
+    url.startsWith("notion://") -> "notion_ticket"
+    url.startsWith("duplicate://") -> "duplicate"
+    url.startsWith("analysis://") -> "analysis"
+    else -> "artifact"
+}
+
+private fun completionMessageFor(artifactType: String): String = when (artifactType) {
+    "pull_request" -> "Pull request opened"
+    "github_issue" -> "GitHub issue created"
+    "notion_ticket" -> "Notion ticket created"
+    "duplicate" -> "Duplicate crash recorded"
+    "analysis" -> "Analysis result recorded"
+    else -> "Artifact created"
 }

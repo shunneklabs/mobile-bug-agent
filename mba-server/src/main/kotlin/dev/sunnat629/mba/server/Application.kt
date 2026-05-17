@@ -2,6 +2,8 @@ package dev.sunnat629.mba.server
 
 import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.model.RawCrashReport
+import dev.sunnat629.mba.server.middleware.apiKeyAuth
+import dev.sunnat629.mba.server.middleware.parseAllowedCorsOrigins
 import dev.sunnat629.mba.server.middleware.rateLimiter
 import dev.sunnat629.mba.server.middleware.RateLimiter
 import dev.sunnat629.mba.server.model.ServerStats
@@ -46,6 +48,7 @@ private object EnvConfig {
     val port: Int = System.getenv("PORT")?.toIntOrNull() ?: 8080
     val dedupCachePath: String = System.getenv("MBA_DEDUP_CACHE_PATH") ?: "data/dedup-cache.json"
     val dataDir: String = System.getenv("MBA_DATA_DIR") ?: "data"
+    val allowedCorsOrigins = parseAllowedCorsOrigins(System.getenv("MBA_ALLOWED_ORIGINS"))
 
     // ---- GitHub issue / auto-fix path (optional) ---- //
     val github: GitHubRuntimeConfig = GitHubRuntimeConfigLoader.load()
@@ -73,10 +76,14 @@ fun Application.module() {
     }
 
     install(CORS) {
-        allowHost("localhost:3000", schemes = listOf("http"))
-        allowHost("localhost:8080", schemes = listOf("http"))
-        allowHost("localhost:63342", schemes = listOf("http"))
-        anyHost()
+        allowMethod(HttpMethod.Get)
+        allowMethod(HttpMethod.Post)
+        allowMethod(HttpMethod.Options)
+        allowHeader(HttpHeaders.ContentType)
+        allowHeader("X-MBA-API-Key")
+        EnvConfig.allowedCorsOrigins.forEach { origin ->
+            allowHost(origin.host, schemes = origin.schemes)
+        }
     }
 
     // ---- Initialize dependency graph ---- //
@@ -94,7 +101,8 @@ fun Application.module() {
         githubConfigMessage = EnvConfig.github.configurationMessage,
     )
 
-    // ---- Rate limiter (10 req/s) ---- //
+    // ---- /report auth + rate limiter (10 req/s) ---- //
+    apiKeyAuth(EnvConfig.serverApiKey)
     val rateLimiter = RateLimiter(maxRequests = 10)
     rateLimiter(rateLimiter)
 

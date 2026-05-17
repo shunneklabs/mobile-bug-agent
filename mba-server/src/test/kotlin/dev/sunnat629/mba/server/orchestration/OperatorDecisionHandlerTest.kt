@@ -274,11 +274,11 @@ class OperatorDecisionHandlerTest {
             events += RecordedEvent("progress", message, stage, level)
         }
 
-        override suspend fun complete(jobId: String, artifactUrl: String) {
+        override suspend fun complete(jobId: String, artifactUrl: String, artifactType: String) {
             events += RecordedEvent("complete", artifactUrl)
         }
 
-        override suspend fun prOpened(jobId: String, prUrl: String) {
+        override suspend fun prOpened(jobId: String, prUrl: String, artifactType: String) {
             events += RecordedEvent("pr", prUrl)
         }
 

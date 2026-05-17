@@ -47,11 +47,13 @@ class RateLimiter(
 }
 
 /**
- * Ktor plugin that applies rate limiting to all requests.
+ * Ktor plugin that applies rate limiting to protected write endpoints.
  * Uses X-MBA-API-Key as the rate limit key.
  */
-fun Application.rateLimiter(limiter: RateLimiter) {
+fun Application.rateLimiter(limiter: RateLimiter, protectedPaths: Set<String> = setOf("/report")) {
     intercept(ApplicationCallPipeline.Call) {
+        if (!shouldRateLimitPath(call.request.path(), protectedPaths)) return@intercept
+
         val remoteHost = call.request.local.remoteHost
         if (isLocalOrDevRequest(remoteHost, call.request.header(HttpHeaders.Origin), call.request.header(HttpHeaders.Referrer))) {
             return@intercept
@@ -64,6 +66,9 @@ fun Application.rateLimiter(limiter: RateLimiter) {
         }
     }
 }
+
+internal fun shouldRateLimitPath(path: String, protectedPaths: Set<String> = setOf("/report")): Boolean =
+    path in protectedPaths
 
 internal fun isLocalOrDevRequest(
     remoteHost: String,
