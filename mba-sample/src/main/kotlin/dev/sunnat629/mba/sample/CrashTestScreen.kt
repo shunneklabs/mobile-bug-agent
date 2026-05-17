@@ -26,6 +26,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +49,7 @@ fun CrashTestScreen() {
 
     var status by remember { mutableStateOf("Ready. Fatal scenarios close the app; reopen it to let WorkManager process the saved crash.") }
     val mode = SampleRuntime.deliveryMode
+    val integrationMode by SampleIntegrationRuntime.mode.collectAsState()
     val scenarios = remember { sampleScenarios() }
 
     Scaffold(
@@ -71,6 +73,13 @@ fun CrashTestScreen() {
         ) {
             ModeCard(mode)
             ConfigCard(mode)
+            IntegrationCard(
+                selected = integrationMode,
+                onSelect = { requested ->
+                    val applied = SampleIntegrationRuntime.select(requested)
+                    status = "Integration route: ${applied.label}. Trigger a crash to test this app-layer setup."
+                },
+            )
 
             StatusCard(status)
 
@@ -102,7 +111,7 @@ fun CrashTestScreen() {
                 title = "What Should Happen",
                 body = when (mode) {
                     SampleDeliveryMode.SDK_ONLY ->
-                        "SDKOnly: app captures crash, runs Koog on-device with the app LLM key, updates local aggregation, invokes callback, then syncs Notion/GitHub if configured."
+                        "SDKOnly: app captures crash, runs Koog on-device with the app LLM key, updates local aggregation, invokes callback/JSON, then uses the selected app-layer integration route."
                     SampleDeliveryMode.HOSTED ->
                         "Hosted: app uploads raw crash to MBA Server. Backend Koog owns analysis, aggregation, Notion, and GitHub. The app does not create duplicate tickets."
                 },
@@ -167,6 +176,90 @@ private fun ConfigChip(label: String, value: String) {
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
             style = MaterialTheme.typography.labelMedium,
         )
+    }
+}
+
+@Composable
+private fun IntegrationCard(
+    selected: SampleIntegrationMode,
+    onSelect: (SampleIntegrationMode) -> Unit,
+) {
+    val hasNotion = SampleIntegrationRuntime.hasNotionConfig
+    val hasGitHub = SampleIntegrationRuntime.hasGitHubConfig
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("App-layer Integrations", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Active: ${selected.label}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                ) {
+                    Text(
+                        selected.label,
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
+
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                IntegrationButton(
+                    label = "Callback only",
+                    selected = selected == SampleIntegrationMode.CALLBACK_ONLY,
+                    enabled = true,
+                    onClick = { onSelect(SampleIntegrationMode.CALLBACK_ONLY) },
+                )
+                IntegrationButton(
+                    label = "Use Notion",
+                    selected = selected == SampleIntegrationMode.NOTION,
+                    enabled = hasNotion,
+                    onClick = { onSelect(SampleIntegrationMode.NOTION) },
+                )
+                IntegrationButton(
+                    label = "Use GitHub",
+                    selected = selected == SampleIntegrationMode.GITHUB,
+                    enabled = hasGitHub,
+                    onClick = { onSelect(SampleIntegrationMode.GITHUB) },
+                )
+                IntegrationButton(
+                    label = "Use both",
+                    selected = selected == SampleIntegrationMode.BOTH,
+                    enabled = hasNotion && hasGitHub,
+                    onClick = { onSelect(SampleIntegrationMode.BOTH) },
+                )
+            }
+
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ConfigChip("Notion keys", if (hasNotion) "ready" else "missing")
+                ConfigChip("GitHub keys", if (hasGitHub) "ready" else "missing")
+            }
+        }
+    }
+}
+
+@Composable
+private fun IntegrationButton(
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    if (selected) {
+        Button(onClick = onClick, enabled = enabled) {
+            Text(label)
+        }
+    } else {
+        OutlinedButton(onClick = onClick, enabled = enabled) {
+            Text(label)
+        }
     }
 }
 

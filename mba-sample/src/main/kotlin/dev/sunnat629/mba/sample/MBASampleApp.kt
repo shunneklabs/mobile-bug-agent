@@ -8,8 +8,6 @@ import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.config.LLM
 import dev.sunnat629.mba.core.config.MBAConfig
 import dev.sunnat629.mba.core.config.MBAMode
-import dev.sunnat629.mba.github.GitHubIssueBackend
-import dev.sunnat629.mba.notion.NotionTicketBackend
 
 private const val TAG = "Sample"
 private val sampleDeliveryMode: SampleDeliveryMode
@@ -40,24 +38,6 @@ class MBASampleApp : Application() {
         MBAAndroid.install(this)
 
         val mode = sampleDeliveryMode
-        val notionBackend = if (BuildConfig.NOTION_API_KEY.isNotBlank() && BuildConfig.NOTION_TICKET_DB_ID.isNotBlank()) {
-            NotionTicketBackend(
-                apiKey = BuildConfig.NOTION_API_KEY,
-                bugTicketDbId = BuildConfig.NOTION_TICKET_DB_ID,
-                crashReportDbId = BuildConfig.NOTION_CRASH_DB_ID.ifBlank { null },
-            )
-        } else {
-            null
-        }
-        val githubBackend = if (BuildConfig.GITHUB_TOKEN.isNotBlank() && BuildConfig.GITHUB_OWNER.isNotBlank() && BuildConfig.GITHUB_REPO.isNotBlank()) {
-            GitHubIssueBackend(
-                token = BuildConfig.GITHUB_TOKEN,
-                owner = BuildConfig.GITHUB_OWNER,
-                repo = BuildConfig.GITHUB_REPO,
-            )
-        } else {
-            null
-        }
 
         MBA.configure(
             MBAConfig.Builder().apply {
@@ -71,10 +51,7 @@ class MBASampleApp : Application() {
             }.build()
         )
 
-        MBAAndroid.setTicketBackends(
-            notionBackend = notionBackend,
-            githubBackend = githubBackend,
-        )
+        SampleIntegrationRuntime.select(SampleIntegrationMode.CALLBACK_ONLY)
 
         // Phase 3: Save local processing/backend config for WorkManager worker.
         // Emulator default is 10.0.2.2. Physical devices must use the Mac LAN URL,
