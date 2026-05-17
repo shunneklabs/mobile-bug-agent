@@ -8,7 +8,13 @@ import dev.sunnat629.mba.core.config.LLMConfig
 import dev.sunnat629.mba.core.pii.PIISanitizer
 import dev.sunnat629.mba.core.store.LocalDedupCache
 import dev.sunnat629.mba.github.GitHubAutoFixOpener
+import dev.sunnat629.mba.github.GitHubIssueBackend
 import dev.sunnat629.mba.notion.NotionTicketBackend
+import dev.sunnat629.mba.server.orchestration.CrashAnalysisTool
+import dev.sunnat629.mba.server.orchestration.DemoEventSink
+import dev.sunnat629.mba.server.orchestration.DemoOrchestrator
+import dev.sunnat629.mba.server.orchestration.GitHubAutoFixTool
+import dev.sunnat629.mba.server.orchestration.OperatorDecisionHandler
 import dev.sunnat629.mba.server.orchestration.SeverityRouter
 import dev.sunnat629.mba.server.persistence.JobStore
 import dev.sunnat629.mba.server.queue.CrashProcessingQueue
@@ -32,6 +38,12 @@ class ServerModule(
     val githubOwner: String = "",
     val githubRepo: String = "",
     val githubBaseBranch: String = "main",
+    val githubConfigMessage: String = GitHubRuntimeConfig(
+        token = githubToken,
+        owner = githubOwner,
+        repo = githubRepo,
+        baseBranch = githubBaseBranch,
+    ).configurationMessage,
 ) {
     private companion object {
         private const val TAG = "ServerModule"
@@ -77,7 +89,15 @@ class ServerModule(
                 baseBranch = githubBaseBranch,
             )
         } else {
-            MBALog.i(TAG, "GitHub auto-fix disabled — set GITHUB_TOKEN/GITHUB_OWNER/GITHUB_REPO to enable.")
+            MBALog.i(TAG, "GitHub auto-fix disabled — $githubConfigMessage")
+            null
+        }
+
+    val githubIssueBackend: GitHubIssueBackend? =
+        if (githubToken.isNotBlank() && githubOwner.isNotBlank() && githubRepo.isNotBlank()) {
+            GitHubIssueBackend(githubToken, githubOwner, githubRepo)
+        } else {
+            MBALog.i(TAG, "GitHub issues disabled — $githubConfigMessage")
             null
         }
 
@@ -92,6 +112,55 @@ class ServerModule(
 
     val queue = CrashProcessingQueue(jobStore)
 
+    private val demoEventSink = object : DemoEventSink {
+        override suspend fun startProcessing(jobId: String) {
+            queue.startProcessing(jobId)
+        }
+
+        override suspend fun progress(
+            jobId: String,
+            message: String,
+            stage: String,
+            level: String,
+            metadata: Map<String, String>,
+        ) {
+            queue.progress(jobId, message, stage, level, metadata)
+        }
+
+        override suspend fun complete(jobId: String, artifactUrl: String) {
+            queue.complete(jobId, artifactUrl)
+        }
+
+        override suspend fun prOpened(jobId: String, prUrl: String) {
+            queue.prOpened(jobId, prUrl)
+        }
+
+        override suspend fun fail(jobId: String, errorMessage: String) {
+            queue.fail(jobId, errorMessage)
+        }
+    }
+
+    val demoOrchestrator = DemoOrchestrator(
+        analysisTool = CrashAnalysisTool { raw -> analysisAgent.process(raw) },
+        eventSink = demoEventSink,
+        severityRouter = severityRouter,
+        notionBackend = notionBackend,
+        githubAutoFixTool = githubAutoFixOpener?.let { opener ->
+            GitHubAutoFixTool { report -> opener.openAutoFix(report) }
+        },
+    )
+
+    val operatorDecisionHandler = OperatorDecisionHandler(
+        analysisTool = CrashAnalysisTool { raw -> analysisAgent.process(raw) },
+        eventSink = demoEventSink,
+        notionBackend = notionBackend,
+        githubIssueBackend = githubIssueBackend,
+        githubConfigMessage = githubConfigMessage,
+        githubAutoFixTool = githubAutoFixOpener?.let { opener ->
+            GitHubAutoFixTool { report -> opener.openAutoFix(report) }
+        },
+    )
+
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     init {
@@ -100,7 +169,9 @@ class ServerModule(
             TAG,
             "ServerModule initialized — " +
                 "Notion=${if (notionBackend != null) "enabled" else "disabled"}, " +
+                "GitHubIssues=${if (githubIssueBackend != null) "enabled" else "disabled"}, " +
                 "GitHubAutoFix=${if (githubAutoFixOpener != null) "enabled" else "disabled"}, " +
+                "GitHubRepo=${githubOwner.ifBlank { "?" }}/${githubRepo.ifBlank { "?" }}, " +
                 "baseBranch=$githubBaseBranch",
         )
     }
@@ -110,6 +181,7 @@ class ServerModule(
         FileDedupPersistence.save(dedupCache, dedupCachePath)
         agentFactory.close()
         notionBackend?.close()
+        githubIssueBackend?.close()
         githubAutoFixOpener?.close()
         scope.cancel()
     }
@@ -133,6 +205,12 @@ fun Application.installServerModule(
     githubOwner: String = "",
     githubRepo: String = "",
     githubBaseBranch: String = "main",
+    githubConfigMessage: String = GitHubRuntimeConfig(
+        token = githubToken,
+        owner = githubOwner,
+        repo = githubRepo,
+        baseBranch = githubBaseBranch,
+    ).configurationMessage,
 ): ServerModule {
     val module = ServerModule(
         geminiApiKey = geminiApiKey,
@@ -145,6 +223,7 @@ fun Application.installServerModule(
         githubOwner = githubOwner,
         githubRepo = githubRepo,
         githubBaseBranch = githubBaseBranch,
+        githubConfigMessage = githubConfigMessage,
     )
     attributes.put(ServerModuleKey, module)
     return module

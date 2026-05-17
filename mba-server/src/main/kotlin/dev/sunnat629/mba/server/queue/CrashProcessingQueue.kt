@@ -6,7 +6,8 @@ import dev.sunnat629.mba.server.model.JobStatus
 import dev.sunnat629.mba.server.persistence.JobStore
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.serialization.Serializable
 
 /**
@@ -46,18 +47,21 @@ class CrashProcessingQueue(
         private const val TAG = "CrashProcessingQueue"
     }
 
-    private val eventChannel = Channel<SseEvent>(channelCapacity)
+    private val eventFlow = MutableSharedFlow<SseEvent>(
+        replay = 64,
+        extraBufferCapacity = channelCapacity,
+    )
     private val jobChannel = Channel<CrashJob>(Channel.UNLIMITED)
 
-    /** Flow of SSE events for the /events endpoint. */
-    val events: Flow<SseEvent> = eventChannel.receiveAsFlow()
+    /** Broadcast flow of SSE events for the /events endpoint. */
+    val events: Flow<SseEvent> = eventFlow.asSharedFlow()
 
     /** Channel for submitting crash jobs to the background consumer. */
     val jobs: Channel<CrashJob> = jobChannel
 
     /** Enqueue a crash job. Returns the job id. */
     suspend fun enqueue(jobId: String, report: RawCrashReport): String {
-        jobStore.createJob(jobId)
+        jobStore.createJob(jobId, report)
         emitEvent(jobId, JobStatus.QUEUED, message = "Crash report queued")
         jobChannel.send(CrashJob(jobId, report))
         MBALog.i(TAG, "Enqueued job $jobId")
@@ -98,7 +102,7 @@ class CrashProcessingQueue(
         level: String = "info",
         metadata: Map<String, String> = emptyMap(),
     ) {
-        eventChannel.send(
+        eventFlow.emit(
             SseEvent(
                 jobId = jobId,
                 status = JobStatus.ANALYZING,
@@ -128,7 +132,7 @@ class CrashProcessingQueue(
         metadata: Map<String, String> = emptyMap(),
         jobId: String = "booth",
     ) {
-        eventChannel.send(
+        eventFlow.emit(
             SseEvent(
                 jobId = jobId,
                 status = JobStatus.QUEUED,
@@ -157,7 +161,7 @@ class CrashProcessingQueue(
             JobStatus.PR_OPENED -> "github_pr"
             JobStatus.FAILED -> "failed"
         }
-        eventChannel.trySend(
+        eventFlow.tryEmit(
             SseEvent(
                 jobId = jobId,
                 status = status,

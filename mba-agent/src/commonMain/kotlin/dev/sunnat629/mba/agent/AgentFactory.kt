@@ -129,7 +129,7 @@ internal class LegacyMultiStepExecutor(
             systemPrompt = SystemPrompt.CRASH_ANALYST,
             userPrompt = "${ToolPrompts.STACK_TRACE_PARSER}\n\nStack trace:\n$sanitizedTrace",
         )
-        return json.decodeFromString<ParsedStackTrace>(response)
+        return json.decodeFromString<ParsedStackTrace>(extractJsonObjectPayload(response))
     }
 
     override suspend fun classifySeverity(
@@ -144,7 +144,7 @@ internal class LegacyMultiStepExecutor(
             systemPrompt = SystemPrompt.CRASH_ANALYST,
             userPrompt = "${ToolPrompts.SEVERITY_CLASSIFIER}\n\n$input",
         )
-        return json.decodeFromString<SeverityResult>(response)
+        return json.decodeFromString<SeverityResult>(extractJsonObjectPayload(response))
     }
 
     override suspend fun generateSummary(
@@ -167,7 +167,7 @@ internal class LegacyMultiStepExecutor(
             systemPrompt = SystemPrompt.CRASH_ANALYST,
             userPrompt = "${ToolPrompts.SUMMARY_GENERATOR}\n\n$input",
         )
-        return json.decodeFromString<CrashSummary>(response)
+        return json.decodeFromString<CrashSummary>(extractJsonObjectPayload(response))
     }
 }
 

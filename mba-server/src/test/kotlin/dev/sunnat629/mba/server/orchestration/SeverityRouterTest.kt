@@ -3,6 +3,8 @@ package dev.sunnat629.mba.server.orchestration
 import dev.sunnat629.mba.core.model.Severity
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class SeverityRouterTest {
     @Test
@@ -41,5 +43,15 @@ class SeverityRouterTest {
         val router = SeverityRouter(autoFixEnabled = true)
 
         assertEquals(RoutingDecision.AutoFix, router.route(Severity.LOW))
+    }
+
+    @Test
+    fun `per-crash autofix path allows medium and above but blocks low noise`() {
+        val router = SeverityRouter(autoFixEnabled = false)
+
+        assertTrue(router.shouldAutoFix(Severity.CRITICAL))
+        assertTrue(router.shouldAutoFix(Severity.HIGH))
+        assertTrue(router.shouldAutoFix(Severity.MEDIUM))
+        assertFalse(router.shouldAutoFix(Severity.LOW))
     }
 }

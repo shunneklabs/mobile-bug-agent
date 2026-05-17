@@ -11,7 +11,7 @@ import dev.sunnat629.mba.notion.NotionTicketBackend
 import kotlin.time.Duration.Companion.hours
 
 /**
- * WorkManager worker that processes pending crash files and pushes them to Notion.
+ * WorkManager worker that processes pending crash files and pushes them to Notion/backend.
  *
  * Lifecycle:
  * 1. Reads config from SharedPreferences (MBAPreferences)
@@ -19,8 +19,9 @@ import kotlin.time.Duration.Companion.hours
  * 3. For each file:
  *    a. Build ProcessedCrashReport (PII scrub, fingerprint, basic title — no AI)
  *    b. Dedup check (skip if fingerprint already seen)
- *    c. Push to Notion (Bug Tickets + Crash Reports DBs)
- *    d. Delete file on success
+ *    c. Push raw crash to MBA backend `/report` when configured
+ *    d. Push to Notion (Bug Tickets + Crash Reports DBs)
+ *    e. Delete file only when configured destinations succeed
  * 4. Returns Result.success() or Result.retry()
  *
  * Triggered by MBAAndroid.install() on every app startup.
@@ -49,6 +50,10 @@ internal class CrashUploadWorker(
         val notionApiKey = MBAPreferences.loadNotionApiKey(context)
         val ticketDbId = MBAPreferences.loadNotionTicketDbId(context)
         val crashDbId = MBAPreferences.loadNotionCrashDbId(context)
+        val backendEndpoint = MBAPreferences.loadBackendEndpoint(context)
+        val projectKey = MBAPreferences.loadProjectKey(context)
+        val serverApiKey = MBAPreferences.loadServerApiKey(context)
+        val sendToBackend = MBAPreferences.loadSendToBackend(context)
         val debug = MBAPreferences.loadDebug(context)
 
         MBALog.enabled = debug
@@ -75,6 +80,15 @@ internal class CrashUploadWorker(
             bugTicketDbId = ticketDbId,
             crashReportDbId = crashDbId,
         )
+        val serverUploader = backendEndpoint
+            ?.takeIf { sendToBackend }
+            ?.let {
+                ServerReportUploader(
+                    endpoint = it,
+                    projectKey = projectKey,
+                    serverApiKey = serverApiKey,
+                )
+            }
         val dedupCache = LocalDedupCache(maxSize = 500, ttl = 24.hours)
 
         var successCount = 0
@@ -96,17 +110,37 @@ internal class CrashUploadWorker(
                     continue
                 }
 
-                // Push to Notion
-                MBALog.d(TAG, "Uploading to Notion: '${report.title}'")
-                val result = backend.createTicket(report)
+                val serverUploaded = if (serverUploader != null) {
+                    MBALog.d(TAG, "Uploading raw crash to backend: $backendEndpoint/report")
+                    when (val backendResult = serverUploader.upload(rawReport)) {
+                        is BackendUploadResult.Accepted -> {
+                            MBALog.i(TAG, "✅ Backend accepted: ${file.name} → job=${backendResult.jobId.take(12)}... (${backendResult.status})")
+                            true
+                        }
+                        is BackendUploadResult.Rejected -> {
+                            MBALog.e(TAG, "❌ Backend rejected ${file.name}: HTTP ${backendResult.statusCode} ${backendResult.reason}")
+                            false
+                        }
+                    }
+                } else {
+                    true
+                }
 
-                if (result.success) {
-                    MBALog.i(TAG, "✅ Uploaded: ${file.name} → ticket=${result.ticketId.take(12)}...")
+                // Push to Notion after local backend so booth can update without waiting on cloud calls.
+                MBALog.d(TAG, "Uploading to Notion: '${report.title}'")
+                val notionResult = backend.createTicket(report)
+
+                if (notionResult.success) {
+                    MBALog.i(TAG, "✅ Notion uploaded: ${file.name} → ticket=${notionResult.ticketId.take(12)}...")
                     dedupCache.put(report.fingerprint)
+                } else {
+                    MBALog.e(TAG, "❌ Notion upload failed for ${file.name}: ${notionResult.errorMessage}")
+                }
+
+                if (notionResult.success && serverUploaded) {
                     file.delete()
                     successCount++
                 } else {
-                    MBALog.e(TAG, "❌ Upload failed for ${file.name}: ${result.errorMessage}")
                     failCount++
                 }
             } catch (e: Exception) {
@@ -116,6 +150,7 @@ internal class CrashUploadWorker(
         }
 
         backend.close()
+        serverUploader?.close()
 
         MBALog.i(TAG, "Done: $successCount uploaded, $failCount failed out of ${pendingCrashes.size}")
 

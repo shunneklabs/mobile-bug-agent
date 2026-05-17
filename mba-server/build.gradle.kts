@@ -21,8 +21,10 @@ tasks.named<JavaExec>("run") {
     environment("MBA_SERVER_API_KEY", localProps.getProperty("MBA_SERVER_API_KEY", ""))
     // GitHub auto-fix path (optional — only required when a client sends autoFix=true)
     environment("GITHUB_TOKEN", localProps.getProperty("GITHUB_TOKEN", ""))
-    environment("GITHUB_OWNER", localProps.getProperty("GITHUB_OWNER", ""))
-    environment("GITHUB_REPO", localProps.getProperty("GITHUB_REPO", ""))
+    environment("GITHUB_OWNER", localProps.getProperty("GITHUB_OWNER", localProps.getProperty("GITHUB_TARGET_OWNER", "")))
+    environment("GITHUB_REPO", localProps.getProperty("GITHUB_REPO", localProps.getProperty("GITHUB_TARGET_REPO", "")))
+    environment("GITHUB_TARGET_OWNER", localProps.getProperty("GITHUB_TARGET_OWNER", ""))
+    environment("GITHUB_TARGET_REPO", localProps.getProperty("GITHUB_TARGET_REPO", ""))
     environment("GITHUB_BASE_BRANCH", localProps.getProperty("GITHUB_BASE_BRANCH", "main"))
 }
 

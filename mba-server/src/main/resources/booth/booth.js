@@ -17,6 +17,16 @@ const operatorPanelEl = document.getElementById("operatorPanel");
 const pendingDecisionsEl = document.getElementById("pendingDecisions");
 
 let latestStage = "queued";
+let sseWasOpen = false;
+
+const operatorDecisions = [
+  { value: "notion", label: "Notion Ticket" },
+  { value: "github", label: "GitHub Issue" },
+  { value: "both", label: "Both" },
+  { value: "autofix", label: "Autofix" },
+  { value: "notify", label: "Notify" },
+  { value: "fallback", label: "Fallback" }
+];
 
 function renderPipeline(active) {
   pipelineEl.innerHTML = "";
@@ -94,6 +104,9 @@ async function sendDecision(jobId, decision) {
   });
   if (!res.ok) {
     addLine(terminalEl, `Decision failed (${decision}) for ${jobId.slice(0, 8)}`, "error");
+  } else {
+    addLine(terminalEl, `Decision accepted (${decision}) for ${jobId.slice(0, 8)}`, "info");
+    await loadPendingDecisions();
   }
 }
 
@@ -111,10 +124,10 @@ async function loadPendingDecisions() {
     title.textContent = `${job.jobId.slice(0, 8)} · ${job.status}`;
     row.appendChild(title);
 
-    ["notify", "autofix", "fallback"].forEach((decision) => {
+    operatorDecisions.forEach(({ value, label }) => {
       const btn = document.createElement("button");
-      btn.textContent = decision;
-      btn.onclick = () => sendDecision(job.jobId, decision);
+      btn.textContent = label;
+      btn.onclick = () => sendDecision(job.jobId, value);
       row.appendChild(btn);
     });
 
@@ -171,7 +184,19 @@ async function bootstrap() {
     setInterval(loadPendingDecisions, 5000);
   }
 
+  connectEvents();
+}
+
+function connectEvents() {
   const source = new EventSource("/events");
+  source.onopen = () => {
+    if (!sseWasOpen) {
+      addLine(terminalEl, "SSE connected — waiting for crash reports", "info");
+    } else {
+      addLine(terminalEl, "SSE reconnected", "info");
+    }
+    sseWasOpen = true;
+  };
   source.onmessage = async (msg) => {
     const event = JSON.parse(msg.data);
     renderEvent(event);
@@ -179,7 +204,7 @@ async function bootstrap() {
   };
 
   source.onerror = () => {
-    addLine(terminalEl, "SSE disconnected, retrying…", "warning");
+    addLine(terminalEl, "SSE disconnected, retrying… Check server still running and /events reachable.", "warning");
   };
 }
 

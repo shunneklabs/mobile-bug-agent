@@ -13,6 +13,10 @@ import dev.sunnat629.mba.core.MBALog
  * - mba_notion_api_key
  * - mba_notion_ticket_db_id
  * - mba_notion_crash_db_id
+ * - mba_backend_endpoint
+ * - mba_project_key
+ * - mba_server_api_key
+ * - mba_send_to_backend
  * - mba_debug
  */
 internal object MBAPreferences {
@@ -24,6 +28,10 @@ internal object MBAPreferences {
     private const val KEY_NOTION_API_KEY = "mba_notion_api_key"
     private const val KEY_NOTION_TICKET_DB_ID = "mba_notion_ticket_db_id"
     private const val KEY_NOTION_CRASH_DB_ID = "mba_notion_crash_db_id"
+    private const val KEY_BACKEND_ENDPOINT = "mba_backend_endpoint"
+    private const val KEY_PROJECT_KEY = "mba_project_key"
+    private const val KEY_SERVER_API_KEY = "mba_server_api_key"
+    private const val KEY_SEND_TO_BACKEND = "mba_send_to_backend"
     private const val KEY_DEBUG = "mba_debug"
 
     fun save(
@@ -32,6 +40,10 @@ internal object MBAPreferences {
         notionApiKey: String,
         notionTicketDbId: String,
         notionCrashDbId: String?,
+        backendEndpoint: String?,
+        projectKey: String?,
+        serverApiKey: String?,
+        sendToBackend: Boolean,
         debug: Boolean,
     ) {
         prefs(context).edit()
@@ -39,6 +51,10 @@ internal object MBAPreferences {
             .putString(KEY_NOTION_API_KEY, notionApiKey)
             .putString(KEY_NOTION_TICKET_DB_ID, notionTicketDbId)
             .putString(KEY_NOTION_CRASH_DB_ID, notionCrashDbId ?: "")
+            .putString(KEY_BACKEND_ENDPOINT, backendEndpoint ?: "")
+            .putString(KEY_PROJECT_KEY, projectKey ?: "")
+            .putString(KEY_SERVER_API_KEY, serverApiKey ?: "")
+            .putBoolean(KEY_SEND_TO_BACKEND, sendToBackend)
             .putBoolean(KEY_DEBUG, debug)
             .apply()
         MBALog.i(TAG, "Config saved to SharedPreferences")
@@ -55,6 +71,18 @@ internal object MBAPreferences {
 
     fun loadNotionCrashDbId(context: Context): String? =
         prefs(context).getString(KEY_NOTION_CRASH_DB_ID, null)?.ifBlank { null }
+
+    fun loadBackendEndpoint(context: Context): String? =
+        prefs(context).getString(KEY_BACKEND_ENDPOINT, null)?.ifBlank { null }
+
+    fun loadProjectKey(context: Context): String? =
+        prefs(context).getString(KEY_PROJECT_KEY, null)?.ifBlank { null }
+
+    fun loadServerApiKey(context: Context): String? =
+        prefs(context).getString(KEY_SERVER_API_KEY, null)?.ifBlank { null }
+
+    fun loadSendToBackend(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_SEND_TO_BACKEND, loadBackendEndpoint(context) != null)
 
     fun loadDebug(context: Context): Boolean =
         prefs(context).getBoolean(KEY_DEBUG, false)

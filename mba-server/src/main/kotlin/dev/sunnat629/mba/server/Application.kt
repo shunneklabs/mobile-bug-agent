@@ -1,13 +1,12 @@
 package dev.sunnat629.mba.server
 
-import dev.sunnat629.mba.agent.CrashAnalysisResult
 import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.model.RawCrashReport
 import dev.sunnat629.mba.server.middleware.rateLimiter
 import dev.sunnat629.mba.server.middleware.RateLimiter
 import dev.sunnat629.mba.server.model.ServerStats
 import dev.sunnat629.mba.server.model.ServerVersion
-import dev.sunnat629.mba.server.queue.CrashJob
+import dev.sunnat629.mba.server.orchestration.OperatorDecision
 import dev.sunnat629.mba.server.sse.sseEvents
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
@@ -48,11 +47,8 @@ private object EnvConfig {
     val dedupCachePath: String = System.getenv("MBA_DEDUP_CACHE_PATH") ?: "data/dedup-cache.json"
     val dataDir: String = System.getenv("MBA_DATA_DIR") ?: "data"
 
-    // ---- GitHub auto-fix path (optional) ---- //
-    val githubToken: String = System.getenv("GITHUB_TOKEN") ?: ""
-    val githubOwner: String = System.getenv("GITHUB_OWNER") ?: ""
-    val githubRepo: String = System.getenv("GITHUB_REPO") ?: ""
-    val githubBaseBranch: String = System.getenv("GITHUB_BASE_BRANCH")?.takeIf { it.isNotBlank() } ?: "main"
+    // ---- GitHub issue / auto-fix path (optional) ---- //
+    val github: GitHubRuntimeConfig = GitHubRuntimeConfigLoader.load()
 
     private fun requireEnv(name: String): String =
         System.getenv(name)
@@ -91,10 +87,11 @@ fun Application.module() {
         serverApiKey = EnvConfig.serverApiKey,
         dedupCachePath = EnvConfig.dedupCachePath,
         dataDir = EnvConfig.dataDir,
-        githubToken = EnvConfig.githubToken,
-        githubOwner = EnvConfig.githubOwner,
-        githubRepo = EnvConfig.githubRepo,
-        githubBaseBranch = EnvConfig.githubBaseBranch,
+        githubToken = EnvConfig.github.token,
+        githubOwner = EnvConfig.github.owner,
+        githubRepo = EnvConfig.github.repo,
+        githubBaseBranch = EnvConfig.github.baseBranch,
+        githubConfigMessage = EnvConfig.github.configurationMessage,
     )
 
     // ---- Rate limiter (10 req/s) ---- //
@@ -104,7 +101,7 @@ fun Application.module() {
     // ---- Background queue consumer ---- //
     serverModule.scope.launch {
         for (job in serverModule.queue.jobs) {
-            processJob(serverModule, job)
+            serverModule.demoOrchestrator.process(job.jobId, job.report)
         }
     }
 
@@ -177,27 +174,46 @@ fun Application.module() {
 
             val request = call.receive<ForceDecisionRequest>()
             val normalizedDecision = request.decision.trim().lowercase()
-            if (normalizedDecision !in setOf("notify", "autofix", "fallback")) {
+            val operatorDecision = OperatorDecision.fromWireValue(normalizedDecision)
+            if (operatorDecision == null) {
                 return@post call.respond(
                     HttpStatusCode.BadRequest,
-                    mapOf("error" to "decision must be notify|autofix|fallback"),
+                    mapOf("error" to "decision must be ${OperatorDecision.allowedWireValues.joinToString("|")}"),
                 )
             }
 
             val job = serverModule.jobStore.getJob(request.jobId)
                 ?: return@post call.respond(HttpStatusCode.NotFound, mapOf("error" to "Unknown job id"))
 
+            val rawReport = job.rawReport
+            if (rawReport == null && operatorDecision !in setOf(OperatorDecision.Notify, OperatorDecision.Fallback)) {
+                return@post call.respond(
+                    HttpStatusCode.Conflict,
+                    mapOf("error" to "Job does not include a raw crash report; submit a new crash before running ${operatorDecision.wireValue}"),
+                )
+            }
+
             serverModule.queue.publishBoothEvent(
                 type = "operator_decision",
-                message = "Operator chose ${normalizedDecision.uppercase()} for ${request.jobId.take(8)}",
+                message = "Operator chose ${operatorDecision.displayName} for ${request.jobId.take(8)}",
                 metadata = mapOf("decision" to normalizedDecision, "jobId" to request.jobId),
                 jobId = request.jobId,
             )
 
+            if (rawReport != null) {
+                serverModule.scope.launch {
+                    runCatching {
+                        serverModule.operatorDecisionHandler.handle(request.jobId, rawReport, operatorDecision)
+                    }.onFailure { error ->
+                        serverModule.queue.fail(request.jobId, error.message ?: "Operator action failed")
+                    }
+                }
+            }
+
             call.respond(
                 BoothActionResponse(
                     ok = true,
-                    message = "Decision accepted",
+                    message = "Decision accepted: ${operatorDecision.displayName}",
                     jobId = job.id,
                 )
             )
@@ -277,175 +293,3 @@ private data class PendingDecisionJob(
     val updatedAt: Long,
     val artifactUrl: String?,
 )
-
-/**
- * Background job processor.
- *
- * Pipeline (per crash):
- *  1. Analyze (Gemini → ProcessedCrashReport) — surfaced as `progress` events.
- *  2. If `report.autoFix && severity ∈ {HIGH, CRITICAL}` and GitHub configured →
- *     create Issue + tracking branch via [GitHubAutoFixOpener].
- *  3. If `!report.skipNotion` and Notion configured → create Notion ticket.
- *  4. Pick the terminal SSE event:
- *      - GitHub PR opened (if we have one) → [CrashProcessingQueue.prOpened].
- *      - Otherwise Notion URL → [CrashProcessingQueue.complete].
- *      - Otherwise a synthetic `analysis://<fingerprint>` URL (dry-run).
- */
-private suspend fun processJob(serverModule: ServerModule, job: CrashJob) {
-    val queue = serverModule.queue
-    val raw = job.report
-    try {
-        queue.startProcessing(job.jobId)
-        queue.progress(job.jobId, "Sanitizing PII + computing fingerprint…")
-
-        val result = withContext(Dispatchers.IO) {
-            serverModule.analysisAgent.process(raw)
-        }
-
-        when (result) {
-            is CrashAnalysisResult.Duplicate -> {
-                queue.progress(
-                    job.jobId,
-                    "Duplicate crash (fingerprint=${result.report.fingerprint.take(8)}…) — skipping LLM",
-                )
-                MBALog.i(TAG, "Job ${job.jobId}: Duplicate: ${result.report.fingerprint}")
-                queue.complete(job.jobId, "duplicate://${result.report.fingerprint}")
-            }
-
-            is CrashAnalysisResult.New -> {
-                queue.progress(
-                    job.jobId,
-                    "Analysis complete — severity=${result.report.severity}, " +
-                        "confidence=${"%.0f".format(result.report.confidence * 100)}%",
-                )
-                handlePostAnalysis(serverModule, job, raw, result.report, fallback = false)
-                FileDedupPersistence.save(serverModule.dedupCache, EnvConfig.dedupCachePath)
-            }
-
-            is CrashAnalysisResult.Fallback -> {
-                queue.progress(
-                    job.jobId,
-                    "AI analysis failed (${result.error.message}) — using fallback report",
-                    level = "warning",
-                )
-                MBALog.w(TAG, "Job ${job.jobId}: AI analysis failed, using fallback… (${result.error.message})")
-                handlePostAnalysis(serverModule, job, raw, result.report, fallback = true)
-                FileDedupPersistence.save(serverModule.dedupCache, EnvConfig.dedupCachePath)
-            }
-        }
-    } catch (e: Exception) {
-        MBALog.e(TAG, "Job ${job.jobId}: Processing failed", e)
-        queue.fail(job.jobId, e.message ?: "Unknown error")
-    }
-}
-
-/**
- * Route a successful (or fallback) analysis through the configured backends.
- *
- * - `autoFix=true` + severity ∈ {HIGH, CRITICAL} + GitHub configured → Issue + branch.
- * - `skipNotion=false` + Notion configured → Notion ticket.
- *
- * Notion failures fall through to `queue.fail`, but only if no GitHub PR has
- * already been opened (so users always see at least one terminal event).
- */
-private suspend fun handlePostAnalysis(
-    serverModule: ServerModule,
-    job: CrashJob,
-    raw: dev.sunnat629.mba.core.model.RawCrashReport,
-    processed: dev.sunnat629.mba.core.model.ProcessedCrashReport,
-    fallback: Boolean,
-) {
-    val queue = serverModule.queue
-    val severityOk = serverModule.severityRouter.shouldAutoFix(processed.severity)
-    val wantGitHub = raw.autoFix && severityOk && serverModule.githubAutoFixOpener != null
-    val wantNotion = !raw.skipNotion && serverModule.notionBackend != null
-
-    if (raw.autoFix && !severityOk) {
-        queue.progress(
-            job.jobId,
-            "autoFix=true ignored — severity ${processed.severity} below HIGH gate",
-            level = "warning",
-        )
-    }
-    if (raw.autoFix && serverModule.githubAutoFixOpener == null) {
-        queue.progress(
-            job.jobId,
-            "autoFix=true requested but GitHub backend is not configured (set GITHUB_TOKEN/OWNER/REPO)",
-            level = "warning",
-        )
-    }
-
-    // ---- GitHub auto-fix path ---- //
-    var prOpened = false
-    if (wantGitHub) {
-        queue.progress(job.jobId, "Opening GitHub issue…", stage = "github_pr")
-        val ghResult = withContext(Dispatchers.IO) {
-            serverModule.githubAutoFixOpener!!.openAutoFix(processed)
-        }
-        when (ghResult) {
-            is dev.sunnat629.mba.github.AutoFixResult.Success -> {
-                queue.progress(
-                    job.jobId,
-                    "Issue #${ghResult.issueNumber} opened — branch '${ghResult.branch}' ready for agent patch",
-                    stage = "github_pr",
-                )
-                queue.prOpened(job.jobId, ghResult.issueUrl)
-                prOpened = true
-            }
-            is dev.sunnat629.mba.github.AutoFixResult.IssueOnly -> {
-                queue.progress(
-                    job.jobId,
-                    "Issue #${ghResult.issueNumber} opened but branch creation failed: ${ghResult.branchError}",
-                    stage = "github_pr",
-                    level = "warning",
-                )
-                queue.prOpened(job.jobId, ghResult.issueUrl)
-                prOpened = true
-            }
-            is dev.sunnat629.mba.github.AutoFixResult.Failure -> {
-                queue.progress(
-                    job.jobId,
-                    "GitHub auto-fix failed: ${ghResult.reason}",
-                    stage = "github_pr",
-                    level = "error",
-                )
-            }
-        }
-    }
-
-    // ---- Notion path ---- //
-    if (wantNotion) {
-        val notionBackend = serverModule.notionBackend!!
-        val notionStage = "notion_ticket"
-        queue.progress(
-            job.jobId,
-            if (fallback) "Creating Notion fallback ticket…" else "Creating Notion ticket…",
-            stage = notionStage,
-        )
-        val ticket = withContext(Dispatchers.IO) { notionBackend.createTicket(processed) }
-        if (ticket.success) {
-            MBALog.i(TAG, "Job ${job.jobId}: Notion ticket created: ${ticket.url}")
-            queue.complete(job.jobId, ticket.url ?: "notion://created")
-        } else {
-            val msg = ticket.errorMessage ?: "Unknown Notion error"
-            MBALog.e(TAG, "Job ${job.jobId}: Notion failed: $msg")
-            if (prOpened) {
-                // GitHub already produced a terminal `prOpened` event — don't override with FAILED.
-                queue.progress(job.jobId, "Notion ticket failed: $msg", stage = notionStage, level = "error")
-            } else {
-                queue.fail(job.jobId, msg)
-            }
-        }
-    } else if (!prOpened) {
-        // Dry-run path: neither GitHub nor Notion ran. Emit a synthetic terminal
-        // event so the booth doesn't sit at `analyzing` forever.
-        val reason = when {
-            raw.skipNotion && serverModule.notionBackend == null -> "skipNotion=true, Notion not configured"
-            raw.skipNotion -> "skipNotion=true"
-            serverModule.notionBackend == null -> "Notion not configured"
-            else -> "no backend ran"
-        }
-        queue.progress(job.jobId, "Skipping ticket creation ($reason)")
-        queue.complete(job.jobId, "analysis://${processed.fingerprint}")
-    }
-}

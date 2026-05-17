@@ -1,5 +1,7 @@
 import java.util.Properties
 
+fun String.escapedForBuildConfig(): String = replace("\\", "\\\\").replace("\"", "\\\"")
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.serialization)
@@ -27,11 +29,15 @@ android {
         val crashDbId = props.getProperty("NOTION_CRASH_DB_ID_OR_URL") ?: ""
         val ticketDbId = props.getProperty("NOTION_TICKET_DB_ID_OR_URL") ?: ""
         val geminiKey = props.getProperty("GEMINI_API_KEY") ?: ""
+        val backendEndpoint = props.getProperty("MBA_SAMPLE_BACKEND_ENDPOINT")
+            ?: System.getenv("MBA_SAMPLE_BACKEND_ENDPOINT")
+            ?: "http://10.0.2.2:8080"
 
-        buildConfigField("String", "NOTION_API_KEY", "\"$notionKey\"")
-        buildConfigField("String", "NOTION_CRASH_DB_ID", "\"$crashDbId\"")
-        buildConfigField("String", "NOTION_TICKET_DB_ID", "\"$ticketDbId\"")
-        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiKey\"")
+        buildConfigField("String", "NOTION_API_KEY", "\"${notionKey.escapedForBuildConfig()}\"")
+        buildConfigField("String", "NOTION_CRASH_DB_ID", "\"${crashDbId.escapedForBuildConfig()}\"")
+        buildConfigField("String", "NOTION_TICKET_DB_ID", "\"${ticketDbId.escapedForBuildConfig()}\"")
+        buildConfigField("String", "GEMINI_API_KEY", "\"${geminiKey.escapedForBuildConfig()}\"")
+        buildConfigField("String", "MBA_BACKEND_ENDPOINT", "\"${backendEndpoint.escapedForBuildConfig()}\"")
     }
 
     buildTypes {
