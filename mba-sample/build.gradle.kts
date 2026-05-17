@@ -35,6 +35,22 @@ android {
         val backendEndpoint = props.getProperty("MBA_SAMPLE_BACKEND_ENDPOINT")
             ?: System.getenv("MBA_SAMPLE_BACKEND_ENDPOINT")
             ?: "http://10.0.2.2:8080"
+        val sampleMode = props.getProperty("MBA_SAMPLE_MODE")
+            ?: System.getenv("MBA_SAMPLE_MODE")
+            ?: "hosted"
+        val githubToken = props.getProperty("GITHUB_TOKEN")
+            ?: System.getenv("GITHUB_TOKEN")
+            ?: ""
+        val githubOwner = props.getProperty("GITHUB_OWNER")
+            ?: props.getProperty("GITHUB_TARGET_OWNER")
+            ?: System.getenv("GITHUB_OWNER")
+            ?: System.getenv("GITHUB_TARGET_OWNER")
+            ?: ""
+        val githubRepo = props.getProperty("GITHUB_REPO")
+            ?: props.getProperty("GITHUB_TARGET_REPO")
+            ?: System.getenv("GITHUB_REPO")
+            ?: System.getenv("GITHUB_TARGET_REPO")
+            ?: ""
 
         buildConfigField("String", "NOTION_API_KEY", "\"${notionKey.escapedForBuildConfig()}\"")
         buildConfigField("String", "NOTION_CRASH_DB_ID", "\"${crashDbId.escapedForBuildConfig()}\"")
@@ -42,6 +58,10 @@ android {
         buildConfigField("String", "GEMINI_API_KEY", "\"${geminiKey.escapedForBuildConfig()}\"")
         buildConfigField("String", "MBA_SERVER_API_KEY", "\"${serverApiKey.escapedForBuildConfig()}\"")
         buildConfigField("String", "MBA_BACKEND_ENDPOINT", "\"${backendEndpoint.escapedForBuildConfig()}\"")
+        buildConfigField("String", "MBA_SAMPLE_MODE", "\"${sampleMode.escapedForBuildConfig()}\"")
+        buildConfigField("String", "GITHUB_TOKEN", "\"${githubToken.escapedForBuildConfig()}\"")
+        buildConfigField("String", "GITHUB_OWNER", "\"${githubOwner.escapedForBuildConfig()}\"")
+        buildConfigField("String", "GITHUB_REPO", "\"${githubRepo.escapedForBuildConfig()}\"")
     }
 
     buildTypes {
@@ -58,12 +78,20 @@ android {
         compose = true
         buildConfig = true
     }
-    packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "META-INF/INDEX.LIST"
+            excludes += "META-INF/DEPENDENCIES"
+            excludes += "META-INF/io.netty.versions.properties"
+        }
+    }
 }
 
 dependencies {
     implementation(project(":mba-android"))
     implementation(project(":mba-core"))
+    implementation(project(":mba-agent"))
     implementation(project(":mba-notion"))
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.core)

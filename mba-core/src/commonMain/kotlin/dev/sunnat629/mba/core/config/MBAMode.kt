@@ -8,7 +8,7 @@ import dev.sunnat629.mba.core.ticket.TicketBackend
  * External devs pick ONE:
  * ```kotlin
  * // Open source: dev provides all keys
- * mode = MBAMode.SdkOnly(llmApiKey = "...", ticketBackend = notionBackend)
+ * mode = MBAMode.SdkOnly(llmApiKey = "...")
  *
  * // SaaS: one project key, we handle the rest
  * mode = MBAMode.Saas(projectKey = "proj_abc123")
@@ -22,7 +22,7 @@ public sealed interface MBAMode {
     /** Open source mode. Developer provides all keys. MBA owns zero secrets. */
     public data class SdkOnly(
         val llmApiKey: String,
-        val ticketBackend: TicketBackend,
+        val ticketBackend: TicketBackend? = null,
     ) : MBAMode
 
     /** MBA Cloud SaaS. One project key. All integrations server-side. */

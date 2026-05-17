@@ -48,7 +48,7 @@ public class MBAConfig internal constructor(
      *
      * ```kotlin
      * MBA.init(crashDir) {
-     *     mode = MBAMode.SdkOnly(llmApiKey = "...", ticketBackend = notionBackend)
+     *     mode = MBAMode.SdkOnly(llmApiKey = "...")
      *     debug = true
      * }
      * ```

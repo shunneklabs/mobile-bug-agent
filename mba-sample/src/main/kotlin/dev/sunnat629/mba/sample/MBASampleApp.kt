@@ -2,12 +2,22 @@ package dev.sunnat629.mba.sample
 
 import android.app.Application
 import dev.sunnat629.mba.android.MBAAndroid
+import dev.sunnat629.mba.agent.runtime.MBAAgentCallback
 import dev.sunnat629.mba.core.MBA
 import dev.sunnat629.mba.core.MBALog
+import dev.sunnat629.mba.core.config.LLM
 import dev.sunnat629.mba.core.config.MBAConfig
 import dev.sunnat629.mba.core.config.MBAMode
 
 private const val TAG = "Sample"
+private val sampleDeliveryMode: SampleDeliveryMode
+    get() = if (BuildConfig.MBA_SAMPLE_MODE.equals("sdkOnly", ignoreCase = true) ||
+        BuildConfig.MBA_SAMPLE_MODE.equals("sdk-only", ignoreCase = true)
+    ) {
+        SampleDeliveryMode.SDK_ONLY
+    } else {
+        SampleDeliveryMode.HOSTED
+    }
 
 class MBASampleApp : Application() {
     override fun onCreate() {
@@ -21,25 +31,23 @@ class MBASampleApp : Application() {
         MBALog.d(TAG, "NOTION_CRASH_DB_ID:  ${if (BuildConfig.NOTION_CRASH_DB_ID.isNotBlank()) "loaded" else "!! EMPTY !!" }")
         MBALog.d(TAG, "MBA_BACKEND_ENDPOINT: ${BuildConfig.MBA_BACKEND_ENDPOINT}")
         MBALog.d(TAG, "MBA_SERVER_API_KEY: ${if (BuildConfig.MBA_SERVER_API_KEY.isNotBlank()) "loaded" else "!! EMPTY !!" }")
+        MBALog.d(TAG, "MBA_SAMPLE_MODE: ${BuildConfig.MBA_SAMPLE_MODE}")
         MBALog.d(TAG, "========================================")
 
         // Phase 1: Install crash handler + enqueue WorkManager
         MBAAndroid.install(this)
 
-        // Phase 2: Configure MBA with debug logging.
-        //
-        // autoFix=true + skipNotion=false → server runs BOTH paths for every crash
-        // captured here:
-        //   1. NotionTicketBackend.createTicket(...)   (audit trail)
-        //   2. GitHubAutoFixOpener.openAutoFix(...)    (issue + autofix/issue-N-<slug> branch)
-        // Severity gate still applies on the GitHub side (HIGH/CRITICAL only); LOW/MEDIUM
-        // crashes silently downgrade to Notion-only.
+        val mode = sampleDeliveryMode
+
         MBA.configure(
             MBAConfig.Builder().apply {
-                mode = MBAMode.Saas(projectKey = "sample-app-debug")
+                this.mode = when (mode) {
+                    SampleDeliveryMode.SDK_ONLY -> MBAMode.SdkOnly(llmApiKey = BuildConfig.GEMINI_API_KEY)
+                    SampleDeliveryMode.HOSTED -> MBAMode.Saas(projectKey = "sample-app-debug")
+                }
                 debug = true
-                autoFix = true       // opt in to GitHub auto-fix path
-                skipNotion = false   // keep Notion ticket as well — both fire
+                autoFix = mode == SampleDeliveryMode.HOSTED
+                skipNotion = false
             }.build()
         )
 
@@ -54,10 +62,31 @@ class MBASampleApp : Application() {
             backendEndpoint = BuildConfig.MBA_BACKEND_ENDPOINT,
             projectKey = "sample-app-debug",
             serverApiKey = BuildConfig.MBA_SERVER_API_KEY,
-            sendToBackend = true,
+            sendToBackend = mode == SampleDeliveryMode.HOSTED,
+            llm = if (BuildConfig.GEMINI_API_KEY.isBlank()) null else LLM.gemini(BuildConfig.GEMINI_API_KEY),
+            skipGitIssue = BuildConfig.GITHUB_TOKEN.isBlank() || BuildConfig.GITHUB_OWNER.isBlank() || BuildConfig.GITHUB_REPO.isBlank(),
+            githubToken = BuildConfig.GITHUB_TOKEN,
+            githubOwner = BuildConfig.GITHUB_OWNER,
+            githubRepo = BuildConfig.GITHUB_REPO,
+            callback = MBAAgentCallback { event ->
+                MBALog.i(
+                    TAG,
+                    "SDKOnly callback: group=${event.group.id}, new=${event.isNewGroup}, " +
+                        "title='${event.report.title}', severity=${event.report.severity}",
+                )
+            },
             debug = true,
         )
 
-        MBALog.d(TAG, "MBA SDK initialized. Crashes will auto-push to Notion and local backend on next launch.")
+        MBALog.d(TAG, "MBA SDK initialized in ${mode.label}. Crashes are processed on next launch.")
     }
+}
+
+enum class SampleDeliveryMode(val label: String) {
+    SDK_ONLY("SDKOnly"),
+    HOSTED("Hosted backend"),
+}
+
+object SampleRuntime {
+    val deliveryMode: SampleDeliveryMode get() = sampleDeliveryMode
 }
