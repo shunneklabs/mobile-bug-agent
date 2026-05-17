@@ -109,13 +109,15 @@ class DemoOrchestrator(
         val wantNotion = !raw.skipNotion && notionBackend != null
 
         if (raw.autoFix && !severityOk) {
+            MBALog.w(TAG, "Job $jobId: autoFix ignored because severity ${processed.severity} is below gate")
             eventSink.progress(
                 jobId,
-                "autoFix=true ignored — severity ${processed.severity} below HIGH gate",
+                "autoFix=true ignored — severity ${processed.severity} below auto-fix gate",
                 level = "warning",
             )
         }
         if (raw.autoFix && githubAutoFixTool == null) {
+            MBALog.w(TAG, "Job $jobId: autoFix requested but GitHub backend is not configured")
             eventSink.progress(
                 jobId,
                 "autoFix=true requested but GitHub backend is not configured (set GITHUB_TOKEN/OWNER/REPO)",

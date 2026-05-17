@@ -61,7 +61,7 @@ internal class SinglePromptExecutor(
             userPrompt = userPrompt,
         )
 
-        val analysis = json.decodeFromString<CombinedCrashAnalysis>(response)
+        val analysis = json.decodeFromString<CombinedCrashAnalysis>(extractJsonObjectPayload(response))
         lastTrace = sanitizedTrace
         lastAnalysis = analysis
 

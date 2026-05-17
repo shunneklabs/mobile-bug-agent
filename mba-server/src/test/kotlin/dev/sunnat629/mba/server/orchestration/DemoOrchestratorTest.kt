@@ -38,7 +38,7 @@ class DemoOrchestratorTest {
     }
 
     @Test
-    fun `auto fix below high severity emits warning and still creates Notion ticket`() {
+    fun `medium severity auto fix opens GitHub and then creates Notion ticket`() {
         runBlocking {
             val sink = RecordingDemoEventSink()
             val raw = rawReport(autoFix = true, skipNotion = false)
@@ -52,8 +52,8 @@ class DemoOrchestratorTest {
                 githubTool = GitHubAutoFixTool { AutoFixResult.Success(7, "https://github.test/issues/7", "autofix/7") },
             ).process("job-2", raw)
 
-            assertFalse(sink.events.any { it.type == "pr" })
-            assertTrue(sink.events.any { it.level == "warning" && it.message.contains("below HIGH gate") })
+            assertTrue(sink.events.any { it.type == "pr" && it.message == "https://github.test/issues/7" })
+            assertTrue(sink.events.any { it.stage == "github_pr" && it.message.contains("Issue #7 opened") })
             assertEquals(1, notion.createdReports.size)
             assertEquals("https://notion.test/ticket-1", sink.events.last().message)
         }
@@ -99,6 +99,7 @@ class DemoOrchestratorTest {
             ).process("job-4", raw)
 
             assertFalse(sink.events.any { it.type == "fail" })
+            assertTrue(sink.events.any { it.level == "warning" && it.message.contains("GitHub backend is not configured") })
             assertTrue(sink.events.any { it.level == "warning" && it.message.contains("Notion ticket failed") })
             assertEquals("analysis://fingerprint-1", sink.events.last().message)
         }

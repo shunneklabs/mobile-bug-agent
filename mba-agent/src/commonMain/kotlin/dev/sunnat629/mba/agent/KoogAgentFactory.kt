@@ -21,6 +21,31 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.Closeable
 
+internal fun extractJsonObjectPayload(response: String): String {
+    val trimmed = response.trim()
+    val firstBrace = trimmed.indexOf('{')
+    if (firstBrace < 0) return trimmed
+
+    var depth = 0
+    var inString = false
+    var escaped = false
+    for (index in firstBrace until trimmed.length) {
+        val char = trimmed[index]
+        when {
+            escaped -> escaped = false
+            char == '\\' && inString -> escaped = true
+            char == '"' -> inString = !inString
+            !inString && char == '{' -> depth++
+            !inString && char == '}' -> {
+                depth--
+                if (depth == 0) return trimmed.substring(firstBrace, index + 1)
+            }
+        }
+    }
+
+    return trimmed.substring(firstBrace)
+}
+
 /**
  * Factory that creates [CrashAnalysisExecutor] instances backed by Koog.
  *
@@ -91,7 +116,7 @@ internal class KoogCrashAnalysisExecutor(
         }
         val response = promptExecutor.execute(prompt, model)
             .joinToString("") { it.content }
-        return json.decodeFromString<ParsedStackTrace>(response)
+        return json.decodeFromString<ParsedStackTrace>(extractJsonObjectPayload(response))
     }
 
     override suspend fun classifySeverity(
@@ -108,7 +133,7 @@ internal class KoogCrashAnalysisExecutor(
         }
         val response = promptExecutor.execute(prompt, model)
             .joinToString("") { it.content }
-        return json.decodeFromString<SeverityResult>(response)
+        return json.decodeFromString<SeverityResult>(extractJsonObjectPayload(response))
     }
 
     override suspend fun generateSummary(
@@ -133,6 +158,6 @@ internal class KoogCrashAnalysisExecutor(
         }
         val response = promptExecutor.execute(prompt, model)
             .joinToString("") { it.content }
-        return json.decodeFromString<CrashSummary>(response)
+        return json.decodeFromString<CrashSummary>(extractJsonObjectPayload(response))
     }
 }
