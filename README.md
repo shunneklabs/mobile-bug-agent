@@ -5,46 +5,83 @@
 [![Platform](https://img.shields.io/badge/platform-Android%20%7C%20JVM-brightgreen)]()
 [![Status](https://img.shields.io/badge/status-alpha-orange)]()
 
-An AI-powered crash reporting SDK for **Kotlin Multiplatform (KMP)** and **Android**.
+**Crashlytics catches your crashes. Mobile Bug Agent opens the ticket — and, for safe fixes, can start the pull request.**
 
-Captures crashes → analyzes with AI → creates structured bug tickets in Notion (or opens GitHub issues + PRs).
+MBA is an alpha Kotlin Multiplatform crash pipeline for Android and JVM apps. It captures fatal and non-fatal failures, scrubs private data, groups duplicates, asks an AI agent for root-cause analysis, then files structured work in Notion or GitHub.
 
-> **Status:** Alpha. Public API surface is small (`MBA`, `MBAConfig.Builder`, `MBAMode`, `LLM`, `TicketBackend`, `Severity`, `DeviceContext`, `TicketResult`, `NotionTicketBackend`) but may evolve before `1.0`. Pin a tag for stability.
+> **KotlinConf Munich booth demo:** the live path is `tap crash → server job → Koog analysis → Notion/GitHub update → live booth timeline`. Auto-fix PR creation is guard-railed and kill-switched while Workstream D orchestration is being completed.
 
-## ✨ What it does
+> **Status:** Alpha. Public API surface is intentionally small (`MBA`, `MBAConfig.Builder`, `MBAMode`, `LLM`, `TicketBackend`, `Severity`, `DeviceContext`, `TicketResult`, `NotionTicketBackend`) and may change before `1.0`. Pin a tag for stability.
 
+## ✨ What MBA does
+
+```text
+Crash happens
+  → report is written to disk before process death
+  → PII is scrubbed
+  → fingerprint + dedup keep repeats quiet
+  → Koog-backed AI analysis explains likely cause
+  → Notion ticket, GitHub issue, or guarded PR path is created
+  → `/events` streams booth-visible progress
 ```
-Crash happens → Written to disk instantly → PII scrubbed → Fingerprinted →
-Deduplicated → AI analyzes (Gemini/OpenAI) → Bug ticket created in Notion
+
+## 🎬 Demo media
+
+The booth recording and 30-second animated GIF are tracked for the `v0.1.0-kotlinconf` polish pass. Until the asset is committed, run the sample app and the server booth page side by side:
+
+- Android sample: `mba-sample`
+- Live event wall: `mba-server` static booth page backed by `/events`
+- Demo story: **one clean crash becomes one visible ticket/PR trail**
+
+## 🏗️ Architecture at a glance
+
+```text
+Android/JVM app
+    │
+    ├─ mba-core: public API, config, crash model, PII scrub, fingerprint, dedup
+    ├─ mba-android / mba-jvm: platform crash handlers + disk writer
+    │
+    ▼
+Pending crash file / report upload
+    │
+    ├─ SdkOnly: local Koog analysis + TicketBackend
+    └─ Saas/SelfHosted: mba-server `/report` queue
+            │
+            ├─ Koog agent analysis
+            ├─ Notion backend: Bug Tickets + Crash Reports
+            ├─ GitHub backend: issues, guarded branches, PR opener
+            └─ `/events`: SSE timeline for booth dashboard
 ```
 
-## 🏗️ Project Structure
+More detail: [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## 📦 Modules
 
 | Module | Role |
 |---|---|
-| `mba-core` | KMP shared library — models, config, crash capture, PII sanitizer, fingerprinting, dedup cache |
-| `mba-agent` | KMP shared — AI crash analysis pipeline (LLM callers, prompts, single-prompt executor) |
-| `mba-notion` | KMP shared — Notion API integration (dual-DB: Bug Tickets + Crash Reports) |
-| `mba-github` | KMP shared — GitHub backend: ticket backend + auto-fix issue/branch opener + guard-railed PR creator |
-| `mba-android` | Android-specific — UncaughtExceptionHandler, WorkManager, AndroidX Startup |
-| `mba-jvm` | JVM-specific — crash handler for server/desktop |
-| `mba-server` | Ktor server — receives crash reports, runs AI, creates tickets |
-| `mba-sample` | Android sample app — 5 crash trigger buttons + Notion integration test |
+| `mba-core` | KMP shared API, models, config, crash capture, PII sanitizer, fingerprinting, dedup cache |
+| `mba-agent` | Koog-backed crash analysis pipeline with Gemini/OpenAI support and legacy fallback |
+| `mba-notion` | Notion API integration with linked Bug Tickets and Crash Reports databases |
+| `mba-github` | GitHub issue backend, source reader, guardrails, auto-fix branch and PR creator |
+| `mba-android` | Android crash handler, AndroidX Startup, WorkManager upload path |
+| `mba-jvm` | JVM crash handler for server and desktop runtimes |
+| `mba-server` | Ktor ingest server with queue, job state, rate limit, persistence, SSE, booth page |
+| `mba-sample` | Android demo app for stage-safe crash generation and SDK smoke tests |
 
-## 🚀 Quick Start (Sample App)
+## 🚀 Quick Start: sample app
 
-1. Clone the repo
-2. Add to `local.properties` (not committed to git):
+1. Clone the repo.
+2. Add local secrets to `local.properties` (never commit them):
    ```properties
    NOTION_TOKEN=ntn_your_integration_token
    NOTION_TICKET_DB_ID_OR_URL=your_bug_tickets_db_id
    NOTION_CRASH_DB_ID_OR_URL=your_crash_reports_db_id
    GEMINI_API_KEY=AIzaSy...
    ```
-3. Build & run `mba-sample` on a device/emulator
-4. Tap any crash button → real exception is caught → sent to your Notion DBs
+3. Build and run `mba-sample` on a device or emulator.
+4. Trigger a crash, relaunch, and confirm a Notion ticket or server job appears.
 
-## 📦 SDK Integration (for your app)
+## 📦 SDK integration
 
 ```kotlin
 // Application.onCreate()
@@ -75,42 +112,38 @@ try { riskyOperation() } catch (e: Exception) {
 val scope = CoroutineScope(Dispatchers.IO + MBA.exceptionHandler)
 ```
 
-## ✅ Done
+## 🤖 Why Koog
 
-- [x] **Core SDK** — `MBA` singleton with 2-phase init, crash capture to disk
-- [x] **Breadcrumb tracking** — thread-safe, bounded (50 entries)
-- [x] **PII sanitizer** — regex-based scrubbing (email, phone, IP, tokens) before data leaves device
-- [x] **Crash fingerprinting** — SHA-256 hash of exception type + top N frames
-- [x] **Local dedup cache** — LRU with TTL, prevents re-processing known crashes
-- [x] **AI crash analysis** — Gemini + OpenAI LLM callers with single-prompt optimization
-- [x] **Notion integration** — dual-DB: Bug Tickets (all) + Crash Reports (crash-only), linked via relation
-- [x] **Ktor server** — `/report` endpoint with API key auth, fail-fast config, Dispatchers.IO
-- [x] **Server dedup persistence** — cache saved to disk JSON, survives restarts
-- [x] **Sample app** — 5 crash trigger buttons, all send to Notion directly
-- [x] **Kermit logging** — KMP-native logger, gated by `debug` flag, zero overhead in production
-- [x] **Minimal public API** — `explicitApi()` enforced, only 8 public types
-- [x] **Security** — API keys in headers (not URLs), `LLMConfig.toString()` masks keys
-- [x] **Unit tests** — PIISanitizer, CrashFingerprint, LocalDedupCache, BreadcrumbTracker, CrashAnalysisAgent (mock), NotionTicketBackend (mock)
-- [x] **Version catalog** — all deps in `libs.versions.toml`, parallel builds enabled
-- [x] **Convention plugins** — `build-logic/` with shared KMP + JVM config
+MBA uses [JetBrains Koog](https://github.com/JetBrains/koog) as the Kotlin-native AI agent runtime. Koog keeps the agent layer close to the rest of the codebase: prompts, tool calls, model clients, retries, and structured outputs stay in Kotlin instead of a separate Python service.
 
-## 🔲 Coming Up
+Current shape:
 
-- [ ] **WorkManager pipeline** — auto-process crash files on next app launch (PendingCrashProcessor)
-- [ ] **Anthropic + Ollama LLM callers** — currently only Gemini + OpenAI
-- [ ] **GitHub Issues backend** — `GitHubTicketBackend` as alternative to Notion
-- [ ] **Jira backend** — `JiraTicketBackend`
-- [ ] **Linear backend** — `LinearTicketBackend`
-- [ ] **iOS support** — add `iosMain` source sets, NSException handler
-- [ ] **Compose Multiplatform sample** — shared UI across Android + iOS
-- [ ] **ProGuard/R8 mapping** — deobfuscate stack traces from release builds
-- [ ] **Rate limiting** — server-side rate limiter per API key
-- [ ] **Dashboard view** — Notion dashboard template for crash analytics
-- [ ] **ANR detection** — watchdog timer for main thread hangs
-- [ ] **Network condition capture** — WiFi/cellular/offline context in crash reports
-- [ ] **User identification** — optional user ID/email for crash correlation
-- [ ] **Crash-free sessions metric** — track session health
-- [ ] **Publish to Maven Central** — `dev.sunnat629.mba:mba-core`, `mba-android`, `mba-notion`
+- `mba-agent` runs Koog by default for crash analysis.
+- Gemini and OpenAI clients sit behind the Koog-backed executor.
+- A legacy direct HTTP path remains available while the demo orchestration matures.
+- Workstream D is wiring Notion/GitHub/source/guardrail actions into visible Koog tool events.
+
+## ✅ Current status
+
+- [x] **Core SDK** — `MBA` singleton, 2-phase initialization, crash capture to disk
+- [x] **Breadcrumb tracking** — thread-safe bounded history
+- [x] **PII sanitizer** — email, phone, IP, token, and custom pattern scrubbing before network calls
+- [x] **Crash fingerprinting + dedup** — stable grouping for repeated failures
+- [x] **Android upload path** — AndroidX Startup plus WorkManager processing on next launch
+- [x] **Koog analysis** — Gemini/OpenAI analysis through `mba-agent`, with fallback path retained
+- [x] **Notion integration** — linked Bug Tickets and Crash Reports databases
+- [x] **GitHub integration** — issue creation, source reader, reviewer lookup, guarded PR opener
+- [x] **Ktor server** — `/report`, `/jobs/{id}`, `/events`, `/version`, `/stats`, rate limit, persisted job state
+- [x] **Booth page foundation** — live SSE timeline and PR-opened highlight in `mba-server`
+- [x] **Apache 2.0 license** — full license text committed
+
+## 🔲 Next up
+
+- [ ] **Workstream D orchestration** — Koog tool wrappers, deterministic tests, and visible tool-call SSE events
+- [ ] **Booth polish** — one-button sample app, QR, branding, confetti, fallback video, rehearsal
+- [ ] **Repo polish** — GIF/video asset, issue templates, release tag, GitHub topics, repository description
+- [ ] **Ops** — Docker/compose or reliable laptop deployment, demo reset script, real deployment rehearsal
+- [ ] **Future SDK scope** — iOS support, ANR watchdog, mapping-file deobfuscation, Jira/Linear backends, Maven Central publish
 
 ## 🛠️ Tech Stack
 
@@ -125,16 +158,25 @@ val scope = CoroutineScope(Dispatchers.IO + MBA.exceptionHandler)
 | Compose BOM | 2026.03.01 |
 | Targets | Android (API 26+), JVM |
 
+## 🧭 Routing truth table
+
+| Input | Default behavior | Notes |
+|---|---|---|
+| `SdkOnly` app crash | Analyze locally, send to configured `TicketBackend` | Good for direct Notion/GitHub use without server hosting |
+| `SelfHosted` / server report | Queue job, persist state, stream updates over SSE | Used by booth dashboard and demos |
+| High/critical crash | Notify/ticket path | Auto-fix remains kill-switch controlled |
+| Low-risk fix candidate | GitHub issue + guarded branch/PR path | Guardrails reject `main`/`master`, large diffs, new deps, public API changes |
+
 ## 🤝 Contributing
 
-Contributions welcome — issues, PRs, and discussions. See [CONTRIBUTING.md](CONTRIBUTING.md) and look for `good first issue` labels on the [issue tracker](https://github.com/shunneklabs/mobile-bug-agent/issues).
+Contributions welcome — issues, PRs, and discussions. See [CONTRIBUTING.md](CONTRIBUTING.md) and look for `good first issue` labels on the [issue tracker](https://github.com/shunneklabs/mobile-bug-agent/issues). For Munich demo work, the highest-value areas are Workstream D orchestration, booth polish, and repo polish.
 
 ## 📄 License
 
 Apache License 2.0 — see [LICENSE](LICENSE).
 
 ```
-Copyright 2025 Mohi Us Sunnat and Mobile Bug Agent contributors
+Copyright 2025-2026 Mohi Us Sunnat and Mobile Bug Agent contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
