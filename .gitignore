@@ -30,4 +30,6 @@ local.properties
 
 # Agent local planning artifacts
 /.agent/
+/.junie/
 /issues
+/assets/
