@@ -1,4 +1,4 @@
-package dev.sunnat629.mba.android
+package dev.sunnat629.mba.core.processing
 
 import dev.sunnat629.mba.core.fingerprint.CrashFingerprint
 import dev.sunnat629.mba.core.model.ProcessedCrashReport
@@ -7,34 +7,32 @@ import dev.sunnat629.mba.core.model.Severity
 import dev.sunnat629.mba.core.pii.PIISanitizer
 
 /**
- * Builds a [ProcessedCrashReport] from a [RawCrashReport] WITHOUT AI.
+ * Builds a fallback [ProcessedCrashReport] without LLM analysis.
  *
- * Uses:
- * - PII sanitizer to scrub stack traces
- * - CrashFingerprint for dedup
- * - Basic template for title/description (no LLM needed)
- * - Default severity: MEDIUM
- *
- * AI enrichment can be layered on top later.
+ * This is shared by Android, JVM, iOS, and server adapters for cases where the
+ * Koog agent is unavailable but the SDK still needs a structured report.
  */
-internal object CrashReportBuilder {
+public object CrashReportBuilder {
 
     private val piiSanitizer = PIISanitizer()
 
-    fun build(raw: RawCrashReport): ProcessedCrashReport {
-        // PII scrub
+    public fun build(raw: RawCrashReport): ProcessedCrashReport {
         val sanitizedTrace = piiSanitizer.scrub(raw.stackTrace)
         val sanitizedMessage = raw.message?.let { piiSanitizer.scrub(it) }
 
-        // Fingerprint
         val fingerprint = CrashFingerprint.compute(
             exceptionType = raw.exceptionType,
             stackTrace = sanitizedTrace,
         )
 
-        // Extract crash location from stack trace
         val firstAppFrame = sanitizedTrace.lines()
-            .firstOrNull { it.trim().startsWith("at ") && !it.contains("android.") && !it.contains("java.") && !it.contains("kotlin.") }
+            .firstOrNull {
+                val frame = it.trim()
+                frame.startsWith("at ") &&
+                    !frame.contains("android.") &&
+                    !frame.contains("java.") &&
+                    !frame.contains("kotlin.")
+            }
             ?.trim()
         val crashFile = firstAppFrame
             ?.substringAfter("(", "")
@@ -49,14 +47,10 @@ internal object CrashReportBuilder {
             ?.substringBefore("(", "")
             ?.ifBlank { null }
 
-        // Short exception name
         val shortType = raw.exceptionType.substringAfterLast(".")
-
-        // Basic title: "NullPointerException in CheckoutScreen"
         val screen = raw.currentScreen ?: "unknown screen"
         val title = "$shortType in $screen"
 
-        // Basic description
         val description = buildString {
             append("$shortType: ${sanitizedMessage ?: "(no message)"}")
             appendLine()
@@ -66,7 +60,9 @@ internal object CrashReportBuilder {
             crashMethod?.let {
                 appendLine()
                 append("Location: $it")
-                crashFile?.let { f -> append(" ($f${crashLine?.let { l -> ":$l" } ?: ""})" ) }
+                crashFile?.let { file ->
+                    append(" ($file${crashLine?.let { line -> ":$line" } ?: ""})")
+                }
             }
         }
 
@@ -77,7 +73,7 @@ internal object CrashReportBuilder {
             ),
             fingerprint = fingerprint,
             severity = Severity.MEDIUM,
-            confidence = 1.0f, // No AI uncertainty — this is raw data
+            confidence = 1.0f,
             title = title,
             description = description,
             possibleCause = buildPossibleCause(raw, crashFile, crashLine, crashMethod),

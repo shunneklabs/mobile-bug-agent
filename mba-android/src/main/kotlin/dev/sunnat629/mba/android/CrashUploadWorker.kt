@@ -5,7 +5,9 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import dev.sunnat629.mba.agent.AgentFactory
 import dev.sunnat629.mba.agent.CrashAnalysisAgent
+import dev.sunnat629.mba.agent.runtime.CrashDeliveryPipeline
 import dev.sunnat629.mba.agent.runtime.FileLocalCrashAggregationStore
+import dev.sunnat629.mba.agent.runtime.MBAAgentCallback
 import dev.sunnat629.mba.agent.runtime.MBAAgentEvent
 import dev.sunnat629.mba.agent.runtime.MBAAgentSink
 import dev.sunnat629.mba.agent.runtime.MBAAgentSinkResult
@@ -128,13 +130,19 @@ internal class CrashUploadWorker(
                 aggregationStore = FileLocalCrashAggregationStore(
                     File(context.filesDir, "mba-agent/aggregation-store.json")
                 ),
-                callback = MBAAndroid.agentCallback,
+                callback = MBAAgentCallback { event -> MBAAndroid.publishAgentEvent(event) },
                 notionSink = backend?.let(::NotionSdkOnlySink),
                 githubSink = githubBackend?.let(::GitHubSdkOnlySink),
                 skipNotion = backend == null,
                 skipGitIssue = skipGitIssue,
             )
         }
+        val deliveryPipeline = CrashDeliveryPipeline(
+            rawUploader = serverUploader,
+            sdkOnlyOrchestrator = sdkOnlyOrchestrator,
+            fallbackTicketBackend = backend,
+            fallbackDedupCache = dedupCache,
+        )
 
         var successCount = 0
         var failCount = 0
@@ -144,61 +152,13 @@ internal class CrashUploadWorker(
             try {
                 MBALog.d(TAG, "Processing: ${file.name} (${rawReport.exceptionType})")
 
-                val serverResult = if (serverUploader != null) {
-                    MBALog.d(TAG, "Uploading raw crash to backend: $backendEndpoint/report")
-                    when (val backendResult = serverUploader.upload(rawReport)) {
-                        is BackendUploadResult.Accepted -> {
-                            MBALog.i(TAG, "✅ Backend accepted: ${file.name} → job=${backendResult.jobId.take(12)}... (${backendResult.status})")
-                            BackendDelivery.Accepted
-                        }
-                        is BackendUploadResult.Rejected -> {
-                            MBALog.e(TAG, "❌ Backend rejected ${file.name}: HTTP ${backendResult.statusCode} ${backendResult.reason}")
-                            BackendDelivery.Rejected
-                        }
-                    }
-                } else {
-                    BackendDelivery.NotConfigured
-                }
-
-                var fingerprintToCache: String? = null
-                val deliveryResult = if (serverResult == BackendDelivery.Accepted) {
-                    MBALog.i(TAG, "Backend accepted crash; skipping direct Notion upload to avoid duplicate tickets")
-                    TicketResult(
-                        ticketId = "backend",
-                        backendName = "Backend",
-                        success = true,
-                    )
-                } else if (sdkOnlyOrchestrator != null) {
-                    MBALog.d(TAG, "Running SDKOnly Koog agent for '${rawReport.exceptionType}'")
-                    sdkOnlyOrchestrator.process(rawReport)
-                    TicketResult(ticketId = "sdk-only", backendName = "SDKOnly", success = true)
-                } else {
-                    // Build ProcessedCrashReport (no AI)
-                    val report = CrashReportBuilder.build(rawReport)
-                    fingerprintToCache = report.fingerprint
-
-                    // Dedup check for legacy direct Notion fallback only.
-                    if (dedupCache.contains(report.fingerprint)) {
-                        MBALog.w(TAG, "Duplicate: ${report.fingerprint.take(12)}... — deleting file")
-                        file.delete()
-                        successCount++
-                        continue
-                    }
-
-                    // Direct Notion is a fallback/local mode only. The server owns grouping when configured.
-                    if (backend == null) {
-                        TicketResult.failure("SDKOnly", "No LLM callback or Notion backend configured for local processing")
-                    } else {
-                        MBALog.d(TAG, "Uploading to Notion: '${report.title}'")
-                        backend.createTicket(report)
-                    }
-                }
+                val deliveryResult = deliveryPipeline.process(rawReport)
+                val ticketResult = deliveryResult.ticketResult
 
                 if (deliveryResult.success) {
-                    MBALog.i(TAG, "✅ Crash processed: ${file.name} → ticket=${deliveryResult.ticketId.take(12)}...")
-                    fingerprintToCache?.let { dedupCache.put(it) }
+                    MBALog.i(TAG, "Crash processed: ${file.name} via ${deliveryResult.channel} -> ticket=${ticketResult?.ticketId?.take(12) ?: "none"}")
                 } else {
-                    MBALog.e(TAG, "❌ Crash processing failed for ${file.name}: ${deliveryResult.errorMessage}")
+                    MBALog.e(TAG, "Crash processing failed for ${file.name}: ${deliveryResult.errorMessage}")
                 }
 
                 if (deliveryResult.success) {
@@ -225,12 +185,6 @@ internal class CrashUploadWorker(
         } else {
             Result.success()
         }
-    }
-
-    private enum class BackendDelivery {
-        Accepted,
-        Rejected,
-        NotConfigured,
     }
 
     private fun loadLlmConfig(context: Context): LLMConfig? {

@@ -4,9 +4,15 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import androidx.work.*
 import dev.sunnat629.mba.agent.runtime.MBAAgentCallback
+import dev.sunnat629.mba.agent.runtime.MBAAgentEvent
 import dev.sunnat629.mba.core.MBA
 import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.config.LLMConfig
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.util.concurrent.TimeUnit
 
 /**
@@ -29,6 +35,21 @@ public object MBAAndroid {
     @Volatile
     internal var agentCallback: MBAAgentCallback? = null
         private set
+
+    private val eventJson = Json { ignoreUnknownKeys = true }
+    private val _agentEvents = MutableSharedFlow<MBAAgentEvent>(extraBufferCapacity = 64)
+    private val _agentEventJson = MutableSharedFlow<String>(extraBufferCapacity = 64)
+
+    /**
+     * SDKOnly analysis events emitted after the local Koog agent processes a crash.
+     *
+     * Apps can collect this flow to handle their own upload, UI, analytics, or
+     * custom ticket routing without using built-in Notion/GitHub sinks.
+     */
+    public val agentEvents: SharedFlow<MBAAgentEvent> = _agentEvents.asSharedFlow()
+
+    /** Same SDKOnly event stream serialized as JSON for app-owned integrations. */
+    public val agentEventJson: SharedFlow<String> = _agentEventJson.asSharedFlow()
 
     /**
      * Install the MBA SDK for Android.
@@ -100,8 +121,8 @@ public object MBAAndroid {
      */
     public fun saveConfig(
         context: Context,
-        notionApiKey: String,
-        notionTicketDbId: String,
+        notionApiKey: String = "",
+        notionTicketDbId: String = "",
         notionCrashDbId: String? = null,
         backendEndpoint: String? = null,
         projectKey: String? = null,
@@ -144,6 +165,12 @@ public object MBAAndroid {
 
     public fun setAgentCallback(callback: MBAAgentCallback?) {
         agentCallback = callback
+    }
+
+    internal suspend fun publishAgentEvent(event: MBAAgentEvent) {
+        _agentEvents.emit(event)
+        _agentEventJson.emit(eventJson.encodeToString(event))
+        agentCallback?.onCrashAnalyzed(event)
     }
 
     private fun enqueueCrashUploadWorker(context: Context) {
