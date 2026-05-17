@@ -62,6 +62,45 @@ class CrashProcessingQueueTest {
         }
     }
 
+    @Test
+    fun `events broadcast to multiple booth subscribers`() {
+        runBlocking {
+            val dataDir = createTempDataDir("mba-booth-broadcast-test")
+            val queue = CrashProcessingQueue(jobStore = JobStore(dataDir.absolutePath))
+
+            val events = coroutineScope {
+                val firstBooth = async { queue.events.first() }
+                val secondBooth = async { queue.events.first() }
+                queue.enqueue(jobId = "job-broadcast", report = demoReport("job-broadcast"))
+                firstBooth.await() to secondBooth.await()
+            }
+
+            assertEquals("job-broadcast", events.first.jobId)
+            assertEquals("job-broadcast", events.second.jobId)
+            assertEquals("Crash report queued", events.first.message)
+            assertEquals("Crash report queued", events.second.message)
+
+            dataDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `late booth subscriber receives recent queued event`() {
+        runBlocking {
+            val dataDir = createTempDataDir("mba-booth-replay-test")
+            val queue = CrashProcessingQueue(jobStore = JobStore(dataDir.absolutePath))
+
+            queue.enqueue(jobId = "job-replay", report = demoReport("job-replay"))
+            val event = queue.events.first()
+
+            assertEquals("job-replay", event.jobId)
+            assertEquals("queued", event.stage)
+            assertEquals("Crash report queued", event.message)
+
+            dataDir.deleteRecursively()
+        }
+    }
+
     private fun demoReport(id: String): RawCrashReport = RawCrashReport(
         id = id,
         exceptionType = "java.lang.NullPointerException",

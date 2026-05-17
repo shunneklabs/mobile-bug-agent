@@ -58,8 +58,9 @@ usage() {
 Usage: scripts/run-local-demo.sh [command]
 
 Commands:
-  local         Start server, install sample app, open local booth flow (default)
-  server        Start only the local server and keep terminal logs attached
+  local         Build packaged server, install sample app, open local booth flow (default)
+  server        Build packaged server and keep terminal logs attached
+  gradle-server Start server via Gradle :mba-server:run for debugging only
   package       Build deployable mba-server distribution under mba-server/build/distributions
   deploy-local  Build installDist and run the packaged server with env from local.properties
   commands      Print useful deploy/log/debug commands
@@ -72,7 +73,8 @@ Environment:
                    Backend URL baked into mba-sample; use http://<mac-lan-ip>:8080 for phones
 
 Deploy notes:
-  - Local demo uses Gradle :mba-server:run, which injects secrets from local.properties.
+  - Local demo uses the packaged server runner, not long-lived Gradle :mba-server:run,
+    to avoid Gradle/JVM memory pressure during booth demos.
   - Packaged/deployed server needs real environment variables: GEMINI_API_KEY,
     NOTION_API_KEY, NOTION_DATABASE_ID, MBA_SERVER_API_KEY, GITHUB_TOKEN,
     GITHUB_OWNER, GITHUB_REPO, and GITHUB_BASE_BRANCH when those paths are used.
@@ -92,6 +94,9 @@ Run local demo:
 
 Run server only:
   ./scripts/run-local-demo.sh server
+
+Run Gradle server only for debugging:
+  ./scripts/run-local-demo.sh gradle-server
 
 Package server for deploy:
   ./scripts/run-local-demo.sh package
@@ -214,6 +219,7 @@ package_server() {
 
 start_gradle_server() {
   echo "🚀 Starting Ktor server (:mba-server:run) on port ${PORT}..."
+  echo "⚠️  Debug path only. If this gets SIGKILL/137, use: ./scripts/run-local-demo.sh server"
   echo "🪵 Server log: ${SERVER_LOG}"
   : > "${SERVER_LOG}"
   (
@@ -242,9 +248,9 @@ if [[ "${COMMAND}" == "package" ]]; then
   exit 0
 fi
 
-if [[ "${COMMAND}" == "deploy-local" ]]; then
+if [[ "${COMMAND}" == "deploy-local" || "${COMMAND}" == "local" || "${COMMAND}" == "server" ]]; then
   start_installed_server
-elif [[ "${COMMAND}" == "local" || "${COMMAND}" == "server" ]]; then
+elif [[ "${COMMAND}" == "gradle-server" ]]; then
   start_gradle_server
 else
   echo "❌ Unknown command: ${COMMAND}"
