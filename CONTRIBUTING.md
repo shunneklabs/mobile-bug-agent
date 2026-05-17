@@ -34,7 +34,7 @@ See `mba-agent/src/commonMain/kotlin/dev/sunnat629/mba/agent/KoogAgentFactory.kt
 
 ## Good First Issues
 
-Look for issues labeled `good first issue` on our [issue tracker](https://github.com/sunnat629/mobile-bug-agent/issues).
+Look for issues labeled `good first issue` on our [issue tracker](https://github.com/shunneklabs/mobile-bug-agent/issues).
 
 ## Code Style
 
@@ -44,7 +44,7 @@ Look for issues labeled `good first issue` on our [issue tracker](https://github
 
 ## Reporting Issues
 
-- Search [existing issues](https://github.com/sunnat629/mobile-bug-agent/issues) first.
+- Search [existing issues](https://github.com/shunneklabs/mobile-bug-agent/issues) first.
 - For bugs: include MBA version, target platform (Android API level / JVM), repro steps, expected vs actual, and a minimal stack trace if relevant.
 - For security issues: **do not open a public issue.** Email the maintainer or use GitHub's private security advisory.
 

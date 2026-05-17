@@ -127,7 +127,7 @@ val scope = CoroutineScope(Dispatchers.IO + MBA.exceptionHandler)
 
 ## 🤝 Contributing
 
-Contributions welcome — issues, PRs, and discussions. See [CONTRIBUTING.md](CONTRIBUTING.md) and look for `good first issue` labels on the [issue tracker](https://github.com/sunnat629/mobile-bug-agent/issues).
+Contributions welcome — issues, PRs, and discussions. See [CONTRIBUTING.md](CONTRIBUTING.md) and look for `good first issue` labels on the [issue tracker](https://github.com/shunneklabs/mobile-bug-agent/issues).
 
 ## 📄 License
 
