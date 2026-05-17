@@ -9,6 +9,10 @@ import dev.sunnat629.mba.core.pii.PIISanitizer
 import dev.sunnat629.mba.core.store.LocalDedupCache
 import dev.sunnat629.mba.github.GitHubAutoFixOpener
 import dev.sunnat629.mba.notion.NotionTicketBackend
+import dev.sunnat629.mba.server.orchestration.CrashAnalysisTool
+import dev.sunnat629.mba.server.orchestration.DemoEventSink
+import dev.sunnat629.mba.server.orchestration.DemoOrchestrator
+import dev.sunnat629.mba.server.orchestration.GitHubAutoFixTool
 import dev.sunnat629.mba.server.orchestration.SeverityRouter
 import dev.sunnat629.mba.server.persistence.JobStore
 import dev.sunnat629.mba.server.queue.CrashProcessingQueue
@@ -91,6 +95,42 @@ class ServerModule(
     val jobStore = JobStore(dataDir)
 
     val queue = CrashProcessingQueue(jobStore)
+
+    val demoOrchestrator = DemoOrchestrator(
+        analysisTool = CrashAnalysisTool { raw -> analysisAgent.process(raw) },
+        eventSink = object : DemoEventSink {
+            override suspend fun startProcessing(jobId: String) {
+                queue.startProcessing(jobId)
+            }
+
+            override suspend fun progress(
+                jobId: String,
+                message: String,
+                stage: String,
+                level: String,
+                metadata: Map<String, String>,
+            ) {
+                queue.progress(jobId, message, stage, level, metadata)
+            }
+
+            override suspend fun complete(jobId: String, artifactUrl: String) {
+                queue.complete(jobId, artifactUrl)
+            }
+
+            override suspend fun prOpened(jobId: String, prUrl: String) {
+                queue.prOpened(jobId, prUrl)
+            }
+
+            override suspend fun fail(jobId: String, errorMessage: String) {
+                queue.fail(jobId, errorMessage)
+            }
+        },
+        severityRouter = severityRouter,
+        notionBackend = notionBackend,
+        githubAutoFixTool = githubAutoFixOpener?.let { opener ->
+            GitHubAutoFixTool { report -> opener.openAutoFix(report) }
+        },
+    )
 
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
