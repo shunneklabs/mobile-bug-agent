@@ -3,8 +3,10 @@ package dev.sunnat629.mba.android
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import androidx.work.*
+import dev.sunnat629.mba.agent.runtime.MBAAgentCallback
 import dev.sunnat629.mba.core.MBA
 import dev.sunnat629.mba.core.MBALog
+import dev.sunnat629.mba.core.config.LLMConfig
 import java.util.concurrent.TimeUnit
 
 /**
@@ -23,6 +25,10 @@ public object MBAAndroid {
     private const val WORK_NAME = "mba-crash-upload"
 
     private var isInstalled = false
+
+    @Volatile
+    internal var agentCallback: MBAAgentCallback? = null
+        private set
 
     /**
      * Install the MBA SDK for Android.
@@ -101,6 +107,9 @@ public object MBAAndroid {
         projectKey: String? = null,
         serverApiKey: String? = null,
         sendToBackend: Boolean = backendEndpoint != null,
+        llm: LLMConfig? = null,
+        skipGitIssue: Boolean = true,
+        callback: MBAAgentCallback? = null,
         debug: Boolean = false,
     ) {
         val appContext = context.applicationContext
@@ -116,10 +125,19 @@ public object MBAAndroid {
             projectKey = projectKey,
             serverApiKey = serverApiKey,
             sendToBackend = sendToBackend,
+            llmProvider = llm?.provider?.name,
+            llmApiKey = llm?.apiKey,
+            llmModel = llm?.model,
+            skipGitIssue = skipGitIssue,
             debug = debug,
         )
+        agentCallback = callback
 
         MBALog.i(TAG, "Notion/backend config saved to SharedPreferences for WorkManager")
+    }
+
+    public fun setAgentCallback(callback: MBAAgentCallback?) {
+        agentCallback = callback
     }
 
     private fun enqueueCrashUploadWorker(context: Context) {

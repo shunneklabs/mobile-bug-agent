@@ -3,11 +3,22 @@ package dev.sunnat629.mba.android
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import dev.sunnat629.mba.agent.AgentFactory
+import dev.sunnat629.mba.agent.CrashAnalysisAgent
+import dev.sunnat629.mba.agent.runtime.FileLocalCrashAggregationStore
+import dev.sunnat629.mba.agent.runtime.MBAAgentEvent
+import dev.sunnat629.mba.agent.runtime.MBAAgentSink
+import dev.sunnat629.mba.agent.runtime.MBAAgentSinkResult
+import dev.sunnat629.mba.agent.runtime.SdkOnlyCrashOrchestrator
 import dev.sunnat629.mba.core.MBALog
-import dev.sunnat629.mba.core.fingerprint.CrashFingerprint
+import dev.sunnat629.mba.core.config.LLM
+import dev.sunnat629.mba.core.config.LLMConfig
+import dev.sunnat629.mba.core.model.TicketResult
 import dev.sunnat629.mba.core.pii.PIISanitizer
 import dev.sunnat629.mba.core.store.LocalDedupCache
+import dev.sunnat629.mba.core.ticket.TicketUpdate
 import dev.sunnat629.mba.notion.NotionTicketBackend
+import java.io.File
 import kotlin.time.Duration.Companion.hours
 
 /**
@@ -42,7 +53,7 @@ internal class CrashUploadWorker(
         // 1. Load config from SharedPreferences
         val context = applicationContext
         if (!MBAPreferences.isConfigured(context)) {
-            MBALog.e(TAG, "MBA not configured — no Notion credentials in SharedPreferences. Failing.")
+            MBALog.e(TAG, "MBA not configured — no backend, LLM, or Notion config in SharedPreferences. Failing.")
             return Result.failure()
         }
 
@@ -54,16 +65,18 @@ internal class CrashUploadWorker(
         val projectKey = MBAPreferences.loadProjectKey(context)
         val serverApiKey = MBAPreferences.loadServerApiKey(context)
         val sendToBackend = MBAPreferences.loadSendToBackend(context)
+        val llmConfig = loadLlmConfig(context)
+        val skipGitIssue = MBAPreferences.loadSkipGitIssue(context)
         val debug = MBAPreferences.loadDebug(context)
 
         MBALog.enabled = debug
 
-        if (crashDir == null || notionApiKey == null || ticketDbId == null) {
-            MBALog.e(TAG, "Missing config: crashDir=$crashDir, apiKey=${notionApiKey?.take(8)}, ticketDb=${ticketDbId?.take(8)}")
+        if (crashDir == null) {
+            MBALog.e(TAG, "Missing crashDir config")
             return Result.failure()
         }
 
-        MBALog.d(TAG, "Config loaded: crashDir=$crashDir, ticketDb=${ticketDbId.take(8)}..., crashDb=${crashDbId?.take(8) ?: "none"}")
+        MBALog.d(TAG, "Config loaded: crashDir=$crashDir, ticketDb=${ticketDbId?.take(8) ?: "none"}..., crashDb=${crashDbId?.take(8) ?: "none"}")
 
         // 2. Read pending crash files
         val pendingCrashes = PendingCrashProcessor.readPending(crashDir)
@@ -75,11 +88,15 @@ internal class CrashUploadWorker(
         MBALog.i(TAG, "Processing ${pendingCrashes.size} pending crash(es)...")
 
         // 3. Setup dependencies
-        val backend = NotionTicketBackend(
-            apiKey = notionApiKey,
-            bugTicketDbId = ticketDbId,
-            crashReportDbId = crashDbId,
-        )
+        val backend = if (!notionApiKey.isNullOrBlank() && !ticketDbId.isNullOrBlank()) {
+            NotionTicketBackend(
+                apiKey = notionApiKey,
+                bugTicketDbId = ticketDbId,
+                crashReportDbId = crashDbId,
+            )
+        } else {
+            null
+        }
         val serverUploader = backendEndpoint
             ?.takeIf { sendToBackend }
             ?.let {
@@ -90,6 +107,25 @@ internal class CrashUploadWorker(
                 )
             }
         val dedupCache = LocalDedupCache(maxSize = 500, ttl = 24.hours)
+        val sdkOnlyOrchestrator = llmConfig?.let { config ->
+            val factory = AgentFactory(config)
+            SdkOnlyCrashOrchestrator(
+                analysisAgent = CrashAnalysisAgent(
+                    agentFactory = factory,
+                    piiSanitizer = PIISanitizer(),
+                    dedupCache = dedupCache,
+                    useLocalDedup = false,
+                ),
+                aggregationStore = FileLocalCrashAggregationStore(
+                    File(context.filesDir, "mba-agent/aggregation-store.json")
+                ),
+                callback = MBAAndroid.agentCallback,
+                notionSink = backend?.let(::NotionSdkOnlySink),
+                githubSink = null,
+                skipNotion = backend == null,
+                skipGitIssue = skipGitIssue,
+            )
+        }
 
         var successCount = 0
         var failCount = 0
@@ -98,17 +134,6 @@ internal class CrashUploadWorker(
         for ((file, rawReport) in pendingCrashes) {
             try {
                 MBALog.d(TAG, "Processing: ${file.name} (${rawReport.exceptionType})")
-
-                // Build ProcessedCrashReport (no AI)
-                val report = CrashReportBuilder.build(rawReport)
-
-                // Dedup check
-                if (dedupCache.contains(report.fingerprint)) {
-                    MBALog.w(TAG, "Duplicate: ${report.fingerprint.take(12)}... — deleting file")
-                    file.delete()
-                    successCount++
-                    continue
-                }
 
                 val serverResult = if (serverUploader != null) {
                     MBALog.d(TAG, "Uploading raw crash to backend: $backendEndpoint/report")
@@ -126,27 +151,48 @@ internal class CrashUploadWorker(
                     BackendDelivery.NotConfigured
                 }
 
-                val notionResult = if (serverResult == BackendDelivery.Accepted) {
+                var fingerprintToCache: String? = null
+                val deliveryResult = if (serverResult == BackendDelivery.Accepted) {
                     MBALog.i(TAG, "Backend accepted crash; skipping direct Notion upload to avoid duplicate tickets")
-                    dev.sunnat629.mba.core.model.TicketResult(
+                    TicketResult(
                         ticketId = "backend",
                         backendName = "Backend",
                         success = true,
                     )
+                } else if (sdkOnlyOrchestrator != null) {
+                    MBALog.d(TAG, "Running SDKOnly Koog agent for '${rawReport.exceptionType}'")
+                    sdkOnlyOrchestrator.process(rawReport)
+                    TicketResult(ticketId = "sdk-only", backendName = "SDKOnly", success = true)
                 } else {
+                    // Build ProcessedCrashReport (no AI)
+                    val report = CrashReportBuilder.build(rawReport)
+                    fingerprintToCache = report.fingerprint
+
+                    // Dedup check for legacy direct Notion fallback only.
+                    if (dedupCache.contains(report.fingerprint)) {
+                        MBALog.w(TAG, "Duplicate: ${report.fingerprint.take(12)}... — deleting file")
+                        file.delete()
+                        successCount++
+                        continue
+                    }
+
                     // Direct Notion is a fallback/local mode only. The server owns grouping when configured.
-                    MBALog.d(TAG, "Uploading to Notion: '${report.title}'")
-                    backend.createTicket(report)
+                    if (backend == null) {
+                        TicketResult.failure("SDKOnly", "No LLM callback or Notion backend configured for local processing")
+                    } else {
+                        MBALog.d(TAG, "Uploading to Notion: '${report.title}'")
+                        backend.createTicket(report)
+                    }
                 }
 
-                if (notionResult.success) {
-                    MBALog.i(TAG, "✅ Notion uploaded: ${file.name} → ticket=${notionResult.ticketId.take(12)}...")
-                    dedupCache.put(report.fingerprint)
+                if (deliveryResult.success) {
+                    MBALog.i(TAG, "✅ Crash processed: ${file.name} → ticket=${deliveryResult.ticketId.take(12)}...")
+                    fingerprintToCache?.let { dedupCache.put(it) }
                 } else {
-                    MBALog.e(TAG, "❌ Notion upload failed for ${file.name}: ${notionResult.errorMessage}")
+                    MBALog.e(TAG, "❌ Crash processing failed for ${file.name}: ${deliveryResult.errorMessage}")
                 }
 
-                if (notionResult.success && serverResult != BackendDelivery.Rejected) {
+                if (deliveryResult.success) {
                     file.delete()
                     successCount++
                 } else {
@@ -158,7 +204,7 @@ internal class CrashUploadWorker(
             }
         }
 
-        backend.close()
+        backend?.close()
         serverUploader?.close()
 
         MBALog.i(TAG, "Done: $successCount uploaded, $failCount failed out of ${pendingCrashes.size}")
@@ -175,5 +221,50 @@ internal class CrashUploadWorker(
         Accepted,
         Rejected,
         NotConfigured,
+    }
+
+    private fun loadLlmConfig(context: Context): LLMConfig? {
+        val apiKey = MBAPreferences.loadLlmApiKey(context) ?: return null
+        val provider = MBAPreferences.loadLlmProvider(context)?.uppercase()
+        val model = MBAPreferences.loadLlmModel(context)
+        val base = when (provider) {
+            LLM.Provider.OPENAI.name -> LLM.openAI(apiKey)
+            else -> LLM.gemini(apiKey)
+        }
+        return if (model.isNullOrBlank()) base else base.model(model)
+    }
+
+    private class NotionSdkOnlySink(
+        private val backend: NotionTicketBackend,
+    ) : MBAAgentSink {
+        override val name: String = "Notion"
+
+        override suspend fun sync(event: MBAAgentEvent): MBAAgentSinkResult {
+            val existingTicketId = event.group.notionTicketId
+            return if (!event.isNewGroup && existingTicketId != null) {
+                val update = backend.updateTicket(
+                    existingTicketId,
+                    TicketUpdate(
+                        incrementCount = true,
+                        occurrenceCount = event.group.occurrenceCount,
+                        uniqueDeviceCount = event.group.uniqueDeviceCount,
+                        newOccurrenceTime = event.occurrence.occurredAt,
+                    ),
+                )
+                backend.createCrashOccurrence(event.report, existingTicketId)
+                update.toSinkResult(created = false)
+            } else {
+                backend.createTicket(event.report).toSinkResult(created = true)
+            }
+        }
+
+        private fun TicketResult.toSinkResult(created: Boolean): MBAAgentSinkResult =
+            MBAAgentSinkResult(
+                ticketId = ticketId.takeIf { it.isNotBlank() },
+                url = url,
+                created = created,
+                success = success,
+                errorMessage = errorMessage,
+            )
     }
 }
