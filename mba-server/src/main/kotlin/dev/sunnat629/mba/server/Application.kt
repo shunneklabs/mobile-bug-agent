@@ -1,6 +1,7 @@
 package dev.sunnat629.mba.server
 
 import dev.sunnat629.mba.agent.CrashAnalysisResult
+import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.model.RawCrashReport
 import dev.sunnat629.mba.server.middleware.rateLimiter
 import dev.sunnat629.mba.server.middleware.RateLimiter
@@ -22,10 +23,9 @@ import io.ktor.server.routing.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import org.slf4j.LoggerFactory
 import java.util.*
 
-private val logger = LoggerFactory.getLogger("MBAServer")
+private const val TAG = "Server"
 
 // ------------------------------------------------------------------ //
 //  Environment Config — fail fast on startup, not at request time
@@ -60,7 +60,9 @@ private object EnvConfig {
 }
 
 fun main() {
-    logger.info("Starting MBA Server on port ${EnvConfig.port}")
+    // Enable Kermit-backed MBALog for the entire server runtime.
+    MBALog.enabled = true
+    MBALog.i(TAG, "Starting MBA Server on port ${EnvConfig.port}")
     embeddedServer(Netty, port = EnvConfig.port) {
         module()
     }.start(wait = true)
@@ -108,7 +110,7 @@ fun Application.module() {
 
     // ---- Clean up resources on shutdown ---- //
     environment.monitor.subscribe(ApplicationStopped) {
-        logger.info("Shutting down — saving state and closing resources...")
+        MBALog.i(TAG, "Shutting down — saving state and closing resources...")
         serverModule.shutdown()
     }
 
@@ -222,7 +224,7 @@ fun Application.module() {
         // ---- Authenticated crash report endpoint ---- //
         post("/report") {
             val rawReport = call.receive<RawCrashReport>()
-            logger.info("Received crash report: ${rawReport.id}")
+            MBALog.i(TAG, "Received crash report: ${rawReport.id}")
 
             val jobId = UUID.randomUUID().toString()
             serverModule.queue.enqueue(jobId, rawReport)
@@ -306,7 +308,7 @@ private suspend fun processJob(serverModule: ServerModule, job: CrashJob) {
                     job.jobId,
                     "Duplicate crash (fingerprint=${result.report.fingerprint.take(8)}…) — skipping LLM",
                 )
-                logger.info("Job ${job.jobId}: Duplicate: ${result.report.fingerprint}")
+                MBALog.i(TAG, "Job ${job.jobId}: Duplicate: ${result.report.fingerprint}")
                 queue.complete(job.jobId, "duplicate://${result.report.fingerprint}")
             }
 
@@ -326,13 +328,13 @@ private suspend fun processJob(serverModule: ServerModule, job: CrashJob) {
                     "AI analysis failed (${result.error.message}) — using fallback report",
                     level = "warning",
                 )
-                logger.warn("Job ${job.jobId}: AI analysis failed, using fallback…", result.error)
+                MBALog.w(TAG, "Job ${job.jobId}: AI analysis failed, using fallback… (${result.error.message})")
                 handlePostAnalysis(serverModule, job, raw, result.report, fallback = true)
                 FileDedupPersistence.save(serverModule.dedupCache, EnvConfig.dedupCachePath)
             }
         }
     } catch (e: Exception) {
-        logger.error("Job ${job.jobId}: Processing failed", e)
+        MBALog.e(TAG, "Job ${job.jobId}: Processing failed", e)
         queue.fail(job.jobId, e.message ?: "Unknown error")
     }
 }
@@ -422,11 +424,11 @@ private suspend fun handlePostAnalysis(
         )
         val ticket = withContext(Dispatchers.IO) { notionBackend.createTicket(processed) }
         if (ticket.success) {
-            logger.info("Job ${job.jobId}: Notion ticket created: ${ticket.url}")
+            MBALog.i(TAG, "Job ${job.jobId}: Notion ticket created: ${ticket.url}")
             queue.complete(job.jobId, ticket.url ?: "notion://created")
         } else {
             val msg = ticket.errorMessage ?: "Unknown Notion error"
-            logger.error("Job ${job.jobId}: Notion failed: $msg")
+            MBALog.e(TAG, "Job ${job.jobId}: Notion failed: $msg")
             if (prOpened) {
                 // GitHub already produced a terminal `prOpened` event — don't override with FAILED.
                 queue.progress(job.jobId, "Notion ticket failed: $msg", stage = notionStage, level = "error")

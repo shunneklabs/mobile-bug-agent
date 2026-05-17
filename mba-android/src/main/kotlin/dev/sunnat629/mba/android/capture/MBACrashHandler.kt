@@ -1,9 +1,9 @@
 package dev.sunnat629.mba.android.capture
 
 import android.content.Context
-import android.util.Log
 import dev.sunnat629.mba.android.context.AndroidContextCollector
 import dev.sunnat629.mba.core.MBA
+import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.model.RawCrashReport
 import dev.sunnat629.mba.core.pii.PIISanitizer
 import kotlinx.coroutines.*
@@ -38,7 +38,7 @@ class MBACrashHandler(
                 metadata = metadata
             )
         } catch (ex: Exception) {
-            Log.e("MBACrashHandler", "Error capturing Android crash: ${ex.message}", ex)
+            MBALog.e("MBACrashHandler", "Error capturing Android crash: ${ex.message}", ex)
         } finally {
             // Forward to default handler
             defaultHandler?.uncaughtException(t, e)

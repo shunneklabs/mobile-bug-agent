@@ -1,5 +1,6 @@
 package dev.sunnat629.mba.server.queue
 
+import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.model.RawCrashReport
 import dev.sunnat629.mba.server.model.JobStatus
 import dev.sunnat629.mba.server.persistence.JobStore
@@ -7,7 +8,6 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.serialization.Serializable
-import org.slf4j.LoggerFactory
 
 /**
  * SSE event emitted when a job transitions state.
@@ -43,7 +43,7 @@ class CrashProcessingQueue(
 ) {
 
     private companion object {
-        private val logger = LoggerFactory.getLogger("CrashProcessingQueue")
+        private const val TAG = "CrashProcessingQueue"
     }
 
     private val eventChannel = Channel<SseEvent>(channelCapacity)
@@ -60,7 +60,7 @@ class CrashProcessingQueue(
         jobStore.createJob(jobId)
         emitEvent(jobId, JobStatus.QUEUED, message = "Crash report queued")
         jobChannel.send(CrashJob(jobId, report))
-        logger.info("Enqueued job $jobId")
+        MBALog.i(TAG, "Enqueued job $jobId")
         return jobId
     }
 
@@ -111,14 +111,14 @@ class CrashProcessingQueue(
                 metadata = metadata,
             )
         )
-        logger.info("Job $jobId [$stage] $message")
+        MBALog.i(TAG, "Job $jobId [$stage] $message")
     }
 
     /** Mark a job as failed. */
     suspend fun fail(jobId: String, errorMessage: String) {
         jobStore.updateStatus(jobId, JobStatus.FAILED, errorMessage = errorMessage)
         emitEvent(jobId, JobStatus.FAILED, message = "Job failed: $errorMessage", level = "error")
-        logger.error("Job $jobId failed: $errorMessage")
+        MBALog.e(TAG, "Job $jobId failed: $errorMessage")
     }
 
     suspend fun publishBoothEvent(

@@ -1,5 +1,6 @@
 package dev.sunnat629.mba.server.persistence
 
+import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.server.model.JobState
 import dev.sunnat629.mba.server.model.JobStatus
 import kotlinx.coroutines.sync.Mutex
@@ -7,7 +8,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import org.slf4j.LoggerFactory
 import java.io.File
 
 /**
@@ -18,7 +18,6 @@ class JobStore(private val dataDir: String = "data") {
 
     private companion object {
         private const val TAG = "JobStore"
-        private val logger = LoggerFactory.getLogger(TAG)
     }
 
     private val mutex = Mutex()
@@ -100,23 +99,23 @@ class JobStore(private val dataDir: String = "data") {
             storeFile.parentFile?.mkdirs()
             storeFile.writeText(json.encodeToString(data))
         } catch (e: Exception) {
-            logger.error("Failed to persist job store", e)
+            MBALog.e(TAG, "Failed to persist job store", e)
         }
     }
 
     private fun restore() {
         try {
             if (!storeFile.exists()) {
-                logger.info("No job store file found — starting fresh")
+                MBALog.i(TAG, "No job store file found — starting fresh")
                 return
             }
             val data = json.decodeFromString<JobStoreData>(storeFile.readText())
             jobs.putAll(data.jobs.mapValues { (_, p) ->
                 JobState(p.id, JobStatus.valueOf(p.status), p.createdAt, p.updatedAt, p.artifactUrl, p.errorMessage)
             })
-            logger.info("Restored ${jobs.size} jobs from disk")
+            MBALog.i(TAG, "Restored ${jobs.size} jobs from disk")
         } catch (e: Exception) {
-            logger.error("Failed to restore job store — starting fresh", e)
+            MBALog.e(TAG, "Failed to restore job store — starting fresh", e)
         }
     }
 }

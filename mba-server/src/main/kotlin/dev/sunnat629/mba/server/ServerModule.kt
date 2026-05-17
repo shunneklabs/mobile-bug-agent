@@ -3,6 +3,7 @@ package dev.sunnat629.mba.server
 import dev.sunnat629.mba.agent.AgentFactory
 import dev.sunnat629.mba.agent.CrashAnalysisAgent
 import dev.sunnat629.mba.core.config.LLM
+import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.config.LLMConfig
 import dev.sunnat629.mba.core.pii.PIISanitizer
 import dev.sunnat629.mba.core.store.LocalDedupCache
@@ -14,7 +15,6 @@ import dev.sunnat629.mba.server.queue.CrashProcessingQueue
 import io.ktor.server.application.*
 import io.ktor.util.AttributeKey
 import kotlinx.coroutines.*
-import org.slf4j.LoggerFactory
 import kotlin.time.Duration.Companion.hours
 
 /**
@@ -34,7 +34,7 @@ class ServerModule(
     val githubBaseBranch: String = "main",
 ) {
     private companion object {
-        private val logger = LoggerFactory.getLogger("ServerModule")
+        private const val TAG = "ServerModule"
     }
 
     val llmConfig = LLMConfig(
@@ -59,7 +59,7 @@ class ServerModule(
         if (notionApiKey.isNotBlank() && notionDatabaseId.isNotBlank()) {
             NotionTicketBackend(notionApiKey, notionDatabaseId)
         } else {
-            logger.warn("NOTION_API_KEY / NOTION_DATABASE_ID not set — Notion ticketing disabled.")
+            MBALog.w(TAG, "NOTION_API_KEY / NOTION_DATABASE_ID not set — Notion ticketing disabled.")
             null
         }
 
@@ -77,7 +77,7 @@ class ServerModule(
                 baseBranch = githubBaseBranch,
             )
         } else {
-            logger.info("GitHub auto-fix disabled — set GITHUB_TOKEN/GITHUB_OWNER/GITHUB_REPO to enable.")
+            MBALog.i(TAG, "GitHub auto-fix disabled — set GITHUB_TOKEN/GITHUB_OWNER/GITHUB_REPO to enable.")
             null
         }
 
@@ -96,16 +96,17 @@ class ServerModule(
 
     init {
         FileDedupPersistence.restore(dedupCache, dedupCachePath)
-        logger.info(
-            "ServerModule initialized — Notion={}, GitHubAutoFix={}, baseBranch={}",
-            if (notionBackend != null) "enabled" else "disabled",
-            if (githubAutoFixOpener != null) "enabled" else "disabled",
-            githubBaseBranch,
+        MBALog.i(
+            TAG,
+            "ServerModule initialized — " +
+                "Notion=${if (notionBackend != null) "enabled" else "disabled"}, " +
+                "GitHubAutoFix=${if (githubAutoFixOpener != null) "enabled" else "disabled"}, " +
+                "baseBranch=$githubBaseBranch",
         )
     }
 
     fun shutdown() {
-        logger.info("Shutting down ServerModule...")
+        MBALog.i(TAG, "Shutting down ServerModule...")
         FileDedupPersistence.save(dedupCache, dedupCachePath)
         agentFactory.close()
         notionBackend?.close()

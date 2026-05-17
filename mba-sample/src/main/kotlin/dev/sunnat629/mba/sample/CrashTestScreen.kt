@@ -1,6 +1,5 @@
 package dev.sunnat629.mba.sample
 
-import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -12,6 +11,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.sunnat629.mba.core.MBA
+import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.model.*
 import dev.sunnat629.mba.notion.NotionTicketBackend
 import kotlinx.coroutines.Dispatchers
@@ -278,11 +278,11 @@ private suspend fun sendRealCrashToNotion(throwable: Throwable, triggerName: Str
             sanitizedStackTrace = stackTrace.take(2000),
         )
 
-        Log.d("MBA-Sample", "Sending $triggerName to Notion (ticket=${ticketDbId.take(8)}, crash=${crashDbId.take(8)})...")
+        MBALog.d("Sample", "Sending $triggerName to Notion (ticket=${ticketDbId.take(8)}, crash=${crashDbId.take(8)})...")
         val result = backend.createTicket(report)
         backend.close()
 
-        Log.d("MBA-Sample", "Result: success=${result.success}, id=${result.ticketId}")
+        MBALog.d("Sample", "Result: success=${result.success}, id=${result.ticketId}")
 
         if (result.success) {
             "\u2705 $triggerName sent to Notion!\n" +
@@ -293,7 +293,7 @@ private suspend fun sendRealCrashToNotion(throwable: Throwable, triggerName: Str
             "\u274c $triggerName failed:\n${result.errorMessage?.take(300)}"
         }
     } catch (e: Exception) {
-        Log.e("MBA-Sample", "Failed to send $triggerName", e)
+        MBALog.e("Sample", "Failed to send $triggerName", e)
         "\u274c Error: ${e::class.simpleName}: ${e.message}"
     }
 }

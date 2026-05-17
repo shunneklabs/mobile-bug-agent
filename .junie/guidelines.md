@@ -83,7 +83,7 @@ In `MBAMode.SdkOnly` logs go to Logcat (tag `MBA/Agent`).
 
 - Kotlin Multiplatform; common code under `src/commonMain/kotlin/`.
 - Internal SDK glue (e.g., `AgentFactory`) is `internal` — never instructed users to import directly.
-- Use existing logging tags (`MBA/Agent`, `MBA/Notion`, `MBA/PII`, …) when adding logs.
+- **Logging: Kermit everywhere via `MBALog`** (`mba-core/.../MBALog.kt`). NEVER use `println`, `System.out/err.println`, `android.util.Log`, or `org.slf4j.LoggerFactory` directly — every module (SDK, server, sample app) routes through `MBALog.{d,i,w,e}(component, message)`. Tag convention: short component name (e.g. `Agent`, `Notion`, `PII`, `Server`, `ServerModule`, `JobStore`, `CrashProcessingQueue`, `RateLimiter`, `FileDedupPersistence`, `Sample`) — `MBALog` prefixes them with `MBA/`. Gated by `MBALog.enabled`: SDK flips it in `MBA.configure(config.debug)`; the server forces it on in `Application.main()`; the sample app turns it on before `MBA.configure` so the env-var banner is visible.
 - Long-running suspend work is coordinated through `CrashProcessingQueue`; emit user-visible progress via SSE rather than blocking the booth.
 
 ## 6. Auto-fix flags & env vars
