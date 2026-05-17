@@ -61,7 +61,7 @@ class CrashProcessingQueue(
 
     /** Enqueue a crash job. Returns the job id. */
     suspend fun enqueue(jobId: String, report: RawCrashReport): String {
-        jobStore.createJob(jobId)
+        jobStore.createJob(jobId, report)
         emitEvent(jobId, JobStatus.QUEUED, message = "Crash report queued")
         jobChannel.send(CrashJob(jobId, report))
         MBALog.i(TAG, "Enqueued job $jobId")

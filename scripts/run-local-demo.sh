@@ -166,7 +166,11 @@ export_env_from_local_properties() {
   export MBA_SERVER_API_KEY="${MBA_SERVER_API_KEY:-$(local_property MBA_SERVER_API_KEY)}"
   export GITHUB_TOKEN="${GITHUB_TOKEN:-$(local_property GITHUB_TOKEN)}"
   export GITHUB_OWNER="${GITHUB_OWNER:-$(local_property GITHUB_OWNER)}"
+  export GITHUB_OWNER="${GITHUB_OWNER:-$(local_property GITHUB_TARGET_OWNER)}"
   export GITHUB_REPO="${GITHUB_REPO:-$(local_property GITHUB_REPO)}"
+  export GITHUB_REPO="${GITHUB_REPO:-$(local_property GITHUB_TARGET_REPO)}"
+  export GITHUB_TARGET_OWNER="${GITHUB_TARGET_OWNER:-$(local_property GITHUB_TARGET_OWNER)}"
+  export GITHUB_TARGET_REPO="${GITHUB_TARGET_REPO:-$(local_property GITHUB_TARGET_REPO)}"
   export GITHUB_BASE_BRANCH="${GITHUB_BASE_BRANCH:-$(local_property GITHUB_BASE_BRANCH)}"
   export GITHUB_BASE_BRANCH="${GITHUB_BASE_BRANCH:-main}"
 }

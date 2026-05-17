@@ -1,6 +1,7 @@
 package dev.sunnat629.mba.server.persistence
 
 import dev.sunnat629.mba.core.MBALog
+import dev.sunnat629.mba.core.model.RawCrashReport
 import dev.sunnat629.mba.server.model.JobState
 import dev.sunnat629.mba.server.model.JobStatus
 import kotlinx.coroutines.sync.Mutex
@@ -35,7 +36,7 @@ class JobStore(private val dataDir: String = "data") {
         restore()
     }
 
-    suspend fun createJob(id: String): JobState {
+    suspend fun createJob(id: String, rawReport: RawCrashReport? = null): JobState {
         return mutex.withLock {
             val now = System.currentTimeMillis()
             val job = JobState(
@@ -43,6 +44,7 @@ class JobStore(private val dataDir: String = "data") {
                 status = JobStatus.QUEUED,
                 createdAt = now,
                 updatedAt = now,
+                rawReport = rawReport,
             )
             jobs[id] = job
             persist()
@@ -94,7 +96,17 @@ class JobStore(private val dataDir: String = "data") {
     private fun persist() {
         try {
             val data = JobStoreData(
-                jobs = jobs.mapValues { (_, job) -> PersistedJobState(job.id, job.status.name, job.createdAt, job.updatedAt, job.artifactUrl, job.errorMessage) }
+                jobs = jobs.mapValues { (_, job) ->
+                    PersistedJobState(
+                        id = job.id,
+                        status = job.status.name,
+                        createdAt = job.createdAt,
+                        updatedAt = job.updatedAt,
+                        artifactUrl = job.artifactUrl,
+                        errorMessage = job.errorMessage,
+                        rawReport = job.rawReport,
+                    )
+                }
             )
             storeFile.parentFile?.mkdirs()
             storeFile.writeText(json.encodeToString(data))
@@ -111,7 +123,7 @@ class JobStore(private val dataDir: String = "data") {
             }
             val data = json.decodeFromString<JobStoreData>(storeFile.readText())
             jobs.putAll(data.jobs.mapValues { (_, p) ->
-                JobState(p.id, JobStatus.valueOf(p.status), p.createdAt, p.updatedAt, p.artifactUrl, p.errorMessage)
+                JobState(p.id, JobStatus.valueOf(p.status), p.createdAt, p.updatedAt, p.artifactUrl, p.errorMessage, p.rawReport)
             })
             MBALog.i(TAG, "Restored ${jobs.size} jobs from disk")
         } catch (e: Exception) {
@@ -140,4 +152,5 @@ private data class PersistedJobState(
     val updatedAt: Long,
     val artifactUrl: String?,
     val errorMessage: String?,
+    val rawReport: RawCrashReport? = null,
 )

@@ -19,6 +19,15 @@ const pendingDecisionsEl = document.getElementById("pendingDecisions");
 let latestStage = "queued";
 let sseWasOpen = false;
 
+const operatorDecisions = [
+  { value: "notion", label: "Notion Ticket" },
+  { value: "github", label: "GitHub Issue" },
+  { value: "both", label: "Both" },
+  { value: "autofix", label: "Autofix" },
+  { value: "notify", label: "Notify" },
+  { value: "fallback", label: "Fallback" }
+];
+
 function renderPipeline(active) {
   pipelineEl.innerHTML = "";
   stageOrder.forEach((stage) => {
@@ -95,6 +104,9 @@ async function sendDecision(jobId, decision) {
   });
   if (!res.ok) {
     addLine(terminalEl, `Decision failed (${decision}) for ${jobId.slice(0, 8)}`, "error");
+  } else {
+    addLine(terminalEl, `Decision accepted (${decision}) for ${jobId.slice(0, 8)}`, "info");
+    await loadPendingDecisions();
   }
 }
 
@@ -112,10 +124,10 @@ async function loadPendingDecisions() {
     title.textContent = `${job.jobId.slice(0, 8)} · ${job.status}`;
     row.appendChild(title);
 
-    ["notify", "autofix", "fallback"].forEach((decision) => {
+    operatorDecisions.forEach(({ value, label }) => {
       const btn = document.createElement("button");
-      btn.textContent = decision;
-      btn.onclick = () => sendDecision(job.jobId, decision);
+      btn.textContent = label;
+      btn.onclick = () => sendDecision(job.jobId, value);
       row.appendChild(btn);
     });
 

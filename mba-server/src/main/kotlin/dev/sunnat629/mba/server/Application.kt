@@ -6,6 +6,7 @@ import dev.sunnat629.mba.server.middleware.rateLimiter
 import dev.sunnat629.mba.server.middleware.RateLimiter
 import dev.sunnat629.mba.server.model.ServerStats
 import dev.sunnat629.mba.server.model.ServerVersion
+import dev.sunnat629.mba.server.orchestration.OperatorDecision
 import dev.sunnat629.mba.server.sse.sseEvents
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
@@ -46,11 +47,8 @@ private object EnvConfig {
     val dedupCachePath: String = System.getenv("MBA_DEDUP_CACHE_PATH") ?: "data/dedup-cache.json"
     val dataDir: String = System.getenv("MBA_DATA_DIR") ?: "data"
 
-    // ---- GitHub auto-fix path (optional) ---- //
-    val githubToken: String = System.getenv("GITHUB_TOKEN") ?: ""
-    val githubOwner: String = System.getenv("GITHUB_OWNER") ?: ""
-    val githubRepo: String = System.getenv("GITHUB_REPO") ?: ""
-    val githubBaseBranch: String = System.getenv("GITHUB_BASE_BRANCH")?.takeIf { it.isNotBlank() } ?: "main"
+    // ---- GitHub issue / auto-fix path (optional) ---- //
+    val github: GitHubRuntimeConfig = GitHubRuntimeConfigLoader.load()
 
     private fun requireEnv(name: String): String =
         System.getenv(name)
@@ -89,10 +87,11 @@ fun Application.module() {
         serverApiKey = EnvConfig.serverApiKey,
         dedupCachePath = EnvConfig.dedupCachePath,
         dataDir = EnvConfig.dataDir,
-        githubToken = EnvConfig.githubToken,
-        githubOwner = EnvConfig.githubOwner,
-        githubRepo = EnvConfig.githubRepo,
-        githubBaseBranch = EnvConfig.githubBaseBranch,
+        githubToken = EnvConfig.github.token,
+        githubOwner = EnvConfig.github.owner,
+        githubRepo = EnvConfig.github.repo,
+        githubBaseBranch = EnvConfig.github.baseBranch,
+        githubConfigMessage = EnvConfig.github.configurationMessage,
     )
 
     // ---- Rate limiter (10 req/s) ---- //
@@ -175,27 +174,46 @@ fun Application.module() {
 
             val request = call.receive<ForceDecisionRequest>()
             val normalizedDecision = request.decision.trim().lowercase()
-            if (normalizedDecision !in setOf("notify", "autofix", "fallback")) {
+            val operatorDecision = OperatorDecision.fromWireValue(normalizedDecision)
+            if (operatorDecision == null) {
                 return@post call.respond(
                     HttpStatusCode.BadRequest,
-                    mapOf("error" to "decision must be notify|autofix|fallback"),
+                    mapOf("error" to "decision must be ${OperatorDecision.allowedWireValues.joinToString("|")}"),
                 )
             }
 
             val job = serverModule.jobStore.getJob(request.jobId)
                 ?: return@post call.respond(HttpStatusCode.NotFound, mapOf("error" to "Unknown job id"))
 
+            val rawReport = job.rawReport
+            if (rawReport == null && operatorDecision !in setOf(OperatorDecision.Notify, OperatorDecision.Fallback)) {
+                return@post call.respond(
+                    HttpStatusCode.Conflict,
+                    mapOf("error" to "Job does not include a raw crash report; submit a new crash before running ${operatorDecision.wireValue}"),
+                )
+            }
+
             serverModule.queue.publishBoothEvent(
                 type = "operator_decision",
-                message = "Operator chose ${normalizedDecision.uppercase()} for ${request.jobId.take(8)}",
+                message = "Operator chose ${operatorDecision.displayName} for ${request.jobId.take(8)}",
                 metadata = mapOf("decision" to normalizedDecision, "jobId" to request.jobId),
                 jobId = request.jobId,
             )
 
+            if (rawReport != null) {
+                serverModule.scope.launch {
+                    runCatching {
+                        serverModule.operatorDecisionHandler.handle(request.jobId, rawReport, operatorDecision)
+                    }.onFailure { error ->
+                        serverModule.queue.fail(request.jobId, error.message ?: "Operator action failed")
+                    }
+                }
+            }
+
             call.respond(
                 BoothActionResponse(
                     ok = true,
-                    message = "Decision accepted",
+                    message = "Decision accepted: ${operatorDecision.displayName}",
                     jobId = job.id,
                 )
             )
