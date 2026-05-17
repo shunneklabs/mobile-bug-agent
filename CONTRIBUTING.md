@@ -1,6 +1,16 @@
 # Contributing to Mobile Bug Agent (MBA)
 
-Thanks for your interest in MBA! This document covers the basics for getting started.
+Thanks for helping MBA turn mobile crashes into useful engineering work. This repo is still alpha, so small, focused PRs with clear tests are best.
+
+## Current priorities
+
+For the KotlinConf Munich demo, highest-value work is:
+
+1. **Koog orchestration** — tool wrappers, routing, deterministic tests, visible SSE tool events.
+2. **Booth polish** — one-button sample crash path, QR, branding, fallback recording.
+3. **Repo polish** — public docs, issue templates, release tag, demo media.
+
+Please avoid spreading effort into new backends or large SDK scope unless an issue already calls for it.
 
 ## Why Koog
 
@@ -13,11 +23,12 @@ MBA uses [JetBrains Koog](https://github.com/JetBrains/koog) as its AI agent run
 
 See `mba-agent/src/commonMain/kotlin/dev/sunnat629/mba/agent/KoogAgentFactory.kt` for the Koog integration point.
 
-## Getting Started
+## Getting started
 
 1. Clone the repo
-2. Open in Android Studio or IntelliJ
-3. Run `./gradlew allTests` to verify everything builds
+2. Open in Android Studio or IntelliJ IDEA
+3. Run targeted tests for the module you changed
+4. Run `./gradlew allTests` before opening a PR when your change affects shared code
 
 ## Project Structure
 
@@ -30,7 +41,15 @@ See `mba-agent/src/commonMain/kotlin/dev/sunnat629/mba/agent/KoogAgentFactory.kt
 | `mba-notion` | Notion ticket backend |
 | `mba-github` | GitHub ticket backend + auto-fix opener + guard-railed PR creator |
 | `mba-server` | Ktor server for crash ingestion and SSE feed |
-| `mba-sample` | Demo app with crash button |
+| `mba-sample` | Demo app for crash-button smoke tests |
+
+## Development workflow
+
+- Keep PRs focused on one module or one workstream when possible.
+- Add or update tests for behavior changes.
+- For bug fixes, include a reproduction test when practical.
+- For docs-only changes, no build is required unless commands or code snippets changed.
+- Do not commit secrets. Use `local.properties`, environment variables, or ignored `.env` files for local credentials.
 
 ## Good First Issues
 
@@ -40,7 +59,8 @@ Look for issues labeled `good first issue` on our [issue tracker](https://github
 
 - Kotlin with `explicitApi()` on public modules
 - Follow existing naming conventions
-- Run `./gradlew allTests` before submitting PRs
+- Keep public API additions small and documented
+- Prefer targeted module tests during development, then `./gradlew allTests` before PR if shared behavior changed
 
 ## Reporting Issues
 
@@ -50,7 +70,7 @@ Look for issues labeled `good first issue` on our [issue tracker](https://github
 
 ## Pull Requests
 
-1. Fork and create a feature branch off `main`.
+1. Fork and create a feature branch off the current default branch.
 2. Keep PRs focused — one logical change per PR.
 3. Add or update tests for behavior changes.
 4. Run `./gradlew allTests` locally; CI must be green.

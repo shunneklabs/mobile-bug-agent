@@ -1,13 +1,13 @@
-# 🏗️ MBA Internal Architecture
+# 🏗️ MBA Architecture
 
-This document describes the internal architecture of the Mobile Bug Agent SDK.
+This document describes the Mobile Bug Agent SDK, server, and demo architecture. MBA is split into a small public SDK surface plus internal modules for capture, analysis, ticketing, and guarded automation.
 
 ## Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    External Developer API                     │
-│   MBA.install() → MBA.configure() → MBA.logError()          │
+│                    External Developer API                    │
+│   MBA.init(...) → MBA.logError()                             │
 │   MBA.setScreen() → MBA.addBreadcrumb()                     │
 │   MBA.exceptionHandler (attach to CoroutineScope)            │
 └──────────────────────────┬──────────────────────────────────┘
@@ -40,21 +40,21 @@ This document describes the internal architecture of the Mobile Bug Agent SDK.
 │  All types internal — zero public API surface                │
 │                                                              │
 │  ┌──────────────────────┐    ┌────────────────────────┐     │
-│  │ CrashAnalysisAgent   │    │ AgentFactory           │     │
-│  │ (orchestrator)       │    │ (creates executors)    │     │
+│  │ CrashAnalysisAgent   │    │ KoogAgentFactory       │     │
+│  │ (analysis pipeline)  │    │ (creates executors)    │     │
 │  │                      │    │                        │     │
 │  │ 1. PII scrub         │    │ ┌────────────────────┐ │     │
 │  │ 2. Fingerprint       │    │ │SinglePromptExecutor│ │     │
 │  │ 3. Dedup check       │    │ │(1 LLM call, fast)  │ │     │
-│  │ 4. AI analysis ──────┼────│ ├────────────────────┤ │     │
+│  │ 4. Koog analysis ────┼────│ ├────────────────────┤ │     │
 │  │ 5. Result packaging  │    │ │MultiStepExecutor   │ │     │
 │  └──────────────────────┘    │ │(3 LLM calls, debug)│ │     │
 │                              │ └────────────────────┘ │     │
 │  ┌─────────────────────┐     └────────────────────────┘     │
-│  │ LLM Callers         │                                    │
-│  │ ├─ GeminiLLMCaller  │  API key in x-goog-api-key header │
-│  │ ├─ OpenAILLMCaller  │  API key in Authorization header  │
-│  │ └─ (more planned)   │  JSON built with kotlinx.serial.  │
+│  │ Model Clients       │                                    │
+│  │ ├─ Gemini via Koog  │  API key in x-goog-api-key header │
+│  │ ├─ OpenAI via Koog  │  API key in Authorization header  │
+│  │ └─ Legacy fallback  │  Direct HTTP path retained        │
 │  └─────────────────────┘                                    │
 └─────────────────────────────────────────────────────────────┘
 
@@ -103,6 +103,31 @@ This document describes the internal architecture of the Mobile Bug Agent SDK.
 │ • CrashWriter        │    │                      │
 │   (actual)           │    │                      │
 └──────────────────────┘    └──────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│                     mba-server (Ktor)                       │
+│                                                             │
+│  /report → CrashProcessingQueue → persisted JobStore        │
+│     │                                                       │
+│     ├─ /jobs/{id}: current status                           │
+│     ├─ /events: SSE timeline for booth UI                   │
+│     ├─ /version + /stats: health/readiness endpoints        │
+│     └─ rate limit + API-key auth                            │
+│                                                             │
+│  Demo UI: static booth page renders queue + status events.  │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│                     mba-github (KMP/JVM)                    │
+│                                                             │
+│  GitHubIssueBackend → creates labeled crash issues          │
+│  GitHubSourceReader → reads files/snippets for analysis     │
+│  GitHubPullRequestCreator → opens guarded PRs               │
+│                                                             │
+│  Guardrails: no main/master target, max 20 changed lines,   │
+│  no new dependencies, no public API changes, target file    │
+│  must exist.                                                │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ## Crash Flow (end-to-end)
@@ -133,21 +158,41 @@ This document describes the internal architecture of the Mobile Bug Agent SDK.
    │  → if duplicate: skip LLM, update count
    │  → if new: continue to AI
    │
-6. AI ANALYSIS (2-8 seconds)
-   │  SinglePromptExecutor (1 LLM call):
+6. KOOG AI ANALYSIS (2-8 seconds)
+   │  SinglePromptExecutor (1 model call):
    │  → parseStackTrace + classifySeverity + generateSummary
    │  → Returns: title, description, severity, confidence,
    │            crash file/line/method, possible cause, steps
    │
-7. TICKET CREATION
+7. ROUTING + WORK CREATION
    │  NotionTicketBackend.createTicket(report)
    │  → Creates page in Bug Tickets DB (always)
    │  → Creates page in Crash Reports DB (if crash)
    │  → Links them via relation property
    │
+   │  Optional GitHub path:
+   │  → Create issue
+   │  → Read source context
+   │  → Run guardrails
+   │  → Open branch/PR only if safe and enabled
+   │
 8. DONE
    → TicketResult { ticketId, url, success }
 ```
+
+## Server demo flow
+
+```text
+mba-sample
+  → POST /report
+  → 202 Accepted { jobId }
+  → CrashProcessingQueue marks QUEUED / ANALYZING / TICKET_CREATED / PR_OPENED / FAILED
+  → JobStore persists state to disk
+  → /events streams each status to the booth page
+  → /jobs/{id} gives point-in-time status for clients and operators
+```
+
+The booth demo depends on this visible chain. Current Workstream D is adding full Koog tool-call events so the page can show not only final status, but each tool step.
 
 ## Public API Surface
 
@@ -183,6 +228,8 @@ Uses **Kermit 2.1.0** (KMP-native).
 - PII is scrubbed **before** any data leaves the device
 - `MBAConfig` constructor is `internal` — forces use of validated Builder
 - Server endpoint requires `X-MBA-API-Key` header auth
+- Server has request rate limiting; booth CORS should be narrowed before public deployment
+- GitHub auto-fix is guarded and kill-switch controlled
 
 ## Testing
 
@@ -198,13 +245,19 @@ mba-agent/src/commonTest/
 
 mba-notion/src/commonTest/
 └── NotionTicketBackendTest.kt   (ktor-client-mock, field mapping, HTTP errors)
+
+mba-github/src/commonTest or jvmTest/
+└── GitHub backend, source reader, guardrails, reviewer assignment tests
+
+mba-server/src/test/
+└── Ktor route, queue, job, SSE, and rate-limit tests
 ```
 
 Run: `./gradlew allTests`
 
 ## Optional Modules
 
-- **`mba-github`** — alternative `TicketBackend` (`GitHubIssueBackend`) plus the auto-fix path:
+- **`mba-github`** — alternative `TicketBackend` (`GitHubIssueBackend`) plus guarded auto-fix primitives:
   - `GitHubAutoFixOpener.openAutoFix` — opens a tracking issue and a `autofix/issue-N-<slug>` branch off `GITHUB_BASE_BRANCH`.
   - `GitHubPullRequestCreator.openFix` — guard-railed PR creator (≤20 diff lines, no new deps, no public-API changes, refuses `main`/`master` base, labels `mba/ai-generated` + `do-not-merge-yet`).
   - Gated on the server by `RawCrashReport.autoFix`, severity (HIGH/CRITICAL only), and `GITHUB_*` env vars. See README §"Routing truth table" for full matrix.
