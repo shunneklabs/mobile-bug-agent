@@ -90,6 +90,8 @@ android {
 
 dependencies {
     implementation(project(":mba-android"))
+    implementation(project(":mba-notion"))
+    implementation(project(":mba-github"))
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.ktor.client.okhttp)

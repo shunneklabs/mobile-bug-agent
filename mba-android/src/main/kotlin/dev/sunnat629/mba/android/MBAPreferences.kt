@@ -10,9 +10,6 @@ import dev.sunnat629.mba.core.MBALog
  *
  * Keys stored:
  * - mba_crash_dir
- * - mba_notion_api_key
- * - mba_notion_ticket_db_id
- * - mba_notion_crash_db_id
  * - mba_backend_endpoint
  * - mba_project_key
  * - mba_server_api_key
@@ -20,10 +17,6 @@ import dev.sunnat629.mba.core.MBALog
  * - mba_llm_provider
  * - mba_llm_api_key
  * - mba_llm_model
- * - mba_skip_git_issue
- * - mba_github_token
- * - mba_github_owner
- * - mba_github_repo
  * - mba_debug
  */
 internal object MBAPreferences {
@@ -32,9 +25,6 @@ internal object MBAPreferences {
     private const val PREFS_NAME = "mba_sdk_config"
 
     private const val KEY_CRASH_DIR = "mba_crash_dir"
-    private const val KEY_NOTION_API_KEY = "mba_notion_api_key"
-    private const val KEY_NOTION_TICKET_DB_ID = "mba_notion_ticket_db_id"
-    private const val KEY_NOTION_CRASH_DB_ID = "mba_notion_crash_db_id"
     private const val KEY_BACKEND_ENDPOINT = "mba_backend_endpoint"
     private const val KEY_PROJECT_KEY = "mba_project_key"
     private const val KEY_SERVER_API_KEY = "mba_server_api_key"
@@ -42,18 +32,11 @@ internal object MBAPreferences {
     private const val KEY_LLM_PROVIDER = "mba_llm_provider"
     private const val KEY_LLM_API_KEY = "mba_llm_api_key"
     private const val KEY_LLM_MODEL = "mba_llm_model"
-    private const val KEY_SKIP_GIT_ISSUE = "mba_skip_git_issue"
-    private const val KEY_GITHUB_TOKEN = "mba_github_token"
-    private const val KEY_GITHUB_OWNER = "mba_github_owner"
-    private const val KEY_GITHUB_REPO = "mba_github_repo"
     private const val KEY_DEBUG = "mba_debug"
 
     fun save(
         context: Context,
         crashDir: String,
-        notionApiKey: String,
-        notionTicketDbId: String,
-        notionCrashDbId: String?,
         backendEndpoint: String?,
         projectKey: String?,
         serverApiKey: String?,
@@ -61,17 +44,10 @@ internal object MBAPreferences {
         llmProvider: String?,
         llmApiKey: String?,
         llmModel: String?,
-        skipGitIssue: Boolean,
-        githubToken: String?,
-        githubOwner: String?,
-        githubRepo: String?,
         debug: Boolean,
     ) {
         prefs(context).edit()
             .putString(KEY_CRASH_DIR, crashDir)
-            .putString(KEY_NOTION_API_KEY, notionApiKey)
-            .putString(KEY_NOTION_TICKET_DB_ID, notionTicketDbId)
-            .putString(KEY_NOTION_CRASH_DB_ID, notionCrashDbId ?: "")
             .putString(KEY_BACKEND_ENDPOINT, backendEndpoint ?: "")
             .putString(KEY_PROJECT_KEY, projectKey ?: "")
             .putString(KEY_SERVER_API_KEY, serverApiKey ?: "")
@@ -79,10 +55,6 @@ internal object MBAPreferences {
             .putString(KEY_LLM_PROVIDER, llmProvider ?: "")
             .putString(KEY_LLM_API_KEY, llmApiKey ?: "")
             .putString(KEY_LLM_MODEL, llmModel ?: "")
-            .putBoolean(KEY_SKIP_GIT_ISSUE, skipGitIssue)
-            .putString(KEY_GITHUB_TOKEN, githubToken ?: "")
-            .putString(KEY_GITHUB_OWNER, githubOwner ?: "")
-            .putString(KEY_GITHUB_REPO, githubRepo ?: "")
             .putBoolean(KEY_DEBUG, debug)
             .apply()
         MBALog.i(TAG, "Config saved to SharedPreferences")
@@ -90,15 +62,6 @@ internal object MBAPreferences {
 
     fun loadCrashDir(context: Context): String? =
         prefs(context).getString(KEY_CRASH_DIR, null)
-
-    fun loadNotionApiKey(context: Context): String? =
-        prefs(context).getString(KEY_NOTION_API_KEY, null)
-
-    fun loadNotionTicketDbId(context: Context): String? =
-        prefs(context).getString(KEY_NOTION_TICKET_DB_ID, null)
-
-    fun loadNotionCrashDbId(context: Context): String? =
-        prefs(context).getString(KEY_NOTION_CRASH_DB_ID, null)?.ifBlank { null }
 
     fun loadBackendEndpoint(context: Context): String? =
         prefs(context).getString(KEY_BACKEND_ENDPOINT, null)?.ifBlank { null }
@@ -121,25 +84,12 @@ internal object MBAPreferences {
     fun loadLlmModel(context: Context): String? =
         prefs(context).getString(KEY_LLM_MODEL, null)?.ifBlank { null }
 
-    fun loadSkipGitIssue(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_SKIP_GIT_ISSUE, true)
-
-    fun loadGithubToken(context: Context): String? =
-        prefs(context).getString(KEY_GITHUB_TOKEN, null)?.ifBlank { null }
-
-    fun loadGithubOwner(context: Context): String? =
-        prefs(context).getString(KEY_GITHUB_OWNER, null)?.ifBlank { null }
-
-    fun loadGithubRepo(context: Context): String? =
-        prefs(context).getString(KEY_GITHUB_REPO, null)?.ifBlank { null }
-
     fun loadDebug(context: Context): Boolean =
         prefs(context).getBoolean(KEY_DEBUG, false)
 
     fun isConfigured(context: Context): Boolean =
         (loadSendToBackend(context) && loadBackendEndpoint(context) != null) ||
-            (loadLlmApiKey(context)?.isNotBlank() == true) ||
-            (loadNotionApiKey(context)?.isNotBlank() == true && loadNotionTicketDbId(context)?.isNotBlank() == true)
+            (loadLlmApiKey(context)?.isNotBlank() == true)
 
     private fun prefs(context: Context): SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

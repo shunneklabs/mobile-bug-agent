@@ -8,24 +8,17 @@ import dev.sunnat629.mba.agent.CrashAnalysisAgent
 import dev.sunnat629.mba.agent.runtime.CrashDeliveryPipeline
 import dev.sunnat629.mba.agent.runtime.FileLocalCrashAggregationStore
 import dev.sunnat629.mba.agent.runtime.MBAAgentCallback
-import dev.sunnat629.mba.agent.runtime.MBAAgentEvent
-import dev.sunnat629.mba.agent.runtime.MBAAgentSink
-import dev.sunnat629.mba.agent.runtime.MBAAgentSinkResult
 import dev.sunnat629.mba.agent.runtime.SdkOnlyCrashOrchestrator
 import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.config.LLM
 import dev.sunnat629.mba.core.config.LLMConfig
-import dev.sunnat629.mba.core.model.TicketResult
 import dev.sunnat629.mba.core.pii.PIISanitizer
 import dev.sunnat629.mba.core.store.LocalDedupCache
-import dev.sunnat629.mba.core.ticket.TicketUpdate
-import dev.sunnat629.mba.github.GitHubIssueBackend
-import dev.sunnat629.mba.notion.NotionTicketBackend
 import java.io.File
 import kotlin.time.Duration.Companion.hours
 
 /**
- * WorkManager worker that processes pending crash files and pushes them to Notion/backend.
+ * WorkManager worker that processes pending crash files.
  *
  * Lifecycle:
  * 1. Reads config from SharedPreferences (MBAPreferences)
@@ -34,7 +27,7 @@ import kotlin.time.Duration.Companion.hours
  *    a. Build ProcessedCrashReport (PII scrub, fingerprint, basic title — no AI)
  *    b. Dedup check (skip if fingerprint already seen)
  *    c. Push raw crash to MBA backend `/report` when configured
- *    d. Push to Notion (Bug Tickets + Crash Reports DBs)
+ *    d. Emit SDKOnly callback/Flow and optional external sinks
  *    e. Delete file only when configured destinations succeed
  * 4. Returns Result.success() or Result.retry()
  *
@@ -55,25 +48,16 @@ internal class CrashUploadWorker(
 
         // 1. Load config from SharedPreferences
         val context = applicationContext
-        if (!MBAPreferences.isConfigured(context)) {
-            MBALog.e(TAG, "MBA not configured — no backend, LLM, or Notion config in SharedPreferences. Failing.")
-            return Result.failure()
-        }
-
         val crashDir = MBAPreferences.loadCrashDir(context)
-        val notionApiKey = MBAPreferences.loadNotionApiKey(context)
-        val ticketDbId = MBAPreferences.loadNotionTicketDbId(context)
-        val crashDbId = MBAPreferences.loadNotionCrashDbId(context)
         val backendEndpoint = MBAPreferences.loadBackendEndpoint(context)
         val projectKey = MBAPreferences.loadProjectKey(context)
         val serverApiKey = MBAPreferences.loadServerApiKey(context)
         val sendToBackend = MBAPreferences.loadSendToBackend(context)
         val llmConfig = loadLlmConfig(context)
-        val skipGitIssue = MBAPreferences.loadSkipGitIssue(context)
-        val githubToken = MBAPreferences.loadGithubToken(context)
-        val githubOwner = MBAPreferences.loadGithubOwner(context)
-        val githubRepo = MBAPreferences.loadGithubRepo(context)
         val debug = MBAPreferences.loadDebug(context)
+        val notionSink = MBAAndroid.notionSink
+        val githubSink = MBAAndroid.githubSink
+        val fallbackTicketBackend = MBAAndroid.fallbackTicketBackend
 
         MBALog.enabled = debug
 
@@ -81,8 +65,12 @@ internal class CrashUploadWorker(
             MBALog.e(TAG, "Missing crashDir config")
             return Result.failure()
         }
+        if (!MBAPreferences.isConfigured(context) && fallbackTicketBackend == null) {
+            MBALog.e(TAG, "MBA not configured — no backend, LLM, or external ticket backend. Failing.")
+            return Result.failure()
+        }
 
-        MBALog.d(TAG, "Config loaded: crashDir=$crashDir, ticketDb=${ticketDbId?.take(8) ?: "none"}..., crashDb=${crashDbId?.take(8) ?: "none"}")
+        MBALog.d(TAG, "Config loaded: crashDir=$crashDir, backend=${backendEndpoint ?: "none"}, llm=${llmConfig?.provider ?: "none"}")
 
         // 2. Read pending crash files
         val pendingCrashes = PendingCrashProcessor.readPending(crashDir)
@@ -94,15 +82,6 @@ internal class CrashUploadWorker(
         MBALog.i(TAG, "Processing ${pendingCrashes.size} pending crash(es)...")
 
         // 3. Setup dependencies
-        val backend = if (!notionApiKey.isNullOrBlank() && !ticketDbId.isNullOrBlank()) {
-            NotionTicketBackend(
-                apiKey = notionApiKey,
-                bugTicketDbId = ticketDbId,
-                crashReportDbId = crashDbId,
-            )
-        } else {
-            null
-        }
         val serverUploader = backendEndpoint
             ?.takeIf { sendToBackend }
             ?.let {
@@ -113,11 +92,6 @@ internal class CrashUploadWorker(
                 )
             }
         val dedupCache = LocalDedupCache(maxSize = 500, ttl = 24.hours)
-        val githubBackend = if (!skipGitIssue && !githubToken.isNullOrBlank() && !githubOwner.isNullOrBlank() && !githubRepo.isNullOrBlank()) {
-            GitHubIssueBackend(githubToken, githubOwner, githubRepo)
-        } else {
-            null
-        }
         val sdkOnlyOrchestrator = llmConfig?.let { config ->
             val factory = AgentFactory(config)
             SdkOnlyCrashOrchestrator(
@@ -131,16 +105,16 @@ internal class CrashUploadWorker(
                     File(context.filesDir, "mba-agent/aggregation-store.json")
                 ),
                 callback = MBAAgentCallback { event -> MBAAndroid.publishAgentEvent(event) },
-                notionSink = backend?.let(::NotionSdkOnlySink),
-                githubSink = githubBackend?.let(::GitHubSdkOnlySink),
-                skipNotion = backend == null,
-                skipGitIssue = skipGitIssue,
+                notionSink = notionSink,
+                githubSink = githubSink,
+                skipNotion = notionSink == null,
+                skipGitIssue = githubSink == null,
             )
         }
         val deliveryPipeline = CrashDeliveryPipeline(
             rawUploader = serverUploader,
             sdkOnlyOrchestrator = sdkOnlyOrchestrator,
-            fallbackTicketBackend = backend,
+            fallbackTicketBackend = fallbackTicketBackend,
             fallbackDedupCache = dedupCache,
         )
 
@@ -173,8 +147,6 @@ internal class CrashUploadWorker(
             }
         }
 
-        backend?.close()
-        githubBackend?.close()
         serverUploader?.close()
 
         MBALog.i(TAG, "Done: $successCount uploaded, $failCount failed out of ${pendingCrashes.size}")
@@ -196,57 +168,5 @@ internal class CrashUploadWorker(
             else -> LLM.gemini(apiKey)
         }
         return if (model.isNullOrBlank()) base else base.model(model)
-    }
-
-    private class NotionSdkOnlySink(
-        private val backend: NotionTicketBackend,
-    ) : MBAAgentSink {
-        override val name: String = "Notion"
-
-        override suspend fun sync(event: MBAAgentEvent): MBAAgentSinkResult {
-            val existingTicketId = event.group.notionTicketId
-            return if (!event.isNewGroup && existingTicketId != null) {
-                val update = backend.updateTicket(
-                    existingTicketId,
-                    TicketUpdate(
-                        incrementCount = true,
-                        occurrenceCount = event.group.occurrenceCount,
-                        uniqueDeviceCount = event.group.uniqueDeviceCount,
-                        newOccurrenceTime = event.occurrence.occurredAt,
-                    ),
-                )
-                backend.createCrashOccurrence(event.report, existingTicketId)
-                update.toSinkResult(created = false)
-            } else {
-                backend.createTicket(event.report).toSinkResult(created = true)
-            }
-        }
-
-        private fun TicketResult.toSinkResult(created: Boolean): MBAAgentSinkResult =
-            MBAAgentSinkResult(
-                ticketId = ticketId.takeIf { it.isNotBlank() },
-                url = url,
-                created = created,
-                success = success,
-                errorMessage = errorMessage,
-            )
-    }
-
-    private class GitHubSdkOnlySink(
-        private val backend: GitHubIssueBackend,
-    ) : MBAAgentSink {
-        override val name: String = "GitHub"
-
-        override suspend fun sync(event: MBAAgentEvent): MBAAgentSinkResult =
-            backend.createTicket(event.report).toSinkResult(created = true)
-
-        private fun TicketResult.toSinkResult(created: Boolean): MBAAgentSinkResult =
-            MBAAgentSinkResult(
-                ticketId = ticketId.takeIf { it.isNotBlank() },
-                url = url,
-                created = created,
-                success = success,
-                errorMessage = errorMessage,
-            )
     }
 }

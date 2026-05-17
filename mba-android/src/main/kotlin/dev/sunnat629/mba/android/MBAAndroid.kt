@@ -5,9 +5,12 @@ import android.content.pm.ApplicationInfo
 import androidx.work.*
 import dev.sunnat629.mba.agent.runtime.MBAAgentCallback
 import dev.sunnat629.mba.agent.runtime.MBAAgentEvent
+import dev.sunnat629.mba.agent.runtime.MBAAgentSink
+import dev.sunnat629.mba.agent.runtime.TicketBackendAgentSink
 import dev.sunnat629.mba.core.MBA
 import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.config.LLMConfig
+import dev.sunnat629.mba.core.ticket.TicketBackend
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -34,6 +37,18 @@ public object MBAAndroid {
 
     @Volatile
     internal var agentCallback: MBAAgentCallback? = null
+        private set
+
+    @Volatile
+    internal var notionSink: MBAAgentSink? = null
+        private set
+
+    @Volatile
+    internal var githubSink: MBAAgentSink? = null
+        private set
+
+    @Volatile
+    internal var fallbackTicketBackend: TicketBackend? = null
         private set
 
     private val eventJson = Json { ignoreUnknownKeys = true }
@@ -101,7 +116,7 @@ public object MBAAndroid {
     }
 
     /**
-     * Save Notion config to SharedPreferences so the WorkManager worker can access it.
+     * Save processing config to SharedPreferences so the WorkManager worker can access it.
      *
      * Called by the app after MBA.configure() — typically in Application.onCreate().
      *
@@ -109,9 +124,6 @@ public object MBAAndroid {
      * MBA.configure(config)
      * MBAAndroid.saveConfig(
      *     context = this,
-     *     notionApiKey = "secret_...",
-     *     notionTicketDbId = "...",
-     *     notionCrashDbId = "...",
      *     backendEndpoint = "http://10.0.2.2:8080",
      *     projectKey = "sample-app-debug",
      *     sendToBackend = true,
@@ -121,18 +133,11 @@ public object MBAAndroid {
      */
     public fun saveConfig(
         context: Context,
-        notionApiKey: String = "",
-        notionTicketDbId: String = "",
-        notionCrashDbId: String? = null,
         backendEndpoint: String? = null,
         projectKey: String? = null,
         serverApiKey: String? = null,
         sendToBackend: Boolean = backendEndpoint != null,
         llm: LLMConfig? = null,
-        skipGitIssue: Boolean = true,
-        githubToken: String? = null,
-        githubOwner: String? = null,
-        githubRepo: String? = null,
         callback: MBAAgentCallback? = null,
         debug: Boolean = false,
     ) {
@@ -142,9 +147,6 @@ public object MBAAndroid {
         MBAPreferences.save(
             context = appContext,
             crashDir = crashDir,
-            notionApiKey = notionApiKey,
-            notionTicketDbId = notionTicketDbId,
-            notionCrashDbId = notionCrashDbId,
             backendEndpoint = backendEndpoint,
             projectKey = projectKey,
             serverApiKey = serverApiKey,
@@ -152,19 +154,47 @@ public object MBAAndroid {
             llmProvider = llm?.provider?.name,
             llmApiKey = llm?.apiKey,
             llmModel = llm?.model,
-            skipGitIssue = skipGitIssue,
-            githubToken = githubToken,
-            githubOwner = githubOwner,
-            githubRepo = githubRepo,
             debug = debug,
         )
         agentCallback = callback
 
-        MBALog.i(TAG, "Notion/backend config saved to SharedPreferences for WorkManager")
+        MBALog.i(TAG, "MBA processing config saved to SharedPreferences for WorkManager")
     }
 
     public fun setAgentCallback(callback: MBAAgentCallback?) {
         agentCallback = callback
+    }
+
+    /**
+     * Register optional SDKOnly sinks supplied by optional modules such as
+     * `mba-notion` or `mba-github`.
+     */
+    public fun setExternalSinks(
+        notionSink: MBAAgentSink? = null,
+        githubSink: MBAAgentSink? = null,
+        fallbackTicketBackend: TicketBackend? = null,
+    ) {
+        this.notionSink = notionSink
+        this.githubSink = githubSink
+        this.fallbackTicketBackend = fallbackTicketBackend
+    }
+
+    /**
+     * Convenience wrapper for optional ticket backend modules.
+     *
+     * Example: pass `NotionTicketBackend` and/or `GitHubIssueBackend` from the
+     * app after adding `mba-notion` / `mba-github` dependencies.
+     */
+    public fun setTicketBackends(
+        notionBackend: TicketBackend? = null,
+        githubBackend: TicketBackend? = null,
+        fallbackTicketBackend: TicketBackend? = notionBackend,
+    ) {
+        setExternalSinks(
+            notionSink = notionBackend?.let(::TicketBackendAgentSink),
+            githubSink = githubBackend?.let(::TicketBackendAgentSink),
+            fallbackTicketBackend = fallbackTicketBackend,
+        )
     }
 
     internal suspend fun publishAgentEvent(event: MBAAgentEvent) {

@@ -2,6 +2,7 @@ package dev.sunnat629.mba.notion
 
 import dev.sunnat629.mba.core.model.ProcessedCrashReport
 import dev.sunnat629.mba.core.model.TicketResult
+import dev.sunnat629.mba.core.ticket.CrashOccurrenceTicketBackend
 import dev.sunnat629.mba.core.ticket.TicketBackend
 import dev.sunnat629.mba.core.ticket.TicketUpdate
 import dev.sunnat629.mba.notion.model.*
@@ -32,7 +33,7 @@ public class NotionTicketBackend(
     private val crashReportDbId: String? = null,
     private val httpClient: HttpClient = defaultHttpClient(),
     private val notionApiVersion: String = "2022-06-28",
-) : TicketBackend, AutoCloseable {
+) : CrashOccurrenceTicketBackend, AutoCloseable {
 
     // Legacy constructor for backward compat
     public constructor(
@@ -163,9 +164,9 @@ public class NotionTicketBackend(
         return postNotionPage(bugTicketDbId, properties, children)
     }
 
-    public suspend fun createCrashOccurrence(
+    override suspend fun createCrashOccurrence(
         report: ProcessedCrashReport,
-        parentBugPageId: String,
+        parentBugTicketId: String,
     ): TicketResult {
         return try {
             val properties = mutableMapOf<String, NotionProperty>()
@@ -190,7 +191,7 @@ public class NotionTicketBackend(
                 listOf(NotionRichText(text = NotionTextContent(report.raw.device.displayName)))
             )
             properties["Last Seen"] = NotionProperty.Date(NotionDate(report.raw.timestamp.toString()))
-            properties["Parent Bug"] = NotionProperty.Relation(listOf(NotionRelationItem(parentBugPageId)))
+            properties["Parent Bug"] = NotionProperty.Relation(listOf(NotionRelationItem(parentBugTicketId)))
 
             val children = listOf(
                 NotionBlock(

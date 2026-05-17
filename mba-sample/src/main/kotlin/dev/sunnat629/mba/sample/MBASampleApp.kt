@@ -8,6 +8,8 @@ import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.config.LLM
 import dev.sunnat629.mba.core.config.MBAConfig
 import dev.sunnat629.mba.core.config.MBAMode
+import dev.sunnat629.mba.github.GitHubIssueBackend
+import dev.sunnat629.mba.notion.NotionTicketBackend
 
 private const val TAG = "Sample"
 private val sampleDeliveryMode: SampleDeliveryMode
@@ -38,6 +40,24 @@ class MBASampleApp : Application() {
         MBAAndroid.install(this)
 
         val mode = sampleDeliveryMode
+        val notionBackend = if (BuildConfig.NOTION_API_KEY.isNotBlank() && BuildConfig.NOTION_TICKET_DB_ID.isNotBlank()) {
+            NotionTicketBackend(
+                apiKey = BuildConfig.NOTION_API_KEY,
+                bugTicketDbId = BuildConfig.NOTION_TICKET_DB_ID,
+                crashReportDbId = BuildConfig.NOTION_CRASH_DB_ID.ifBlank { null },
+            )
+        } else {
+            null
+        }
+        val githubBackend = if (BuildConfig.GITHUB_TOKEN.isNotBlank() && BuildConfig.GITHUB_OWNER.isNotBlank() && BuildConfig.GITHUB_REPO.isNotBlank()) {
+            GitHubIssueBackend(
+                token = BuildConfig.GITHUB_TOKEN,
+                owner = BuildConfig.GITHUB_OWNER,
+                repo = BuildConfig.GITHUB_REPO,
+            )
+        } else {
+            null
+        }
 
         MBA.configure(
             MBAConfig.Builder().apply {
@@ -51,23 +71,21 @@ class MBASampleApp : Application() {
             }.build()
         )
 
-        // Phase 3: Save Notion + local backend config for WorkManager worker.
+        MBAAndroid.setTicketBackends(
+            notionBackend = notionBackend,
+            githubBackend = githubBackend,
+        )
+
+        // Phase 3: Save local processing/backend config for WorkManager worker.
         // Emulator default is 10.0.2.2. Physical devices must use the Mac LAN URL,
         // for example MBA_SAMPLE_BACKEND_ENDPOINT=http://192.168.1.42:8080.
         MBAAndroid.saveConfig(
             context = this,
-            notionApiKey = BuildConfig.NOTION_API_KEY,
-            notionTicketDbId = BuildConfig.NOTION_TICKET_DB_ID,
-            notionCrashDbId = BuildConfig.NOTION_CRASH_DB_ID.ifBlank { null },
             backendEndpoint = BuildConfig.MBA_BACKEND_ENDPOINT,
             projectKey = "sample-app-debug",
             serverApiKey = BuildConfig.MBA_SERVER_API_KEY,
             sendToBackend = mode == SampleDeliveryMode.HOSTED,
             llm = if (BuildConfig.GEMINI_API_KEY.isBlank()) null else LLM.gemini(BuildConfig.GEMINI_API_KEY),
-            skipGitIssue = BuildConfig.GITHUB_TOKEN.isBlank() || BuildConfig.GITHUB_OWNER.isBlank() || BuildConfig.GITHUB_REPO.isBlank(),
-            githubToken = BuildConfig.GITHUB_TOKEN,
-            githubOwner = BuildConfig.GITHUB_OWNER,
-            githubRepo = BuildConfig.GITHUB_REPO,
             callback = MBAAgentCallback { event ->
                 MBALog.i(
                     TAG,
