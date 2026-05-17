@@ -33,3 +33,7 @@ local.properties
 /.junie/
 /issues
 /assets/
+
+# Local runtime/demo data
+/data/
+/mba-server/data/
