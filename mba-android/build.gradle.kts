@@ -23,6 +23,7 @@ android {
 
 dependencies {
     implementation(project(":mba-core"))
+    implementation(project(":mba-agent"))
     implementation(project(":mba-notion"))
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.ktor.client.content.negotiation)
