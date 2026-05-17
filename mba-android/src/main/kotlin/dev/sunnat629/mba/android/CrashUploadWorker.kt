@@ -110,25 +110,34 @@ internal class CrashUploadWorker(
                     continue
                 }
 
-                val serverUploaded = if (serverUploader != null) {
+                val serverResult = if (serverUploader != null) {
                     MBALog.d(TAG, "Uploading raw crash to backend: $backendEndpoint/report")
                     when (val backendResult = serverUploader.upload(rawReport)) {
                         is BackendUploadResult.Accepted -> {
                             MBALog.i(TAG, "✅ Backend accepted: ${file.name} → job=${backendResult.jobId.take(12)}... (${backendResult.status})")
-                            true
+                            BackendDelivery.Accepted
                         }
                         is BackendUploadResult.Rejected -> {
                             MBALog.e(TAG, "❌ Backend rejected ${file.name}: HTTP ${backendResult.statusCode} ${backendResult.reason}")
-                            false
+                            BackendDelivery.Rejected
                         }
                     }
                 } else {
-                    true
+                    BackendDelivery.NotConfigured
                 }
 
-                // Push to Notion after local backend so booth can update without waiting on cloud calls.
-                MBALog.d(TAG, "Uploading to Notion: '${report.title}'")
-                val notionResult = backend.createTicket(report)
+                val notionResult = if (serverResult == BackendDelivery.Accepted) {
+                    MBALog.i(TAG, "Backend accepted crash; skipping direct Notion upload to avoid duplicate tickets")
+                    dev.sunnat629.mba.core.model.TicketResult(
+                        ticketId = "backend",
+                        backendName = "Backend",
+                        success = true,
+                    )
+                } else {
+                    // Direct Notion is a fallback/local mode only. The server owns grouping when configured.
+                    MBALog.d(TAG, "Uploading to Notion: '${report.title}'")
+                    backend.createTicket(report)
+                }
 
                 if (notionResult.success) {
                     MBALog.i(TAG, "✅ Notion uploaded: ${file.name} → ticket=${notionResult.ticketId.take(12)}...")
@@ -137,7 +146,7 @@ internal class CrashUploadWorker(
                     MBALog.e(TAG, "❌ Notion upload failed for ${file.name}: ${notionResult.errorMessage}")
                 }
 
-                if (notionResult.success && serverUploaded) {
+                if (notionResult.success && serverResult != BackendDelivery.Rejected) {
                     file.delete()
                     successCount++
                 } else {
@@ -160,5 +169,11 @@ internal class CrashUploadWorker(
         } else {
             Result.success()
         }
+    }
+
+    private enum class BackendDelivery {
+        Accepted,
+        Rejected,
+        NotConfigured,
     }
 }

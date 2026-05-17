@@ -29,6 +29,9 @@ android {
         val crashDbId = props.getProperty("NOTION_CRASH_DB_ID_OR_URL") ?: ""
         val ticketDbId = props.getProperty("NOTION_TICKET_DB_ID_OR_URL") ?: ""
         val geminiKey = props.getProperty("GEMINI_API_KEY") ?: ""
+        val serverApiKey = props.getProperty("MBA_SERVER_API_KEY")
+            ?: System.getenv("MBA_SERVER_API_KEY")
+            ?: ""
         val backendEndpoint = props.getProperty("MBA_SAMPLE_BACKEND_ENDPOINT")
             ?: System.getenv("MBA_SAMPLE_BACKEND_ENDPOINT")
             ?: "http://10.0.2.2:8080"
@@ -37,6 +40,7 @@ android {
         buildConfigField("String", "NOTION_CRASH_DB_ID", "\"${crashDbId.escapedForBuildConfig()}\"")
         buildConfigField("String", "NOTION_TICKET_DB_ID", "\"${ticketDbId.escapedForBuildConfig()}\"")
         buildConfigField("String", "GEMINI_API_KEY", "\"${geminiKey.escapedForBuildConfig()}\"")
+        buildConfigField("String", "MBA_SERVER_API_KEY", "\"${serverApiKey.escapedForBuildConfig()}\"")
         buildConfigField("String", "MBA_BACKEND_ENDPOINT", "\"${backendEndpoint.escapedForBuildConfig()}\"")
     }
 

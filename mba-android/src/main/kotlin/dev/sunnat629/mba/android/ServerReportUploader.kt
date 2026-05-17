@@ -10,7 +10,6 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
@@ -29,7 +28,7 @@ internal class ServerReportUploader(
         val response: HttpResponse = httpClient.post("${endpoint.trimEnd('/')}/report") {
             contentType(ContentType.Application.Json)
             projectKey?.takeIf { it.isNotBlank() }?.let { header("X-MBA-Project-Key", it) }
-            serverApiKey?.takeIf { it.isNotBlank() }?.let { header(HttpHeaders.Authorization, "Bearer $it") }
+            serverApiKey?.takeIf { it.isNotBlank() }?.let { header("X-MBA-API-Key", it) }
             setBody(payload)
         }
 

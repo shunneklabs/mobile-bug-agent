@@ -175,6 +175,14 @@ fun Application.module() {
             call.respond(pending)
         }
 
+        get("/booth/bug-groups") {
+            call.respond(serverModule.crashAggregationStore.getGroups().take(50))
+        }
+
+        get("/booth/crash-occurrences") {
+            call.respond(serverModule.crashAggregationStore.getOccurrences(limit = 100))
+        }
+
         post("/booth/force-decision") {
             if (!call.isLocalOperatorCall()) {
                 return@post call.respond(HttpStatusCode.Forbidden, mapOf("error" to "Operator action only"))
@@ -233,13 +241,18 @@ fun Application.module() {
             }
 
             val existingJobs = serverModule.jobStore.getAllJobs().size
+            val existingGroups = serverModule.crashAggregationStore.getGroups().size
             serverModule.jobStore.clearAll()
+            serverModule.crashAggregationStore.clearAll()
 
             serverModule.queue.publishBoothEvent(
                 type = "dashboard_reset",
                 message = "Dashboard reset by operator",
                 level = "warning",
-                metadata = mapOf("clearedJobs" to existingJobs.toString()),
+                metadata = mapOf(
+                    "clearedJobs" to existingJobs.toString(),
+                    "clearedBugGroups" to existingGroups.toString(),
+                ),
             )
 
             call.respond(BoothActionResponse(ok = true, message = "Dashboard reset", clearedJobs = existingJobs))

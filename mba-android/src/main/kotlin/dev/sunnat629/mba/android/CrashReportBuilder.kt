@@ -62,6 +62,7 @@ internal object CrashReportBuilder {
             appendLine()
             if (raw.isFatal) append("Fatal crash on thread '${raw.threadName}'.")
             else append("Non-fatal error on thread '${raw.threadName}'.")
+            append(" App ${raw.appVersion} (${raw.buildType}).")
             crashMethod?.let {
                 appendLine()
                 append("Location: $it")
@@ -79,13 +80,34 @@ internal object CrashReportBuilder {
             confidence = 1.0f, // No AI uncertainty — this is raw data
             title = title,
             description = description,
-            possibleCause = null, // AI would fill this
-            stepsToReproduce = null, // AI would fill this
+            possibleCause = buildPossibleCause(raw, crashFile, crashLine, crashMethod),
+            stepsToReproduce = buildStepsToReproduce(raw),
             crashFile = crashFile,
             crashLine = crashLine,
             crashMethod = crashMethod,
             isAppCode = firstAppFrame != null,
             sanitizedStackTrace = sanitizedTrace,
         )
+    }
+
+    private fun buildStepsToReproduce(raw: RawCrashReport): String =
+        when {
+            raw.breadcrumbs.isNotEmpty() -> raw.breadcrumbs
+                .mapIndexed { index, breadcrumb -> "${index + 1}. $breadcrumb" }
+                .joinToString("\n")
+            raw.currentScreen != null -> "1. Open ${raw.currentScreen}\n2. Repeat the action that triggered ${raw.exceptionType.substringAfterLast(".")}"
+            else -> "1. Launch app version ${raw.appVersion}\n2. Repeat the user action immediately before the crash"
+        }
+
+    private fun buildPossibleCause(
+        raw: RawCrashReport,
+        crashFile: String?,
+        crashLine: Int?,
+        crashMethod: String?,
+    ): String = buildString {
+        append(raw.exceptionType.substringAfterLast("."))
+        crashMethod?.let { append(" in $it") }
+        crashFile?.let { append(" ($it${crashLine?.let { line -> ":$line" } ?: ""})") }
+        raw.message?.let { append(": $it") }
     }
 }

@@ -4,9 +4,11 @@ import dev.sunnat629.mba.core.model.*
 import io.ktor.client.*
 import io.ktor.client.engine.mock.*
 import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.client.request.HttpRequestData
+import io.ktor.client.request.HttpResponseData
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
-import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -59,7 +61,7 @@ class NotionTicketBackendTest {
     }
 
     @Test
-    fun successfulTicketCreation() = runTest {
+    fun successfulTicketCreation() = runBlocking {
         val mockClient = createMockClient { request ->
             assertEquals("api.notion.com", request.url.host)
             assertEquals("/v1/pages", request.url.encodedPath)
@@ -79,7 +81,7 @@ class NotionTicketBackendTest {
 
         val backend = NotionTicketBackend(
             apiKey = "secret_test",
-            databaseId = "db-456",
+            bugTicketDbId = "db-456",
             httpClient = mockClient,
         )
 
@@ -91,7 +93,7 @@ class NotionTicketBackendTest {
     }
 
     @Test
-    fun httpErrorReturnsFailure() = runTest {
+    fun httpErrorReturnsFailure() = runBlocking {
         val mockClient = createMockClient {
             respond(
                 content = """{"message": "Invalid token"}""",
@@ -102,7 +104,7 @@ class NotionTicketBackendTest {
 
         val backend = NotionTicketBackend(
             apiKey = "bad_token",
-            databaseId = "db-456",
+            bugTicketDbId = "db-456",
             httpClient = mockClient,
         )
 
@@ -112,7 +114,71 @@ class NotionTicketBackendTest {
     }
 
     @Test
-    fun customFieldMappingIsApplied() = runTest {
+    fun schemaMismatchRetriesWithActualTitlePropertyAndDropsMissingAggregationFields() = runBlocking {
+        var postCount = 0
+        var retryBody = ""
+
+        val mockClient = createMockClient { request ->
+            when (request.url.encodedPath) {
+                "/v1/pages" -> {
+                    postCount += 1
+                    if (postCount == 1) {
+                        respond(
+                            content = """{
+                                "object":"error",
+                                "status":400,
+                                "code":"validation_error",
+                                "message":"Name is not a property that exists. Device Matrix is not a property that exists."
+                            }""",
+                            status = HttpStatusCode.BadRequest,
+                            headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                        )
+                    } else {
+                        retryBody = String(request.body.toByteArray())
+                        respond(
+                            content = """{
+                                "id": "page-actual-title",
+                                "url": "https://notion.so/page-actual-title",
+                                "object": "page"
+                            }""",
+                            status = HttpStatusCode.OK,
+                            headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                        )
+                    }
+                }
+                "/v1/databases/db-456" -> respond(
+                    content = """{
+                        "id": "db-456",
+                        "properties": {
+                            "Task name": { "id": "title", "type": "title" },
+                            "Severity": { "id": "severity", "type": "select" },
+                            "Fingerprint": { "id": "fingerprint", "type": "rich_text" }
+                        }
+                    }""",
+                    status = HttpStatusCode.OK,
+                    headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                )
+                else -> error("Unexpected Notion path: ${request.url.encodedPath}")
+            }
+        }
+
+        val backend = NotionTicketBackend(
+            apiKey = "secret_test",
+            bugTicketDbId = "db-456",
+            httpClient = mockClient,
+        )
+
+        val result = backend.createTicket(testReport)
+
+        assertTrue(result.success)
+        assertEquals(2, postCount)
+        assertTrue(retryBody.contains("Task name"))
+        assertFalse(retryBody.contains("Device Matrix"))
+        assertFalse(retryBody.contains("Occurrences"))
+    }
+
+    @Test
+    fun defaultFieldNamesAreApplied() = runBlocking {
         var capturedBody = ""
 
         val mockClient = createMockClient { request ->
@@ -128,26 +194,16 @@ class NotionTicketBackendTest {
             )
         }
 
-        val customMapping = NotionFieldMapping(
-            title = "Bug Title",
-            severity = "Priority",
-            fingerprint = "Hash",
-            device = "Device Info",
-            rootCause = "Cause",
-        )
-
         val backend = NotionTicketBackend(
             apiKey = "secret_test",
-            databaseId = "db-456",
-            fieldMapping = customMapping,
+            bugTicketDbId = "db-456",
             httpClient = mockClient,
         )
 
         val result = backend.createTicket(testReport)
         assertTrue(result.success)
 
-        // Verify custom field names appear in the request body
-        assertTrue(capturedBody.contains("Bug Title"), "Should use custom title field name")
-        assertTrue(capturedBody.contains("Priority"), "Should use custom severity field name")
+        assertTrue(capturedBody.contains("Name"), "Should use default title field name")
+        assertTrue(capturedBody.contains("Severity"), "Should use default severity field name")
     }
 }

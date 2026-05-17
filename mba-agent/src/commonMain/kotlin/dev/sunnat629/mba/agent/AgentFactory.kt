@@ -107,6 +107,7 @@ internal interface CrashAnalysisExecutor {
         screen: String?,
         breadcrumbs: List<String>,
         device: DeviceContext,
+        crashContext: String,
     ): CrashSummary
 }
 
@@ -153,10 +154,12 @@ internal class LegacyMultiStepExecutor(
         screen: String?,
         breadcrumbs: List<String>,
         device: DeviceContext,
+        crashContext: String,
     ): CrashSummary {
         val input = buildString {
             appendLine("Parsed trace: ${json.encodeToString(parsed)}")
             appendLine("Severity: ${severity.severity} (${severity.reasoning})")
+            appendLine(crashContext)
             screen?.let { appendLine("Current screen: $it") }
             if (breadcrumbs.isNotEmpty()) {
                 appendLine("Breadcrumbs: ${breadcrumbs.joinToString(" \u2192 ")}")

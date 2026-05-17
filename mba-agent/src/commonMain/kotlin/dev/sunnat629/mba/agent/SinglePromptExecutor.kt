@@ -39,6 +39,7 @@ internal class SinglePromptExecutor(
         screen: String?,
         breadcrumbs: List<String>,
         device: DeviceContext,
+        crashContext: String,
     ): CrashSummary {
         return lastAnalysis?.toCrashSummary()
             ?: CrashSummary(title = "Unknown crash", description = "Single prompt cache miss")
@@ -87,6 +88,11 @@ internal class SinglePromptExecutor(
               "stepsToReproduce": "1. Open checkout\n2. Start payment\n3. Rotate device",
               "possibleCause": "Payment coroutine outlives ViewModel lifecycle"
             }
+
+            Required:
+            - stepsToReproduce MUST be non-null. Use breadcrumbs/current screen when present.
+            - possibleCause MUST be non-null. Tie it to exception type, app frame, method, or lifecycle context.
+            - description MUST mention failing method/file when known and include app version/build context if provided.
 
             Severity levels: CRITICAL (data loss/security), HIGH (main flow), MEDIUM (edge case), LOW (cosmetic).
             Title format: "[Screen] [what happens] [trigger]".

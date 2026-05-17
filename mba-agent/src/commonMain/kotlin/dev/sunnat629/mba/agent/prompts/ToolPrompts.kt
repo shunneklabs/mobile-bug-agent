@@ -37,6 +37,10 @@ internal object ToolPrompts {
           "stepsToReproduce": "1. Open checkout\n2. Start payment\n3. Rotate",
           "possibleCause": "Payment coroutine outlives ViewModel..."
         }
+        Required:
+        - stepsToReproduce MUST be non-null. Use breadcrumbs/current screen when present.
+        - possibleCause MUST be non-null. Tie it to exception type, app frame, method, or lifecycle context.
+        - description MUST mention the failing method/file when known and include the affected app version/build context if provided.
         Title format: "[Screen] [what happens] [when/trigger]".
         Be direct. No "I think". No raw stack traces in description.
     """.trimIndent()

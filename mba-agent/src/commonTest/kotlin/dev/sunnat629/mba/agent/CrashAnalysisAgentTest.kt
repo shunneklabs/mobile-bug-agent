@@ -82,6 +82,7 @@ class CrashAnalysisAgentTest {
             screen: String?,
             breadcrumbs: List<String>,
             device: DeviceContext,
+            crashContext: String,
         ): CrashSummary {
             summaryCallCount++
             return CrashSummary(

@@ -16,6 +16,7 @@ import dev.sunnat629.mba.server.orchestration.DemoOrchestrator
 import dev.sunnat629.mba.server.orchestration.GitHubAutoFixTool
 import dev.sunnat629.mba.server.orchestration.OperatorDecisionHandler
 import dev.sunnat629.mba.server.orchestration.SeverityRouter
+import dev.sunnat629.mba.server.persistence.CrashAggregationStore
 import dev.sunnat629.mba.server.persistence.JobStore
 import dev.sunnat629.mba.server.queue.CrashProcessingQueue
 import io.ktor.server.application.*
@@ -61,7 +62,12 @@ class ServerModule(
 
     val dedupCache = LocalDedupCache(maxSize = 1000, ttl = 24.hours)
 
-    val analysisAgent = CrashAnalysisAgent(agentFactory, piiSanitizer, dedupCache)
+    val analysisAgent = CrashAnalysisAgent(
+        agentFactory = agentFactory,
+        piiSanitizer = piiSanitizer,
+        dedupCache = dedupCache,
+        useLocalDedup = false,
+    )
 
     /**
      * Notion backend — `null` when `NOTION_API_KEY`/`NOTION_DATABASE_ID` are not
@@ -110,6 +116,8 @@ class ServerModule(
 
     val jobStore = JobStore(dataDir)
 
+    val crashAggregationStore = CrashAggregationStore(dataDir)
+
     val queue = CrashProcessingQueue(jobStore)
 
     private val demoEventSink = object : DemoEventSink {
@@ -148,6 +156,7 @@ class ServerModule(
         githubAutoFixTool = githubAutoFixOpener?.let { opener ->
             GitHubAutoFixTool { report -> opener.openAutoFix(report) }
         },
+        aggregationStore = crashAggregationStore,
     )
 
     val operatorDecisionHandler = OperatorDecisionHandler(
@@ -159,6 +168,7 @@ class ServerModule(
         githubAutoFixTool = githubAutoFixOpener?.let { opener ->
             GitHubAutoFixTool { report -> opener.openAutoFix(report) }
         },
+        aggregationStore = crashAggregationStore,
     )
 
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

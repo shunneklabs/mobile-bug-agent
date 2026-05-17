@@ -17,6 +17,9 @@ public object MBA {
     private var config: MBAConfig? = null
 
     @Volatile
+    private var globalMetadata: Map<String, String> = emptyMap()
+
+    @Volatile
     public var currentScreen: String? = null
         internal set
 
@@ -97,6 +100,10 @@ public object MBA {
         breadcrumbs.add(message)
     }
 
+    public fun setGlobalMetadata(metadata: Map<String, String>) {
+        globalMetadata = metadata
+    }
+
     public fun logError(
         throwable: Throwable,
         metadata: Map<String, String> = emptyMap(),
@@ -128,6 +135,7 @@ public object MBA {
     ) {
         MBALog.d(TAG, "handleCrash: fatal=$isFatal, thread=$threadName, type=${throwable::class.simpleName}")
         try {
+            val mergedMetadata = globalMetadata + metadata
             CrashWriter.writeToDisk(
                 crashDir = crashDirPath,
                 throwable = throwable,
@@ -136,7 +144,7 @@ public object MBA {
                 coroutineContext = coroutineContext,
                 currentScreen = currentScreen,
                 breadcrumbs = breadcrumbs.snapshot(),
-                metadata = metadata,
+                metadata = mergedMetadata,
             )
             MBALog.d(TAG, "Crash written to disk successfully")
         } catch (e: Throwable) {

@@ -36,6 +36,10 @@ public sealed class NotionProperty {
     @Serializable
     @SerialName("date")
     public data class Date(val date: NotionDate) : NotionProperty()
+
+    @Serializable
+    @SerialName("relation")
+    public data class Relation(val relation: List<NotionRelationItem>) : NotionProperty()
 }
 
 @Serializable
@@ -57,6 +61,11 @@ public data class NotionSelectItem(
 @Serializable
 public data class NotionDate(
     val start: String
+)
+
+@Serializable
+public data class NotionRelationItem(
+    val id: String
 )
 
 @Serializable
@@ -82,4 +91,16 @@ public data class NotionParagraphBlock(
 public data class NotionPageResponse(
     val id: String,
     val url: String? = null
+)
+
+@Serializable
+public data class NotionDatabaseResponse(
+    val id: String,
+    val properties: Map<String, NotionDatabaseProperty> = emptyMap(),
+)
+
+@Serializable
+public data class NotionDatabaseProperty(
+    val id: String? = null,
+    val type: String,
 )

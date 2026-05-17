@@ -1,8 +1,8 @@
 package dev.sunnat629.mba.android
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import androidx.work.*
-import dev.sunnat629.mba.android.capture.MBACrashHandler
 import dev.sunnat629.mba.core.MBA
 import dev.sunnat629.mba.core.MBALog
 import java.util.concurrent.TimeUnit
@@ -36,19 +36,41 @@ public object MBAAndroid {
 
         val appContext = context.applicationContext
 
-        // 1. Install UncaughtExceptionHandler
-        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
-        val mbaHandler = MBACrashHandler(appContext, defaultHandler)
-        Thread.setDefaultUncaughtExceptionHandler(mbaHandler)
+        MBA.setGlobalMetadata(androidAppMetadata(appContext))
 
-        // 2. Install core crash handler
+        // 1. Install core crash handler. Metadata is injected through MBA global metadata
+        // so we do not install a second Android handler that would write duplicate crash files.
         val crashDir = appContext.filesDir.resolve("mba-crashes").absolutePath
         MBA.install(crashDir)
 
-        // 3. Enqueue WorkManager to process pending crashes from previous sessions
+        // 2. Enqueue WorkManager to process pending crashes from previous sessions
         enqueueCrashUploadWorker(appContext)
 
         MBALog.i(TAG, "MBAAndroid installed. WorkManager enqueued for pending crashes.")
+    }
+
+    private fun androidAppMetadata(context: Context): Map<String, String> {
+        val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+        val versionName = packageInfo.versionName ?: "unknown"
+        val versionCode = if (android.os.Build.VERSION.SDK_INT >= 28) {
+            packageInfo.longVersionCode.toString()
+        } else {
+            @Suppress("DEPRECATION")
+            packageInfo.versionCode.toString()
+        }
+        val buildType = if ((context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) "debug" else "release"
+        return mapOf(
+            "appId" to context.packageName,
+            "applicationId" to context.packageName,
+            "android.package_name" to context.packageName,
+            "android.app_version" to versionName,
+            "android.version_code" to versionCode,
+            "android.build_type" to buildType,
+            "android.sdk_int" to android.os.Build.VERSION.SDK_INT.toString(),
+            "android.os_version" to (android.os.Build.VERSION.RELEASE ?: "unknown"),
+            "android.device_model" to android.os.Build.MODEL,
+            "android.device_manufacturer" to android.os.Build.MANUFACTURER,
+        )
     }
 
     /**

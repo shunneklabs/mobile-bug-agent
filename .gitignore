@@ -37,3 +37,6 @@ local.properties
 # Local runtime/demo data
 /data/
 /mba-server/data/
+
+# Local architecture planning notes
+/scripts/sdk-only-agent-flow.md

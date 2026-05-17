@@ -27,7 +27,7 @@ class ServerReportUploaderTest {
             val engine = MockEngine { request ->
                 assertEquals("http://localhost:8080/report", request.url.toString())
                 assertEquals("sample-app-debug", request.headers["X-MBA-Project-Key"])
-                assertEquals("Bearer test-token", request.headers[HttpHeaders.Authorization])
+                assertEquals("test-token", request.headers["X-MBA-API-Key"])
                 val body = request.body.readText()
                 assertTrue(body.contains("\"id\":\"crash-1\""), body)
                 assertTrue(body.contains("\"exceptionType\":\"java.lang.IllegalStateException\""), body)
