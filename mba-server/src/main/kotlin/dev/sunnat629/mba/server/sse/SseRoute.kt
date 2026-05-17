@@ -1,6 +1,8 @@
 package dev.sunnat629.mba.server.sse
 
 import dev.sunnat629.mba.server.queue.CrashProcessingQueue
+import dev.sunnat629.mba.server.queue.SseEvent
+import dev.sunnat629.mba.server.model.JobStatus
 import io.ktor.http.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -25,6 +27,18 @@ fun Route.sseEvents(queue: CrashProcessingQueue) {
         // otherwise default to `text/plain` and the browser would silently
         // refuse to treat it as an EventSource stream.
         call.respondTextWriter(contentType = ContentType.Text.EventStream) {
+            val connected = SseEvent(
+                jobId = "booth",
+                status = JobStatus.QUEUED,
+                type = "connection",
+                stage = "queued",
+                message = "SSE connected — waiting for crash reports",
+                timestamp = System.currentTimeMillis(),
+                artifactUrl = null,
+            )
+            write("data: ${json.encodeToString(connected)}\n\n")
+            flush()
+
             coroutineScope {
                 // Heartbeat — every HEARTBEAT_MS emit a comment line so the
                 // connection stays warm during long Gemini / Notion calls.
