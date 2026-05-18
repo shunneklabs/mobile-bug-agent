@@ -1,9 +1,8 @@
 package dev.sunnat629.mba.sample
 
 import android.content.Context
+import androidx.core.content.edit
 import dev.sunnat629.mba.android.MBAAndroid
-import dev.sunnat629.mba.agent.runtime.MBAAgentBatchCallback
-import dev.sunnat629.mba.agent.runtime.MBAAgentCallback
 import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.config.LLM
 import dev.sunnat629.mba.core.config.LLMConfig
@@ -77,10 +76,10 @@ object SampleRuntime {
         val appliedSettings = settings.normalized()
         if (persist) {
             appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .edit()
-                .putString(KEY_DELIVERY_MODE, appliedSettings.deliveryMode.name)
-                .putBoolean(KEY_USE_AGENT, appliedSettings.useAgent)
-                .apply()
+                .edit {
+                    putString(KEY_DELIVERY_MODE, appliedSettings.deliveryMode.name)
+                        .putBoolean(KEY_USE_AGENT, appliedSettings.useAgent)
+                }
         }
 
         _settings.value = appliedSettings
@@ -92,7 +91,7 @@ object SampleRuntime {
             sendToBackend = appliedSettings.deliveryMode == SampleDeliveryMode.HOSTED,
             llm = geminiConfig,
             useAgent = appliedSettings.useAgent,
-            callback = MBAAgentCallback { event ->
+            callback = { event ->
                 MBALog.i(
                     TAG,
                     "SDKOnly latest callback: group=${event.group.id}, new=${event.isNewGroup}, " +
@@ -100,7 +99,7 @@ object SampleRuntime {
                         "title='${event.report.title}', severity=${event.report.severity}",
                 )
             },
-            batchCallback = MBAAgentBatchCallback { batch ->
+            batchCallback = { batch ->
                 MBALog.i(
                     TAG,
                     "SDKOnly batch callback: latest=${batch.latest.group.id}, " +

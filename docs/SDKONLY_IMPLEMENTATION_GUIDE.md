@@ -1,28 +1,22 @@
 # SDKOnly Android Implementation Guide
 
 This guide shows how to add Mobile Bug Agent to an Android app in SDKOnly mode.
-SDKOnly mode processes crashes inside the app and lets the app decide whether
-to keep results in callbacks, send them to Notion, send them to GitHub, or send
-them somewhere else.
+SDKOnly means the app captures and processes crashes locally, then the app
+decides what to do with the result.
 
-## What SDKOnly Does
+Use SDKOnly when you want:
 
-SDKOnly mode can:
+- no MBA hosted backend
+- app-owned LLM keys or local model endpoints
+- app-layer callbacks or JSON payloads
+- optional app-owned Notion/GitHub delivery
+- local duplicate grouping before external ticket creation
 
-- capture fatal JVM/Kotlin crashes
-- record explicit non-fatal errors
-- detect supported Android ANR exits after app restart
-- write raw crash reports to app-private storage
-- process pending reports after the app starts again
-- run Koog/LLM analysis when configured
-- fall back to raw technical reports when analysis is disabled or fails
-- group duplicate crashes locally
-- emit Kotlin callbacks, flows, and JSON payloads
-- optionally deliver grouped bugs to Notion and GitHub
+Hosted/SaaS setup is separate. This guide focuses only on SDKOnly.
 
-## 1. Add Dependencies
+## 1. Add The SDK
 
-For a published SDK, the app should depend on the Android adapter:
+For a published SDK:
 
 ```kotlin
 dependencies {
@@ -30,7 +24,7 @@ dependencies {
 }
 ```
 
-If you are running from this repository, use the project dependency:
+When working inside this repository:
 
 ```kotlin
 dependencies {
@@ -38,7 +32,7 @@ dependencies {
 }
 ```
 
-Add optional integrations only when the app needs them:
+Only add external delivery modules if your app needs them:
 
 ```kotlin
 dependencies {
@@ -47,7 +41,7 @@ dependencies {
 }
 ```
 
-Repository builds use:
+Repository form:
 
 ```kotlin
 dependencies {
@@ -56,36 +50,24 @@ dependencies {
 }
 ```
 
-Apps do not need to add `mba-core` or `mba-agent` separately when using the
-published Android SDK. The Android adapter brings the required core and agent
-pieces.
+You do not need to add `mba-core` or `mba-agent` directly when consuming the
+Android SDK. `mba-android` brings the required core and agent pieces.
 
-## 2. Store Secrets Outside Source Control
+## 2. Configure One LLM
 
-Do not hard-code provider keys in source files. Use your normal secret
-management approach, build config, encrypted remote config, or CI-injected
-values.
-
-For the sample app, `local.properties` stays intentionally simple:
+The simplest plug-and-play setup uses Gemini:
 
 ```properties
 GEMINI_API_KEY=your_gemini_key
-NOTION_API_KEY=your_notion_token
-NOTION_TICKET_DB_ID_OR_URL=your_notion_database_id
-NOTION_CRASH_DB_ID_OR_URL=optional_crash_occurrence_database_id
-GITHUB_TOKEN=github_pat_or_app_token
-GITHUB_OWNER=owner
-GITHUB_REPO=repo
 ```
 
-In a production app, use whatever secret and BuildConfig names match your app.
-The SDK only needs an `LLMConfig` object.
+Your production app can use any secret source: BuildConfig, CI-injected values,
+encrypted remote config, dependency injection, or another app-owned mechanism.
+The SDK only needs an `LLMConfig`.
 
-## 3. Initialize Early In `Application`
+## 3. Initialize In `Application`
 
-Configure MBA as early as possible in `Application.onCreate`.
-
-Common imports used by the snippets:
+Install and configure MBA as early as possible.
 
 ```kotlin
 import android.app.Application
@@ -95,9 +77,7 @@ import dev.sunnat629.mba.core.MBA
 import dev.sunnat629.mba.core.config.LLM
 import dev.sunnat629.mba.core.config.MBAConfig
 import dev.sunnat629.mba.core.config.MBAMode
-```
 
-```kotlin
 class ExampleApp : Application() {
     override fun onCreate() {
         super.onCreate()
@@ -109,16 +89,13 @@ class ExampleApp : Application() {
         MBA.configure(
             MBAConfig.Builder().apply {
                 mode = MBAMode.SdkOnly(llm = llmConfig)
-                useAgent = true
                 debug = BuildConfig.DEBUG
             }.build(),
         )
 
         MBAAndroid.saveConfig(
             context = this,
-            sendToBackend = false,
             llm = llmConfig,
-            useAgent = true,
             callback = { event ->
                 Log.i("MBA", "Crash group=${event.group.id}, title=${event.report.title}")
             },
@@ -137,89 +114,25 @@ class ExampleApp : Application() {
 }
 ```
 
-The Android artifact also includes AndroidX Startup metadata, so install may
-already have run before `Application.onCreate`. Calling `MBAAndroid.install(this)`
-again is safe; it is idempotent. Keeping the explicit call makes the setup work
-even if an app disables AndroidX Startup.
+`MBAAndroid.install(this)` is idempotent. The Android artifact also includes
+AndroidX Startup metadata, so install may already have run before
+`Application.onCreate`; the explicit call keeps setup predictable if the app
+disables AndroidX Startup.
 
-## 4. Choose Agent Or Raw Fallback
+SDKOnly defaults are `sendToBackend = false` and `useAgent = true`. Only pass
+those flags when the app needs to override the default route.
 
-Use local agent analysis when the app has an LLM configuration and wants richer
-reports:
+## 4. Add Crash Context
 
-```kotlin
-mode = MBAMode.SdkOnly(
-    llm = LLM.gemini(BuildConfig.GEMINI_API_KEY),
-)
-useAgent = true
-```
-
-### Provider And Model Options
-
-SDKOnly supports provider and model selection through `LLMConfig`. The sample
-app uses Gemini to stay plug-and-play, but app developers can choose any of
-these in their own app layer:
-
-```kotlin
-LLM.gemini(apiKey, model = "gemini-2.0-flash")
-LLM.openAI(apiKey, model = "gpt-4o-mini")
-LLM.anthropic(apiKey, model = "claude-sonnet-4-20250514")
-LLM.ollama(model = "llama3.2:latest", endpoint = "http://10.0.2.2:11434")
-LLM.openRouter(apiKey, model = "anthropic/claude-3.5-sonnet")
-LLM.mistral(apiKey, model = "mistral-large-latest")
-LLM.deepSeek(apiKey, model = "deepseek-chat")
-LLM.dashScope(apiKey, model = "qwen-plus")
-LLM.custom(apiKey = "", endpoint = "http://10.0.2.2:1234/v1", model = "local-model")
-```
-
-`LLM.custom(...)` is for OpenAI-compatible local or hosted gateways such as LM
-Studio, vLLM, LiteLLM, or an app-owned proxy.
-
-Examples:
-
-```kotlin
-// OpenAI
-val llmConfig = LLM.openAI(
-    apiKey = BuildConfig.OPENAI_API_KEY,
-    model = "gpt-4o-mini",
-)
-
-// Local Ollama from Android emulator to host machine
-val llmConfig = LLM.ollama(
-    model = "llama3.2:latest",
-    endpoint = "http://10.0.2.2:11434",
-)
-
-// OpenAI-compatible local gateway such as LM Studio, vLLM, or LiteLLM
-val llmConfig = LLM.custom(
-    endpoint = "http://10.0.2.2:1234/v1",
-    model = "local-model",
-)
-```
-
-Use raw fallback when the app does not want local LLM analysis:
-
-```kotlin
-mode = MBAMode.SdkOnly()
-useAgent = false
-```
-
-Raw fallback still produces callback and JSON payloads with exception details,
-device/app metadata, fingerprint, grouping information, and optional external
-delivery. It does not generate agentic fields such as inferred root cause or
-richer reproduction steps.
-
-## 5. Add Runtime Context
-
-MBA captures technical crash data automatically. Add only safe, intentional
-context.
+MBA captures fatal crashes automatically. Add lightweight context where it helps
+debugging.
 
 ```kotlin
 MBA.setScreen("CheckoutScreen")
 MBA.addBreadcrumb("Tapped Pay")
 ```
 
-For non-fatal errors:
+Log non-fatal errors explicitly:
 
 ```kotlin
 try {
@@ -232,31 +145,113 @@ try {
 }
 ```
 
-For coroutine scopes:
+Attach the coroutine handler where useful:
 
 ```kotlin
 val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + MBA.exceptionHandler)
 ```
 
-Do not put emails, tokens, payment data, raw user input, or private content in
-screen names, breadcrumbs, exception messages, or metadata.
+Treat crash context like logs. Do not put emails, access tokens, payment data,
+raw user input, or private content in screen names, breadcrumbs, exception
+messages, or custom metadata.
 
-## 6. Use Callback-Only Mode
+## 5. Choose Agent Or Raw Fallback
 
-Callback-only mode is the smallest SDKOnly setup. The SDK processes crashes and
-returns results to the app. The app owns the next step.
+Use the Koog agent when you want richer reports:
+
+```kotlin
+MBAConfig.Builder().apply {
+    mode = MBAMode.SdkOnly(llm = LLM.gemini(BuildConfig.GEMINI_API_KEY))
+    useAgent = true
+}
+```
+
+Use raw fallback when you do not want local LLM analysis:
+
+```kotlin
+MBAConfig.Builder().apply {
+    mode = MBAMode.SdkOnly()
+    useAgent = false
+}
+
+MBAAndroid.saveConfig(
+    context = this,
+    sendToBackend = false,
+    llm = null,
+    useAgent = false,
+)
+```
+
+Raw fallback still gives the app structured crash data, device/app metadata,
+fingerprint, local grouping, callbacks, JSON, and optional external delivery.
+It does not infer richer reproduction steps or possible cause.
+
+## 6. Use Any Supported Provider
+
+The sample app stays simple with Gemini, but external apps are not bound to
+Gemini. SDKOnly accepts any `LLMConfig` supported by the SDK.
+
+```kotlin
+val llmConfig = LLM.gemini(apiKey, model = "gemini-2.0-flash")
+```
+
+```kotlin
+val llmConfig = LLM.openAI(apiKey, model = "gpt-4o-mini")
+```
+
+```kotlin
+val llmConfig = LLM.anthropic(apiKey, model = "claude-sonnet-4-20250514")
+```
+
+```kotlin
+val llmConfig = LLM.ollama(
+    model = "llama3.2:latest",
+    endpoint = "http://10.0.2.2:11434",
+)
+```
+
+```kotlin
+val llmConfig = LLM.openRouter(
+    apiKey = apiKey,
+    model = "anthropic/claude-3.5-sonnet",
+)
+```
+
+```kotlin
+val llmConfig = LLM.mistral(apiKey, model = "mistral-large-latest")
+val llmConfig = LLM.deepSeek(apiKey, model = "deepseek-chat")
+val llmConfig = LLM.dashScope(apiKey, model = "qwen-plus")
+```
+
+For OpenAI-compatible local or hosted gateways such as LM Studio, vLLM, LiteLLM,
+or an app-owned proxy:
+
+```kotlin
+val llmConfig = LLM.custom(
+    apiKey = "",
+    endpoint = "http://10.0.2.2:1234/v1",
+    model = "local-model",
+)
+```
+
+Pass the same `llmConfig` to both `MBAMode.SdkOnly(...)` and
+`MBAAndroid.saveConfig(...)` so WorkManager can process pending crashes after
+restart.
+
+## 7. Handle Callback JSON
+
+Callback-only mode is the smallest SDKOnly deployment. The SDK processes the
+crash and hands the result back to the app.
 
 ```kotlin
 MBAAndroid.saveConfig(
     context = this,
-    sendToBackend = false,
     llm = llmConfig,
-    useAgent = true,
     callback = { event ->
         // Latest processed event from this worker run.
     },
     batchCallback = { batch ->
-        // All events processed in this worker run.
+        // All processed events from this worker run.
     },
     jsonCallback = { json ->
         // Latest event as JSON.
@@ -267,12 +262,12 @@ MBAAndroid.saveConfig(
 )
 ```
 
-Use latest callbacks for simple UI or logging. Use batch callbacks when the app
-needs every pending crash processed during that worker run.
+Use latest callbacks for simple app behavior. Use batch callbacks when the app
+needs every pending crash file processed during the worker run.
 
-## 7. Enable Notion Or GitHub
+## 8. Add Notion Or GitHub
 
-Add only the integration modules the app needs.
+Notion and GitHub are optional. Add only the modules your app uses.
 
 ```kotlin
 val notionBackend = NotionTicketBackend(
@@ -293,26 +288,26 @@ MBAAndroid.setTicketBackends(
 )
 ```
 
-Set no backend when the app wants callback-only mode:
+For callback-only mode, do not register ticket backends:
 
 ```kotlin
 MBAAndroid.setTicketBackends()
 ```
 
-Duplicate crashes should update the existing local bug group and external
-record instead of creating a second parent ticket for the same fingerprint.
+Repeated crashes should update the existing local bug group and external record
+instead of creating duplicate parent tickets for the same fingerprint.
 
-## 8. What Happens After A Crash
+## 9. Crash And ANR Flow
 
 Fatal crash flow:
 
 ```text
 1. The app crashes.
-2. MBA writes a raw crash JSON file to app-private storage.
+2. MBA writes raw crash JSON to app-private storage.
 3. Android terminates the process normally.
 4. The user opens the app again.
 5. WorkManager processes pending crash files.
-6. SDKOnly runs agent analysis or raw fallback.
+6. SDKOnly runs Koog analysis or raw fallback.
 7. Local grouping updates the matching bug group.
 8. The app receives callbacks/JSON.
 9. Optional Notion/GitHub sinks create or update external records.
@@ -328,25 +323,23 @@ ANR flow:
 5. The normal SDKOnly worker pipeline processes it.
 ```
 
-## 9. Release Build Notes
+## 10. Release Checklist
 
-Crash capture does not depend on Logcat. In release builds:
+- Keep `debug = false` in release builds.
+- Keep provider and integration keys out of source control.
+- Use callback JSON or external sinks for observability instead of Logcat.
+- Add custom redaction patterns for app-specific sensitive formats.
+- Avoid sensitive values in breadcrumbs, screen names, exception messages, and
+  custom metadata.
+- Test fatal crash, non-fatal error, duplicate crash, raw fallback, and ANR
+  restart flow.
 
-- keep `debug = false`
-- use callbacks, JSON payloads, or external sinks for observability
-- keep provider keys out of source control
-- add custom redaction patterns for app-specific sensitive formats
-- avoid adding sensitive values to breadcrumbs or metadata
+## Minimal Setup Checklist
 
-## 10. Minimal SDKOnly Checklist
-
-- Add `mba-android`
-- Add optional `mba-notion` and/or `mba-github` only if needed
-- Configure `MBA` in `Application.onCreate`
-- Call `MBAAndroid.saveConfig(...)`
-- Register optional ticket backends
-- Keep `sendToBackend = false`
-- Set `useAgent = true` only when an LLM key is available
-- Add safe screen names and breadcrumbs
-- Use callbacks or JSON to handle results in the app layer
-- Test fatal crash, non-fatal error, duplicate crash, and ANR restart flow
+- Add `mba-android`.
+- Configure `MBA` in `Application.onCreate`.
+- Call `MBAAndroid.saveConfig(...)`.
+- Pass an `LLMConfig`; SDKOnly defaults to `sendToBackend = false` and
+  `useAgent = true`.
+- Add safe screen names and breadcrumbs.
+- Use callbacks or JSON to handle results in the app layer.

@@ -156,9 +156,7 @@ public object MBAAndroid {
      * MBA.configure(config)
      * MBAAndroid.saveConfig(
      *     context = this,
-     *     backendEndpoint = "http://10.0.2.2:8080",
-     *     projectKey = "sample-app-debug",
-     *     sendToBackend = true,
+     *     llm = LLM.gemini(BuildConfig.GEMINI_API_KEY),
      *     debug = true,
      * )
      * ```
@@ -168,7 +166,7 @@ public object MBAAndroid {
         backendEndpoint: String? = null,
         projectKey: String? = null,
         serverApiKey: String? = null,
-        sendToBackend: Boolean = backendEndpoint != null,
+        sendToBackend: Boolean = false,
         llm: LLMConfig? = null,
         useAgent: Boolean = true,
         callback: MBAAgentCallback? = null,

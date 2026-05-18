@@ -134,16 +134,13 @@ class ExampleApp : Application() {
         MBA.configure(
             MBAConfig.Builder().apply {
                 mode = MBAMode.SdkOnly(llm = llmConfig)
-                useAgent = true
                 debug = BuildConfig.DEBUG
             }.build(),
         )
 
         MBAAndroid.saveConfig(
             context = this,
-            sendToBackend = false,
             llm = llmConfig,
-            useAgent = true,
             callback = { event ->
                 Log.i("MBA", "Crash group=${event.group.id}, title=${event.report.title}")
             },
@@ -161,6 +158,9 @@ class ExampleApp : Application() {
     }
 }
 ```
+
+SDKOnly defaults are `sendToBackend = false` and `useAgent = true`, so the
+minimal app setup only needs an LLM config and callbacks.
 
 Use the runtime API to add safe context and report non-fatal errors:
 

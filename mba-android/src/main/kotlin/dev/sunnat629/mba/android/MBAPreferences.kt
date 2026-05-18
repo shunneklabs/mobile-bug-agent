@@ -84,7 +84,7 @@ internal object MBAPreferences {
         prefs(context).getString(KEY_SERVER_API_KEY, null)?.ifBlank { null }
 
     fun loadSendToBackend(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_SEND_TO_BACKEND, loadBackendEndpoint(context) != null)
+        prefs(context).getBoolean(KEY_SEND_TO_BACKEND, false)
 
     fun loadLlmProvider(context: Context): String? =
         prefs(context).getString(KEY_LLM_PROVIDER, null)?.ifBlank { null }
