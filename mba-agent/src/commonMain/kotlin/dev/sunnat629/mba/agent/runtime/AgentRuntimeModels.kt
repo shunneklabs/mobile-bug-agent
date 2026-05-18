@@ -56,8 +56,21 @@ public data class MBAAgentEvent(
     val analysisError: String? = null,
 )
 
+@Serializable
+public data class MBAAgentBatchEvent(
+    val latest: MBAAgentEvent,
+    val events: List<MBAAgentEvent>,
+    val totalCount: Int,
+    val successCount: Int,
+    val failCount: Int,
+)
+
 public fun interface MBAAgentCallback {
     public suspend fun onCrashAnalyzed(event: MBAAgentEvent)
+}
+
+public fun interface MBAAgentBatchCallback {
+    public suspend fun onCrashesAnalyzed(batch: MBAAgentBatchEvent)
 }
 
 public interface LocalCrashAggregationStore {

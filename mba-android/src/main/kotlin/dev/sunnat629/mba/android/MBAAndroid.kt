@@ -3,6 +3,8 @@ package dev.sunnat629.mba.android
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import androidx.work.*
+import dev.sunnat629.mba.agent.runtime.MBAAgentBatchCallback
+import dev.sunnat629.mba.agent.runtime.MBAAgentBatchEvent
 import dev.sunnat629.mba.agent.runtime.MBAAgentCallback
 import dev.sunnat629.mba.agent.runtime.MBAAgentEvent
 import dev.sunnat629.mba.agent.runtime.MBAAgentSink
@@ -40,6 +42,10 @@ public object MBAAndroid {
         private set
 
     @Volatile
+    internal var agentBatchCallback: MBAAgentBatchCallback? = null
+        private set
+
+    @Volatile
     internal var notionSink: MBAAgentSink? = null
         private set
 
@@ -54,6 +60,8 @@ public object MBAAndroid {
     private val eventJson = Json { ignoreUnknownKeys = true }
     private val _agentEvents = MutableSharedFlow<MBAAgentEvent>(extraBufferCapacity = 64)
     private val _agentEventJson = MutableSharedFlow<String>(extraBufferCapacity = 64)
+    private val _agentEventBatches = MutableSharedFlow<MBAAgentBatchEvent>(extraBufferCapacity = 16)
+    private val _agentBatchEventJson = MutableSharedFlow<String>(extraBufferCapacity = 16)
 
     /**
      * SDKOnly analysis events emitted after the local Koog agent processes a crash.
@@ -65,6 +73,16 @@ public object MBAAndroid {
 
     /** Same SDKOnly event stream serialized as JSON for app-owned integrations. */
     public val agentEventJson: SharedFlow<String> = _agentEventJson.asSharedFlow()
+
+    /**
+     * Batch stream emitted once per worker run. [MBAAgentBatchEvent.latest] is
+     * the default app-facing callback event, while [MBAAgentBatchEvent.events]
+     * preserves every processed pending crash for apps that need full history.
+     */
+    public val agentEventBatches: SharedFlow<MBAAgentBatchEvent> = _agentEventBatches.asSharedFlow()
+
+    /** Same SDKOnly batch stream serialized as JSON for app-owned integrations. */
+    public val agentBatchEventJson: SharedFlow<String> = _agentBatchEventJson.asSharedFlow()
 
     /**
      * Install the MBA SDK for Android.
@@ -140,6 +158,7 @@ public object MBAAndroid {
         llm: LLMConfig? = null,
         useAgent: Boolean = true,
         callback: MBAAgentCallback? = null,
+        batchCallback: MBAAgentBatchCallback? = null,
         debug: Boolean = false,
     ) {
         val appContext = context.applicationContext
@@ -159,12 +178,17 @@ public object MBAAndroid {
             debug = debug,
         )
         agentCallback = callback
+        agentBatchCallback = batchCallback
 
         MBALog.i(TAG, "MBA processing config saved to SharedPreferences for WorkManager")
     }
 
     public fun setAgentCallback(callback: MBAAgentCallback?) {
         agentCallback = callback
+    }
+
+    public fun setAgentBatchCallback(callback: MBAAgentBatchCallback?) {
+        agentBatchCallback = callback
     }
 
     /**
@@ -199,18 +223,36 @@ public object MBAAndroid {
         )
     }
 
-    internal suspend fun publishAgentEvent(event: MBAAgentEvent) {
+    internal suspend fun publishAgentEvent(event: MBAAgentEvent, notifyAppCallback: Boolean = true) {
         val json = eventJson.encodeToString(event)
         _agentEvents.emit(event)
         _agentEventJson.emit(json)
         logAgentEventJson(json)
-        agentCallback?.onCrashAnalyzed(event)
+        if (notifyAppCallback) {
+            agentCallback?.onCrashAnalyzed(event)
+        }
+    }
+
+    internal suspend fun publishAgentBatchEvent(batch: MBAAgentBatchEvent) {
+        val json = eventJson.encodeToString(batch)
+        _agentEventBatches.emit(batch)
+        _agentBatchEventJson.emit(json)
+        logAgentBatchEventJson(json)
+        agentCallback?.onCrashAnalyzed(batch.latest)
+        agentBatchCallback?.onCrashesAnalyzed(batch)
     }
 
     private fun logAgentEventJson(json: String) {
-        MBALog.d(TAG, "SDKOnly callback JSON:")
+        MBALog.d(TAG, "SDKOnly event JSON:")
         json.chunked(LOG_CHUNK_SIZE).forEachIndexed { index, chunk ->
-            MBALog.d(TAG, "SDKOnly callback JSON[$index]: $chunk")
+            MBALog.d(TAG, "SDKOnly event JSON[$index]: $chunk")
+        }
+    }
+
+    private fun logAgentBatchEventJson(json: String) {
+        MBALog.d(TAG, "SDKOnly callback batch JSON:")
+        json.chunked(LOG_CHUNK_SIZE).forEachIndexed { index, chunk ->
+            MBALog.d(TAG, "SDKOnly callback batch JSON[$index]: $chunk")
         }
     }
 

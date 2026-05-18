@@ -2,6 +2,7 @@ package dev.sunnat629.mba.sample
 
 import android.content.Context
 import dev.sunnat629.mba.android.MBAAndroid
+import dev.sunnat629.mba.agent.runtime.MBAAgentBatchCallback
 import dev.sunnat629.mba.agent.runtime.MBAAgentCallback
 import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.config.LLM
@@ -93,11 +94,20 @@ object SampleRuntime {
                 val callbackJson = eventJson.encodeToString(event)
                 MBALog.i(
                     TAG,
-                    "SDKOnly callback: group=${event.group.id}, new=${event.isNewGroup}, " +
+                    "SDKOnly latest callback: group=${event.group.id}, new=${event.isNewGroup}, " +
                         "agentic=${event.agentic}, source=${event.analysisSource}, " +
                         "title='${event.report.title}', severity=${event.report.severity}",
                 )
-                logCallbackJson(callbackJson)
+                logChunkedJson("App-layer latest callback JSON", callbackJson)
+            },
+            batchCallback = MBAAgentBatchCallback { batch ->
+                val batchJson = eventJson.encodeToString(batch)
+                MBALog.i(
+                    TAG,
+                    "SDKOnly batch callback: latest=${batch.latest.group.id}, " +
+                        "events=${batch.totalCount}, success=${batch.successCount}, failed=${batch.failCount}",
+                )
+                logChunkedJson("App-layer batch callback JSON", batchJson)
             },
             debug = true,
         )
@@ -107,10 +117,10 @@ object SampleRuntime {
     private fun SampleProcessingSettings.normalized(): SampleProcessingSettings =
         if (useAgent && BuildConfig.GEMINI_API_KEY.isBlank()) copy(useAgent = false) else this
 
-    private fun logCallbackJson(json: String) {
-        MBALog.i(TAG, "App-layer SDKOnly callback JSON:")
+    private fun logChunkedJson(label: String, json: String) {
+        MBALog.i(TAG, "$label:")
         json.chunked(LOG_CHUNK_SIZE).forEachIndexed { index, chunk ->
-            MBALog.i(TAG, "App-layer SDKOnly callback JSON[$index]: $chunk")
+            MBALog.i(TAG, "$label[$index]: $chunk")
         }
     }
 

@@ -8,7 +8,8 @@ import dev.sunnat629.mba.agent.CrashAnalysisAgent
 import dev.sunnat629.mba.agent.runtime.CrashDeliveryPipeline
 import dev.sunnat629.mba.agent.runtime.FileLocalCrashAggregationStore
 import dev.sunnat629.mba.agent.runtime.LocalFallbackCrashOrchestrator
-import dev.sunnat629.mba.agent.runtime.MBAAgentCallback
+import dev.sunnat629.mba.agent.runtime.MBAAgentBatchEvent
+import dev.sunnat629.mba.agent.runtime.MBAAgentEvent
 import dev.sunnat629.mba.agent.runtime.SdkOnlyCrashOrchestrator
 import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.config.LLM
@@ -97,7 +98,6 @@ internal class CrashUploadWorker(
         val aggregationStore = FileLocalCrashAggregationStore(
             File(context.filesDir, "mba-agent/aggregation-store.json")
         )
-        val callback = MBAAgentCallback { event -> MBAAndroid.publishAgentEvent(event) }
         val sdkOnlyOrchestrator = llmConfig?.takeIf { useAgent }?.let { config ->
             val factory = AgentFactory(config)
             SdkOnlyCrashOrchestrator(
@@ -108,7 +108,6 @@ internal class CrashUploadWorker(
                     useLocalDedup = false,
                 ),
                 aggregationStore = aggregationStore,
-                callback = callback,
                 notionSink = notionSink,
                 githubSink = githubSink,
                 skipNotion = notionSink == null,
@@ -117,7 +116,6 @@ internal class CrashUploadWorker(
         }
         val fallbackOrchestrator = LocalFallbackCrashOrchestrator(
             aggregationStore = aggregationStore,
-            callback = callback,
             notionSink = notionSink,
             githubSink = githubSink,
             skipNotion = notionSink == null,
@@ -133,6 +131,7 @@ internal class CrashUploadWorker(
 
         var successCount = 0
         var failCount = 0
+        val processedEvents = mutableListOf<MBAAgentEvent>()
 
         // 4. Process each crash file
         for ((file, rawReport) in pendingCrashes) {
@@ -144,6 +143,10 @@ internal class CrashUploadWorker(
 
                 if (deliveryResult.success) {
                     MBALog.i(TAG, "Crash processed: ${file.name} via ${deliveryResult.channel} -> ticket=${ticketResult?.ticketId?.take(12) ?: "none"}")
+                    deliveryResult.agentEvent?.let { event ->
+                        processedEvents += event
+                        MBAAndroid.publishAgentEvent(event, notifyAppCallback = false)
+                    }
                 } else {
                     MBALog.e(TAG, "Crash processing failed for ${file.name}: ${deliveryResult.errorMessage}")
                 }
@@ -162,6 +165,8 @@ internal class CrashUploadWorker(
 
         serverUploader?.close()
 
+        publishBatchIfNeeded(processedEvents, successCount, failCount)
+
         MBALog.i(TAG, "Done: $successCount uploaded, $failCount failed out of ${pendingCrashes.size}")
 
         return if (failCount > 0 && runAttemptCount < 3) {
@@ -170,6 +175,23 @@ internal class CrashUploadWorker(
         } else {
             Result.success()
         }
+    }
+
+    private suspend fun publishBatchIfNeeded(
+        events: List<MBAAgentEvent>,
+        successCount: Int,
+        failCount: Int,
+    ) {
+        val latest = events.maxByOrNull { it.raw.timestamp } ?: return
+        MBAAndroid.publishAgentBatchEvent(
+            MBAAgentBatchEvent(
+                latest = latest,
+                events = events.sortedBy { it.raw.timestamp },
+                totalCount = events.size,
+                successCount = successCount,
+                failCount = failCount,
+            )
+        )
     }
 
     private fun loadLlmConfig(context: Context): LLMConfig? {
