@@ -85,13 +85,7 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
    NOTION_TOKEN=ntn_your_integration_token
    NOTION_TICKET_DB_ID_OR_URL=your_bug_tickets_db_id
    NOTION_CRASH_DB_ID_OR_URL=your_crash_reports_db_id
-   MBA_SAMPLE_LLM_PROVIDER=GEMINI
-   MBA_SAMPLE_LLM_API_KEY=AIzaSy...
-   MBA_SAMPLE_LLM_MODEL=gemini-2.0-flash
-   # For local models:
-   # MBA_SAMPLE_LLM_PROVIDER=OLLAMA
-   # MBA_SAMPLE_LLM_MODEL=llama3.2:latest
-   # MBA_SAMPLE_LLM_ENDPOINT=http://10.0.2.2:11434
+   GEMINI_API_KEY=AIzaSy...
    ```
 3. Build and run `mba-sample` on a device or emulator.
 4. Trigger a crash, relaunch, and confirm a Notion ticket or server job appears.
@@ -135,10 +129,7 @@ class ExampleApp : Application() {
 
         MBAAndroid.install(this)
 
-        val llmConfig = LLM.openAI(
-            apiKey = BuildConfig.MBA_LLM_API_KEY,
-            model = BuildConfig.MBA_LLM_MODEL,
-        )
+        val llmConfig = LLM.gemini(BuildConfig.GEMINI_API_KEY)
 
         MBA.configure(
             MBAConfig.Builder().apply {

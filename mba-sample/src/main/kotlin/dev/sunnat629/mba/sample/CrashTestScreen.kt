@@ -185,7 +185,7 @@ private fun ConfigCard(settings: SampleProcessingSettings) {
                 ConfigChip("Agent", if (settings.useAgent) "on" else "raw fallback")
                 ConfigChip("Mode default", BuildConfig.MBA_SAMPLE_MODE)
                 ConfigChip("Agent default", BuildConfig.MBA_SAMPLE_USE_AGENT)
-                ConfigChip("LLM", if (hasLlm) SampleRuntime.llmLabel else "missing")
+                ConfigChip("Gemini", if (hasLlm) "ready" else "missing")
                 ConfigChip("Notion", if (hasNotion) "ready" else "missing")
                 ConfigChip("Backend", if (hasBackend && settings.deliveryMode == SampleDeliveryMode.HOSTED) BuildConfig.MBA_BACKEND_ENDPOINT else "off")
                 ConfigChip("GitHub", if (hasGitHub) "${BuildConfig.GITHUB_OWNER}/${BuildConfig.GITHUB_REPO}" else "off")
@@ -280,7 +280,7 @@ private fun ProcessingCard(
                         when {
                             settings.useAgent -> "LLM analysis enabled"
                             hasLlm -> "Raw callback/ticket fallback"
-                            else -> "Raw fallback; LLM config missing"
+                            else -> "Raw fallback; Gemini key missing"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

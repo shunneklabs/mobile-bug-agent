@@ -29,18 +29,6 @@ android {
         val crashDbId = props.getProperty("NOTION_CRASH_DB_ID_OR_URL") ?: ""
         val ticketDbId = props.getProperty("NOTION_TICKET_DB_ID_OR_URL") ?: ""
         val geminiKey = props.getProperty("GEMINI_API_KEY") ?: ""
-        val sampleLlmProvider = props.getProperty("MBA_SAMPLE_LLM_PROVIDER")
-            ?: System.getenv("MBA_SAMPLE_LLM_PROVIDER")
-            ?: "GEMINI"
-        val sampleLlmApiKey = props.getProperty("MBA_SAMPLE_LLM_API_KEY")
-            ?: System.getenv("MBA_SAMPLE_LLM_API_KEY")
-            ?: geminiKey
-        val sampleLlmModel = props.getProperty("MBA_SAMPLE_LLM_MODEL")
-            ?: System.getenv("MBA_SAMPLE_LLM_MODEL")
-            ?: ""
-        val sampleLlmEndpoint = props.getProperty("MBA_SAMPLE_LLM_ENDPOINT")
-            ?: System.getenv("MBA_SAMPLE_LLM_ENDPOINT")
-            ?: ""
         val serverApiKey = props.getProperty("MBA_SERVER_API_KEY")
             ?: System.getenv("MBA_SERVER_API_KEY")
             ?: ""
@@ -71,10 +59,6 @@ android {
         buildConfigField("String", "NOTION_CRASH_DB_ID", "\"${crashDbId.escapedForBuildConfig()}\"")
         buildConfigField("String", "NOTION_TICKET_DB_ID", "\"${ticketDbId.escapedForBuildConfig()}\"")
         buildConfigField("String", "GEMINI_API_KEY", "\"${geminiKey.escapedForBuildConfig()}\"")
-        buildConfigField("String", "MBA_SAMPLE_LLM_PROVIDER", "\"${sampleLlmProvider.escapedForBuildConfig()}\"")
-        buildConfigField("String", "MBA_SAMPLE_LLM_API_KEY", "\"${sampleLlmApiKey.escapedForBuildConfig()}\"")
-        buildConfigField("String", "MBA_SAMPLE_LLM_MODEL", "\"${sampleLlmModel.escapedForBuildConfig()}\"")
-        buildConfigField("String", "MBA_SAMPLE_LLM_ENDPOINT", "\"${sampleLlmEndpoint.escapedForBuildConfig()}\"")
         buildConfigField("String", "MBA_SERVER_API_KEY", "\"${serverApiKey.escapedForBuildConfig()}\"")
         buildConfigField("String", "MBA_BACKEND_ENDPOINT", "\"${backendEndpoint.escapedForBuildConfig()}\"")
         buildConfigField("String", "MBA_SAMPLE_MODE", "\"${sampleMode.escapedForBuildConfig()}\"")

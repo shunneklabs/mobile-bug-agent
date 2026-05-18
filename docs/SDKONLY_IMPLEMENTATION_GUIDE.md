@@ -66,13 +66,10 @@ Do not hard-code provider keys in source files. Use your normal secret
 management approach, build config, encrypted remote config, or CI-injected
 values.
 
-For local development, `local.properties` is enough:
+For the sample app, `local.properties` stays intentionally simple:
 
 ```properties
-MBA_SAMPLE_LLM_PROVIDER=GEMINI
-MBA_SAMPLE_LLM_API_KEY=your_provider_key
-MBA_SAMPLE_LLM_MODEL=gemini-2.0-flash
-MBA_SAMPLE_LLM_ENDPOINT=
+GEMINI_API_KEY=your_gemini_key
 NOTION_API_KEY=your_notion_token
 NOTION_TICKET_DB_ID_OR_URL=your_notion_database_id
 NOTION_CRASH_DB_ID_OR_URL=optional_crash_occurrence_database_id
@@ -80,6 +77,9 @@ GITHUB_TOKEN=github_pat_or_app_token
 GITHUB_OWNER=owner
 GITHUB_REPO=repo
 ```
+
+In a production app, use whatever secret and BuildConfig names match your app.
+The SDK only needs an `LLMConfig` object.
 
 ## 3. Initialize Early In `Application`
 
@@ -104,10 +104,7 @@ class ExampleApp : Application() {
 
         MBAAndroid.install(this)
 
-        val llmConfig = LLM.openAI(
-            apiKey = BuildConfig.MBA_LLM_API_KEY,
-            model = BuildConfig.MBA_LLM_MODEL,
-        )
+        val llmConfig = LLM.gemini(BuildConfig.GEMINI_API_KEY)
 
         MBA.configure(
             MBAConfig.Builder().apply {
@@ -152,15 +149,16 @@ reports:
 
 ```kotlin
 mode = MBAMode.SdkOnly(
-    llm = LLM.anthropic(
-        apiKey = BuildConfig.MBA_LLM_API_KEY,
-        model = "claude-sonnet-4-20250514",
-    ),
+    llm = LLM.gemini(BuildConfig.GEMINI_API_KEY),
 )
 useAgent = true
 ```
 
-SDKOnly supports provider and model selection through `LLMConfig`:
+### Provider And Model Options
+
+SDKOnly supports provider and model selection through `LLMConfig`. The sample
+app uses Gemini to stay plug-and-play, but app developers can choose any of
+these in their own app layer:
 
 ```kotlin
 LLM.gemini(apiKey, model = "gemini-2.0-flash")
@@ -176,6 +174,28 @@ LLM.custom(apiKey = "", endpoint = "http://10.0.2.2:1234/v1", model = "local-mod
 
 `LLM.custom(...)` is for OpenAI-compatible local or hosted gateways such as LM
 Studio, vLLM, LiteLLM, or an app-owned proxy.
+
+Examples:
+
+```kotlin
+// OpenAI
+val llmConfig = LLM.openAI(
+    apiKey = BuildConfig.OPENAI_API_KEY,
+    model = "gpt-4o-mini",
+)
+
+// Local Ollama from Android emulator to host machine
+val llmConfig = LLM.ollama(
+    model = "llama3.2:latest",
+    endpoint = "http://10.0.2.2:11434",
+)
+
+// OpenAI-compatible local gateway such as LM Studio, vLLM, or LiteLLM
+val llmConfig = LLM.custom(
+    endpoint = "http://10.0.2.2:1234/v1",
+    model = "local-model",
+)
+```
 
 Use raw fallback when the app does not want local LLM analysis:
 
@@ -230,7 +250,7 @@ returns results to the app. The app owns the next step.
 MBAAndroid.saveConfig(
     context = this,
     sendToBackend = false,
-    llm = LLM.ollama(model = "llama3.2:latest", endpoint = "http://10.0.2.2:11434"),
+    llm = llmConfig,
     useAgent = true,
     callback = { event ->
         // Latest processed event from this worker run.

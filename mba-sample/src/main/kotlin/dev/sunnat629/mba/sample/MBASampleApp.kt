@@ -19,10 +19,7 @@ class MBASampleApp : Application() {
         MBALog.d(TAG, "NOTION_API_KEY:      ${if (BuildConfig.NOTION_API_KEY.isNotBlank()) "loaded" else "!! EMPTY !!" }")
         MBALog.d(TAG, "NOTION_TICKET_DB_ID: ${if (BuildConfig.NOTION_TICKET_DB_ID.isNotBlank()) "loaded" else "!! EMPTY !!" }")
         MBALog.d(TAG, "NOTION_CRASH_DB_ID:  ${if (BuildConfig.NOTION_CRASH_DB_ID.isNotBlank()) "loaded" else "!! EMPTY !!" }")
-        MBALog.d(TAG, "MBA_SAMPLE_LLM_PROVIDER: ${BuildConfig.MBA_SAMPLE_LLM_PROVIDER}")
-        MBALog.d(TAG, "MBA_SAMPLE_LLM_MODEL: ${BuildConfig.MBA_SAMPLE_LLM_MODEL.ifBlank { "(default)" }}")
-        MBALog.d(TAG, "MBA_SAMPLE_LLM_ENDPOINT: ${BuildConfig.MBA_SAMPLE_LLM_ENDPOINT.ifBlank { "(default)" }}")
-        MBALog.d(TAG, "MBA_SAMPLE_LLM_API_KEY: ${if (BuildConfig.MBA_SAMPLE_LLM_API_KEY.isNotBlank()) "loaded" else "!! EMPTY !!" }")
+        MBALog.d(TAG, "GEMINI_API_KEY:      ${if (BuildConfig.GEMINI_API_KEY.isNotBlank()) "loaded" else "!! EMPTY !!" }")
         MBALog.d(TAG, "MBA_BACKEND_ENDPOINT: ${BuildConfig.MBA_BACKEND_ENDPOINT}")
         MBALog.d(TAG, "MBA_SERVER_API_KEY: ${if (BuildConfig.MBA_SERVER_API_KEY.isNotBlank()) "loaded" else "!! EMPTY !!" }")
         MBALog.d(TAG, "MBA_SAMPLE_MODE: ${BuildConfig.MBA_SAMPLE_MODE}")
@@ -35,7 +32,7 @@ class MBASampleApp : Application() {
         MBA.configure(
             MBAConfig.Builder().apply {
                 this.mode = when (mode) {
-                    SampleDeliveryMode.SDK_ONLY -> MBAMode.SdkOnly(llm = SampleRuntime.llmConfig())
+                    SampleDeliveryMode.SDK_ONLY -> MBAMode.SdkOnly(llm = SampleRuntime.geminiConfig)
                     SampleDeliveryMode.HOSTED -> MBAMode.Saas(projectKey = "sample-app-debug")
                 }
                 debug = true
