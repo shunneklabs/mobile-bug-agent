@@ -7,7 +7,6 @@ import dev.sunnat629.mba.core.model.Severity
 import dev.sunnat629.mba.core.ticket.TicketBackend
 import dev.sunnat629.mba.core.ticket.TicketUpdate
 import dev.sunnat629.mba.github.AutoFixResult
-import dev.sunnat629.mba.notion.NotionTicketBackend
 import dev.sunnat629.mba.server.model.BugGroup
 import dev.sunnat629.mba.server.persistence.CrashAggregationStore
 import kotlinx.coroutines.CoroutineDispatcher
@@ -109,9 +108,6 @@ class OperatorDecisionHandler(
         if (existingUrl != null && existingTicketId != null) {
             eventSink.progress(jobId, "Opening existing Notion grouped bug from operator action…", stage = "notion_ticket")
             withContext(ioDispatcher) { backend.updateTicket(existingTicketId, groupTicketUpdate(aggregated.group)) }
-            (backend as? NotionTicketBackend)?.let { notion ->
-                withContext(ioDispatcher) { notion.createCrashOccurrence(aggregated.report, existingTicketId) }
-            }
             eventSink.complete(jobId, existingUrl, artifactType = "notion_ticket")
             return
         }

@@ -8,7 +8,6 @@ import dev.sunnat629.mba.core.model.Severity
 import dev.sunnat629.mba.core.ticket.TicketBackend
 import dev.sunnat629.mba.core.ticket.TicketUpdate
 import dev.sunnat629.mba.github.AutoFixResult
-import dev.sunnat629.mba.notion.NotionTicketBackend
 import dev.sunnat629.mba.server.model.BugGroup
 import dev.sunnat629.mba.server.model.CrashAggregationUpsert
 import dev.sunnat629.mba.server.persistence.CrashAggregationStore
@@ -222,9 +221,6 @@ class DemoOrchestrator(
             val latestGroup = aggregationStore.getGroup(upsert.group.id) ?: upsert.group
             val update = groupTicketUpdate(latestGroup)
             val ticket = withContext(ioDispatcher) { notionBackend!!.updateTicket(existingNotionTicketId, update) }
-            (notionBackend as? NotionTicketBackend)?.let { backend ->
-                withContext(ioDispatcher) { backend.createCrashOccurrence(processed, existingNotionTicketId) }
-            }
             if (ticket.success) {
                 eventSink.complete(jobId, existingNotionUrl, artifactType = "notion_ticket")
             } else {

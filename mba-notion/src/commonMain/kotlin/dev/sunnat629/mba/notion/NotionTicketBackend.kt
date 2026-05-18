@@ -2,7 +2,6 @@ package dev.sunnat629.mba.notion
 
 import dev.sunnat629.mba.core.model.ProcessedCrashReport
 import dev.sunnat629.mba.core.model.TicketResult
-import dev.sunnat629.mba.core.ticket.CrashOccurrenceTicketBackend
 import dev.sunnat629.mba.core.ticket.TicketBackend
 import dev.sunnat629.mba.core.ticket.TicketUpdate
 import dev.sunnat629.mba.notion.model.*
@@ -29,7 +28,7 @@ public class NotionTicketBackend(
     private val bugTicketDbId: String,
     private val httpClient: HttpClient = defaultHttpClient(),
     private val notionApiVersion: String = "2022-06-28",
-) : CrashOccurrenceTicketBackend, AutoCloseable {
+) : TicketBackend, AutoCloseable {
 
     private companion object {
         private fun defaultHttpClient(): HttpClient = HttpClient {
@@ -132,80 +131,6 @@ public class NotionTicketBackend(
         }
 
         return postNotionPage(bugTicketDbId, properties, children)
-    }
-
-    override suspend fun createCrashOccurrence(
-        report: ProcessedCrashReport,
-        parentBugTicketId: String,
-    ): TicketResult {
-        return try {
-            val properties = mutableMapOf<String, NotionProperty>()
-            properties["Name"] = NotionProperty.Title(
-                listOf(NotionRichText(text = NotionTextContent("${report.raw.exceptionType.substringAfterLast(".")} occurrence")))
-            )
-            properties["Severity"] = NotionProperty.Select(
-                NotionSelectItem(name = report.severity.name)
-            )
-            properties["Fingerprint"] = NotionProperty.RichText(
-                listOf(NotionRichText(text = NotionTextContent(report.fingerprint)))
-            )
-            properties["Description"] = NotionProperty.RichText(
-                listOf(NotionRichText(text = NotionTextContent(report.description.take(2000))))
-            )
-            properties["AI Confidence"] = NotionProperty.Number(report.confidence.toDouble())
-            properties["Bug Type"] = NotionProperty.Select(NotionSelectItem(name = "Crash Occurrence"))
-            properties["Affected Screen"] = NotionProperty.RichText(
-                listOf(NotionRichText(text = NotionTextContent(report.raw.currentScreen ?: "unknown")))
-            )
-            properties["Device Matrix"] = NotionProperty.RichText(
-                listOf(NotionRichText(text = NotionTextContent(report.raw.device.displayName)))
-            )
-            properties["App Version"] = NotionProperty.RichText(
-                listOf(NotionRichText(text = NotionTextContent(report.raw.appVersion)))
-            )
-            properties["Occurred At"] = NotionProperty.Date(NotionDate(report.raw.timestamp.toString()))
-            properties["OS Version"] = NotionProperty.RichText(
-                listOf(NotionRichText(text = NotionTextContent("Android ${report.raw.device.osVersion} (API ${report.raw.device.sdkInt})")))
-            )
-            properties["Device Model"] = NotionProperty.RichText(
-                listOf(NotionRichText(text = NotionTextContent(report.raw.device.displayName)))
-            )
-            properties["Last Seen"] = NotionProperty.Date(NotionDate(report.raw.timestamp.toString()))
-            properties["Device ID Hash"] = NotionProperty.RichText(
-                listOf(NotionRichText(text = NotionTextContent(report.deviceHash())))
-            )
-            properties["Status"] = NotionProperty.Status(NotionSelectItem(name = "New"))
-            properties["External Sync State"] = NotionProperty.Select(NotionSelectItem(name = "Notion Created"))
-            properties["Parent Bug"] = NotionProperty.Relation(listOf(NotionRelationItem(parentBugTicketId)))
-            report.possibleCause?.let { cause ->
-                properties["Possible Cause"] = NotionProperty.RichText(
-                    listOf(NotionRichText(text = NotionTextContent(cause.take(2000))))
-                )
-            }
-            report.stepsToReproduce?.let { steps ->
-                properties["Steps to Reproduce"] = NotionProperty.RichText(
-                    listOf(NotionRichText(text = NotionTextContent(steps.take(2000))))
-                )
-            }
-
-            val children = buildCrashBody(report)
-            if (report.sanitizedStackTrace.isNotBlank()) {
-                children.addStackTrace(report)
-            }
-            children.add(0,
-                NotionBlock(
-                    type = "paragraph",
-                    paragraph = NotionParagraphBlock(
-                        listOf(NotionRichText(text = NotionTextContent(
-                            "Repeated occurrence of parent bug."
-                        )))
-                    )
-                )
-            )
-            postNotionPage(bugTicketDbId, properties, children)
-        } catch (e: Exception) {
-            TicketResult.failure(name, e.message ?: "Unknown error")
-        }
     }
 
     private fun buildCrashBody(report: ProcessedCrashReport): MutableList<NotionBlock> {

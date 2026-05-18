@@ -216,41 +216,6 @@ class NotionTicketBackendTest {
     }
 
     @Test
-    fun crashOccurrenceIncludesAnalysisFields() = runBlocking {
-        var capturedBody = ""
-
-        val mockClient = createMockClient { request ->
-            capturedBody = String(request.body.toByteArray())
-            respond(
-                content = """{
-                    "id": "occurrence-1",
-                    "url": "https://notion.so/occurrence-1",
-                    "object": "page"
-                }""",
-                status = HttpStatusCode.OK,
-                headers = headersOf(HttpHeaders.ContentType, "application/json"),
-            )
-        }
-
-        val backend = NotionTicketBackend(
-            apiKey = "secret_test",
-            bugTicketDbId = "db-456",
-            httpClient = mockClient,
-        )
-
-        val result = backend.createCrashOccurrence(testReport, "parent-1")
-        assertTrue(result.success)
-
-        assertTrue(capturedBody.contains("Fingerprint"), "Occurrence should include fingerprint")
-        assertTrue(capturedBody.contains("AI Confidence"), "Occurrence should include AI confidence")
-        assertTrue(capturedBody.contains("Severity"), "Occurrence should include severity")
-        assertTrue(capturedBody.contains("Description"), "Occurrence should include description")
-        assertTrue(capturedBody.contains("Possible Cause"), "Occurrence should include cause")
-        assertTrue(capturedBody.contains("Steps to Reproduce"), "Occurrence should include reproduction steps")
-        assertTrue(capturedBody.contains("Parent Bug"), "Occurrence should link parent bug")
-    }
-
-    @Test
     fun updateTicketIncludesReportFieldsEvenWhenConfidenceIsZero() = runBlocking {
         var capturedBody = ""
 
