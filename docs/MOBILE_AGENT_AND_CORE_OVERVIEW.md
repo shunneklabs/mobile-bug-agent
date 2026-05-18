@@ -42,7 +42,7 @@ This is the simple version to explain to anyone:
 
 2. The SDK waits quietly. It does not record the user or watch the screen.
 
-3. If the app crashes, or the app explicitly reports a non-fatal error, the SDK
+3. If the app crashes, ANRs, or explicitly reports a non-fatal error, the SDK
    saves a technical crash note inside the app's private storage.
 
 4. When the app opens again, a background worker reads those saved crash notes.
@@ -166,6 +166,201 @@ Android callbacks and flows
   | batch callback / batch JSON
 ```
 
+## Common Lifecycle Questions
+
+### How does it bind to the Android lifecycle?
+
+The Android SDK binds at app startup, not to individual Activities.
+
+There are two paths:
+
+- AndroidX Startup can call `MBAAndroid.install(context)` automatically through
+  `MBAInitializer`.
+- The app can also call `MBAAndroid.install(this)` manually from
+  `Application.onCreate`.
+
+`MBAAndroid.install(context)` does three important things:
+
+- injects Android app metadata into `mba-core`
+- calls `MBA.install(crashDir)` so `mba-core` installs the platform crash
+  handler
+- enqueues a unique `CrashUploadWorker` through WorkManager to process pending
+  crash files from previous runs
+
+The SDK does not need Activity lifecycle callbacks to catch crashes. Fatal
+crashes are caught at the process/thread exception-handler level.
+
+The app can still give better context by calling:
+
+```kotlin
+MBA.setScreen("CheckoutScreen")
+MBA.addBreadcrumb("Tapped Pay")
+MBA.logError(error, metadata = mapOf("flow" to "checkout"))
+```
+
+### What happens when the app crashes and Android kills it?
+
+Fatal crash sequence:
+
+```text
+1. App throws an uncaught exception.
+
+2. Android invokes the default uncaught exception handler chain.
+
+3. MBA's handler receives the throwable first.
+
+4. MBA writes a RawCrashReport JSON file synchronously to app-private storage.
+
+5. MBA calls the previous/default handler.
+
+6. Android continues normal fatal-crash behavior and kills the app process.
+```
+
+The SDK does not try to upload or run AI analysis during the fatal crash handler.
+That would be unreliable because the process is already dying. The safe work in
+that moment is only to write the raw crash snapshot to disk.
+
+### What happens when the user reopens the app?
+
+Reopen sequence:
+
+```text
+1. Application starts again.
+
+2. MBAAndroid.install(context) runs again.
+
+3. WorkManager starts CrashUploadWorker when constraints allow it.
+
+4. PendingCrashProcessor reads every saved mba_crash_*.json file.
+
+5. The worker processes each raw crash:
+   - hosted mode: upload to backend
+   - SDKOnly + useAgent: run local Koog/LLM analysis
+   - SDKOnly fallback: build raw-derived report
+
+6. Local aggregation groups duplicates by app/environment/fingerprint.
+
+7. Optional Notion/GitHub sinks run if registered.
+
+8. Successfully processed files are deleted.
+
+9. App receives latest callback/JSON and, if configured, batch callback/JSON.
+```
+
+This is why the crash often appears in callbacks or tickets after the next app
+launch, not during the crash itself.
+
+### What happens in release builds when there are no logs?
+
+Crash capture does not depend on Logcat.
+
+`MBALog` is gated by the SDK `debug` flag. In release builds, apps usually keep
+`debug=false`, which means SDK logs are silent. The actual crash capture still
+works because it writes JSON crash files directly to app-private storage.
+
+In release:
+
+- fatal crash capture still works
+- non-fatal `MBA.logError(...)` still works
+- pending crash processing still works
+- hosted upload still works if configured
+- SDKOnly callbacks still work if configured
+- Logcat debug output is normally off
+
+For development/demo builds, set `debug=true` to see:
+
+```text
+MBA/MBAAndroid
+MBA/UploadWorker
+MBA/CrashPipeline
+MBA/Sample
+```
+
+For production, rely on the configured backend, callbacks, or external sinks
+instead of Logcat.
+
+### How does it catch ANRs?
+
+Current status: ANR capture is implemented for Android 11/API 30+ using
+`ApplicationExitInfo`.
+
+ANRs are different from normal exceptions. Android reports ANRs when the main
+thread is blocked and the system decides the app is not responding. They do not
+arrive through `Thread.UncaughtExceptionHandler`, so the fatal crash handler
+cannot catch them at the moment they happen.
+
+Instead, the Android adapter checks the previous process exit history when the
+app starts again:
+
+```text
+Previous run ends with ANR
+  |
+  v
+Android records ApplicationExitInfo.REASON_ANR
+  |
+  v
+User opens app again
+  |
+  v
+MBAAndroid.install(context)
+  |
+  v
+ANRExitReporter checks historical process exits
+  |
+  v
+If a new ANR is found, write RawCrashReport(type = REASON_ANR)
+  |
+  v
+CrashUploadWorker processes it like any other pending crash
+```
+
+The generated ANR report includes:
+
+- exception type `android.app.ApplicationExitInfo.REASON_ANR`
+- ANR description when Android provides one
+- ANR trace text when Android provides a trace input stream
+- process name/status/importance metadata
+- app version/build type
+- OS/device metadata
+
+Limitations:
+
+- API 29 and below do not support this `ApplicationExitInfo` path.
+- This is restart-time detection, not live in-process ANR detection.
+- A main-thread watchdog is still a possible future enhancement for detecting
+  long stalls while the app process is still alive.
+
+Current SDK catches these failure classes:
+
+- uncaught JVM/Kotlin exceptions
+- explicit `MBA.logError(...)` non-fatal errors
+- coroutine exceptions routed through `MBA.exceptionHandler`
+- ANR process exits on Android 11/API 30+ after app restart
+
+### What about native crashes?
+
+Current status: native crash capture is not implemented.
+
+The current Android crash handler catches JVM/Kotlin exceptions. Native crashes
+from C/C++/JNI generally require a native signal handler or platform crash
+report integration. That should be a separate feature and should not be claimed
+as supported yet.
+
+### What about app force-stop, device reboot, or worker constraints?
+
+Crash files remain in app-private storage until processed successfully.
+
+If the app crashes, is killed, loses network, or WorkManager is delayed, the raw
+crash file stays on disk. The next successful worker run can process it.
+
+Limitations:
+
+- If the user clears app data, pending crash files are deleted.
+- If the app is force-stopped, Android may not run WorkManager until the user
+  opens the app again.
+- If hosted upload is configured but network is unavailable, WorkManager can
+  retry later.
+
 ## What The SDK Monitors
 
 The SDK monitors failures, not normal user activity.
@@ -173,6 +368,7 @@ The SDK monitors failures, not normal user activity.
 It captures:
 
 - fatal uncaught exceptions
+- ANR process exits on Android 11/API 30+ after app restart
 - explicit non-fatal errors logged by the app through `MBA.logError(...)`
 - coroutine errors when the app uses `MBA.exceptionHandler`
 - the current screen name, only if the app calls `MBA.setScreen(...)`
@@ -240,6 +436,12 @@ That creates the same type of raw crash snapshot, but marks it as non-fatal.
 `MBA.exceptionHandler` can be attached to coroutine scopes. When a coroutine
 throws into that handler, MBA records it as a non-fatal error with coroutine
 context.
+
+### ANRs
+
+On Android 11/API 30+, `mba-android` checks `ApplicationExitInfo` on app start.
+If Android says the previous process exited because of `REASON_ANR`, MBA writes
+an ANR `RawCrashReport` and lets the normal worker/agent pipeline process it.
 
 ## What `mba-core` Does
 
@@ -581,6 +783,9 @@ mba-sample
 - Local aggregation is file-backed for the current SDKOnly/demo phase.
 - If hosted backend mode accepts a crash, local SDKOnly callback analysis may
   not run for that crash.
+- ANR capture currently uses Android 11/API 30+ `ApplicationExitInfo`; API 29
+  and below need a future watchdog or other strategy.
+- Native crash capture is not implemented yet.
 
 These are acceptable for the current architecture if they are explained clearly
 and the app integration guidance is strict about not passing sensitive data.

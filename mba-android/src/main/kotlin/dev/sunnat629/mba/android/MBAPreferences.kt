@@ -19,6 +19,7 @@ import dev.sunnat629.mba.core.MBALog
  * - mba_llm_model
  * - mba_use_agent
  * - mba_debug
+ * - mba_last_anr_timestamp
  */
 internal object MBAPreferences {
 
@@ -35,6 +36,7 @@ internal object MBAPreferences {
     private const val KEY_LLM_MODEL = "mba_llm_model"
     private const val KEY_USE_AGENT = "mba_use_agent"
     private const val KEY_DEBUG = "mba_debug"
+    private const val KEY_LAST_ANR_TIMESTAMP = "mba_last_anr_timestamp"
 
     fun save(
         context: Context,
@@ -93,6 +95,15 @@ internal object MBAPreferences {
 
     fun loadDebug(context: Context): Boolean =
         prefs(context).getBoolean(KEY_DEBUG, false)
+
+    fun loadLastAnrTimestamp(context: Context): Long =
+        prefs(context).getLong(KEY_LAST_ANR_TIMESTAMP, 0L)
+
+    fun saveLastAnrTimestamp(context: Context, timestamp: Long) {
+        prefs(context).edit()
+            .putLong(KEY_LAST_ANR_TIMESTAMP, timestamp)
+            .apply()
+    }
 
     fun isConfigured(context: Context): Boolean =
         (loadSendToBackend(context) && loadBackendEndpoint(context) != null) ||

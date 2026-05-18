@@ -104,14 +104,20 @@ public object MBAAndroid {
 
         val appContext = context.applicationContext
 
-        MBA.setGlobalMetadata(androidAppMetadata(appContext))
+        val metadata = androidAppMetadata(appContext)
+        MBA.setGlobalMetadata(metadata)
 
         // 1. Install core crash handler. Metadata is injected through MBA global metadata
         // so we do not install a second Android handler that would write duplicate crash files.
         val crashDir = appContext.filesDir.resolve("mba-crashes").absolutePath
         MBA.install(crashDir)
 
-        // 2. Enqueue WorkManager to process pending crashes from previous sessions
+        // 2. Detect ANR process deaths from the previous run. ANRs are not thrown
+        // exceptions, so they must be reconstructed from Android exit history
+        // after the app starts again.
+        ANRExitReporter.capturePreviousAnrIfAny(appContext, crashDir, metadata)
+
+        // 3. Enqueue WorkManager to process pending crashes from previous sessions
         enqueueCrashUploadWorker(appContext)
 
         MBALog.i(TAG, "MBAAndroid installed. WorkManager enqueued for pending crashes.")
