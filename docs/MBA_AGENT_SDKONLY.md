@@ -54,7 +54,8 @@ App crash, ANR exit, or logged non-fatal error
 MBA writes RawCrashReport JSON to app-private storage
         |
         v
-On the next worker run, pending crash files are read
+After app config/sinks are restored, `MBAAndroid.flushPendingCrashes(...)`
+starts the worker and pending crash files are read
         |
         v
 SDKOnly pipeline processes each crash

@@ -158,6 +158,8 @@ class ExampleApp : Application() {
             },
             debug = BuildConfig.DEBUG,
         )
+
+        MBAAndroid.flushPendingCrashes(this)
     }
 }
 ```

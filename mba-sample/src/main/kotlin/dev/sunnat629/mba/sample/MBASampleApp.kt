@@ -26,6 +26,10 @@ class MBASampleApp : Application() {
         MBALog.d(TAG, "MBA_SAMPLE_USE_AGENT: ${BuildConfig.MBA_SAMPLE_USE_AGENT}")
         MBALog.d(TAG, "========================================")
 
+        // Startup may already install the crash handler. Calling explicitly keeps
+        // the sample correct when AndroidX Startup is disabled by a host app.
+        MBAAndroid.install(this)
+
         val settings = SampleRuntime.restore(this)
         val mode = settings.deliveryMode
 
@@ -42,8 +46,8 @@ class MBASampleApp : Application() {
         // Restore app-layer integrations before WorkManager processes pending crashes.
         val integrationMode = SampleIntegrationRuntime.restore(this)
 
-        // Install crash handler + enqueue WorkManager after config and sinks are ready.
-        MBAAndroid.install(this)
+        // Process pending crashes only after config and optional sinks are ready.
+        MBAAndroid.flushPendingCrashes(this)
 
         MBALog.d(TAG, "MBA SDK initialized in ${mode.label} with ${integrationMode.label}. Crashes are processed on next launch.")
     }

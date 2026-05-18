@@ -55,20 +55,30 @@ class CrashAnalysisAgent(
             MBALog.d(TAG, "[4/5] Running AI analysis...")
             val executor = agentFactory.create()
 
-            val parsed: ParsedStackTrace = executor.parseStackTrace(sanitizedTrace)
-            MBALog.d(TAG, "  Parsed: file=${parsed.crashFile}, line=${parsed.crashLine}, method=${parsed.crashMethod}")
-
-            val severity: SeverityResult = executor.classifySeverity(parsed, raw.device)
-            MBALog.d(TAG, "  Severity: ${severity.severity} (confidence=${severity.confidence})")
-
-            val summary: CrashSummary = executor.generateSummary(
-                parsed = parsed,
-                severity = severity,
+            val combined = executor.analyzeCrash(
+                sanitizedTrace = sanitizedTrace,
+                device = raw.device,
                 screen = raw.currentScreen,
                 breadcrumbs = sanitizedBreadcrumbs,
-                device = raw.device,
                 crashContext = raw.summaryContext(),
             )
+            val parsed: ParsedStackTrace = combined?.toParsedStackTrace()
+                ?: executor.parseStackTrace(sanitizedTrace)
+            MBALog.d(TAG, "  Parsed: file=${parsed.crashFile}, line=${parsed.crashLine}, method=${parsed.crashMethod}")
+
+            val severity: SeverityResult = combined?.toSeverityResult()
+                ?: executor.classifySeverity(parsed, raw.device)
+            MBALog.d(TAG, "  Severity: ${severity.severity} (confidence=${severity.confidence})")
+
+            val summary: CrashSummary = combined?.toCrashSummary()
+                ?: executor.generateSummary(
+                    parsed = parsed,
+                    severity = severity,
+                    screen = raw.currentScreen,
+                    breadcrumbs = sanitizedBreadcrumbs,
+                    device = raw.device,
+                    crashContext = raw.summaryContext(),
+                )
             MBALog.d(TAG, "  Summary: '${summary.title}'")
 
             // 5. Cache

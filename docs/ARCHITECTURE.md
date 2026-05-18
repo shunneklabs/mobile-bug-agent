@@ -8,7 +8,8 @@ This document describes the Mobile Bug Agent SDK, server, and demo architecture.
 ┌─────────────────────────────────────────────────────────────┐
 │                    External Developer API                    │
 │   MBAAndroid.install(...) → MBA.configure(...)               │
-│   MBAAndroid.saveConfig(...) → SDKOnly callbacks/JSON        │
+│   MBAAndroid.saveConfig(...) → flushPendingCrashes(...)      │
+│   SDKOnly callbacks/JSON                                    │
 │   MBA.logError() → MBA.setScreen() → MBA.addBreadcrumb()     │
 │   MBA.exceptionHandler (attach to CoroutineScope)            │
 └──────────────────────────┬──────────────────────────────────┘

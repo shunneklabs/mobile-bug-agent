@@ -113,6 +113,8 @@ class ExampleApp : Application() {
             },
             debug = BuildConfig.DEBUG,
         )
+
+        MBAAndroid.flushPendingCrashes(this)
     }
 }
 ```
@@ -238,8 +240,9 @@ val llmConfig = LLM.custom(
 ```
 
 Pass the same `llmConfig` to both `MBAMode.SdkOnly(...)` and
-`MBAAndroid.saveConfig(...)` so WorkManager can process pending crashes after
-restart.
+`MBAAndroid.saveConfig(...)`, then call `MBAAndroid.flushPendingCrashes(...)`
+after optional sinks are registered so WorkManager can process pending crashes
+after restart.
 
 ## 7. Handle Callback JSON
 
@@ -316,10 +319,12 @@ Fatal crash flow:
 2. MBA writes raw crash JSON to app-private storage.
 3. Android terminates the process normally.
 4. The user opens the app again.
-5. WorkManager processes pending crash files.
-6. SDKOnly runs Koog analysis or raw fallback.
-7. Local grouping updates the matching bug group.
-8. The app receives callbacks/JSON.
+5. The app restores SDKOnly config and optional sinks.
+6. The app calls `MBAAndroid.flushPendingCrashes(...)`.
+7. WorkManager processes pending crash files.
+8. SDKOnly runs Koog analysis or raw fallback.
+9. Local grouping updates the matching bug group.
+10. The app receives callbacks/JSON.
 9. Optional Notion/GitHub sinks create or update external records.
 ```
 

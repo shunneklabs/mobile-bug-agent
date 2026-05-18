@@ -1,6 +1,7 @@
 package dev.sunnat629.mba.agent
 
 import dev.sunnat629.mba.agent.model.CrashSummary
+import dev.sunnat629.mba.agent.model.CombinedCrashAnalysis
 import dev.sunnat629.mba.agent.model.ParsedStackTrace
 import dev.sunnat629.mba.agent.model.SeverityResult
 import dev.sunnat629.mba.core.model.DeviceContext
@@ -48,7 +49,7 @@ class CrashAnalysisAgentTest {
     )
 
     /** Mock executor that returns predictable results without LLM calls. */
-    private class FakeExecutor : CrashAnalysisExecutor {
+    private open class FakeExecutor : CrashAnalysisExecutor {
         var parseCallCount = 0
         var classifyCallCount = 0
         var summaryCallCount = 0
@@ -230,5 +231,52 @@ class CrashAnalysisAgentTest {
         assertNotNull(result.report.stepsToReproduce)
         assertNotNull(result.report.possibleCause)
         assertTrue(result.report.description.contains("AI processing failed"))
+    }
+
+    @Test
+    fun combinedKoogAnalysisPopulatesTicketFieldsInOnePass() = runTest {
+        val executor = object : FakeExecutor() {
+            override suspend fun analyzeCrash(
+                sanitizedTrace: String,
+                device: DeviceContext,
+                screen: String?,
+                breadcrumbs: List<String>,
+                crashContext: String,
+            ): CombinedCrashAnalysis = CombinedCrashAnalysis(
+                rootException = "java.lang.NullPointerException",
+                rootMessage = "Attempt to invoke virtual method",
+                crashFile = "CheckoutViewModel.kt",
+                crashLine = 87,
+                crashMethod = "processPayment",
+                isAppCode = true,
+                severity = "HIGH",
+                confidence = 0.86f,
+                severityReasoning = "Checkout crash blocks payment",
+                title = "Checkout crashes while processing payment",
+                description = "NullPointerException in CheckoutViewModel.kt:87 on debug app 1.0.0.",
+                stepsToReproduce = "1. Open cart\n2. Tap checkout",
+                possibleCause = "Payment response is null before processPayment reads it",
+            )
+        }
+        val agent = CrashAnalysisAgent(
+            agentFactory = object : AgentFactory(
+                llmConfig = dev.sunnat629.mba.core.config.LLMConfig.NONE
+            ) {
+                override fun create(): CrashAnalysisExecutor = executor
+            },
+            piiSanitizer = PIISanitizer(),
+            dedupCache = LocalDedupCache(maxSize = 100, ttl = 24.hours),
+        )
+
+        val result = agent.process(testReport)
+
+        assertIs<CrashAnalysisResult.New>(result)
+        assertEquals("Checkout crashes while processing payment", result.report.title)
+        assertEquals(0.86f, result.report.confidence)
+        assertEquals("1. Open cart\n2. Tap checkout", result.report.stepsToReproduce)
+        assertEquals("Payment response is null before processPayment reads it", result.report.possibleCause)
+        assertEquals(0, executor.parseCallCount)
+        assertEquals(0, executor.classifyCallCount)
+        assertEquals(0, executor.summaryCallCount)
     }
 }

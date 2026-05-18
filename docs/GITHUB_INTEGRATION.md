@@ -78,7 +78,8 @@ val githubBackend = GitHubIssueBackend(
 )
 ```
 
-Register it after `MBA.configure(...)` and before pending crashes are processed:
+Register it after `MBA.configure(...)` and before calling
+`MBAAndroid.flushPendingCrashes(...)`:
 
 ```kotlin
 MBAAndroid.setTicketBackends(
@@ -92,6 +93,8 @@ A complete SDKOnly setup:
 class ExampleApp : Application() {
     override fun onCreate() {
         super.onCreate()
+
+        MBAAndroid.install(this)
 
         val llmConfig = LLM.gemini(BuildConfig.GEMINI_API_KEY)
 
@@ -116,7 +119,7 @@ class ExampleApp : Application() {
             debug = BuildConfig.DEBUG,
         )
 
-        MBAAndroid.install(this)
+        MBAAndroid.flushPendingCrashes(this)
     }
 }
 ```
