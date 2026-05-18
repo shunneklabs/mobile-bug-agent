@@ -16,23 +16,28 @@ what the local agent does, and what diagnostic data is collected.
 
    Read this for the SDKOnly processing model and future direction.
 
-3. `MOBILE_AGENT_AND_CORE_OVERVIEW.md`
+3. `NOTION_INTEGRATION.md` and `GITHUB_INTEGRATION.md`
+
+   Read these only if the app wants MBA to write directly to Notion or GitHub.
+   Callback-only mode does not require either integration.
+
+4. `MOBILE_AGENT_AND_CORE_OVERVIEW.md`
 
    Read this for the full architecture. It explains how the Android adapter,
    shared core, local agent, and optional integrations work together.
 
-4. `MONITORING_SECURITY_CLAIMS.md`
+5. `MONITORING_SECURITY_CLAIMS.md`
 
    Read this for the monitoring and privacy boundary. It explains what MBA
    collects, what it does not collect, and where app-provided crash text can
    still contain sensitive values.
 
-5. `ARCHITECTURE.md`
+6. `ARCHITECTURE.md`
 
    Read this for the full repository architecture across SDK modules, server,
    Notion, GitHub, and the demo pipeline.
 
-6. `KOOG_AGENT_ROADMAP.md`
+7. `KOOG_AGENT_ROADMAP.md`
 
    Read this for the Koog crash-analysis and auto-fix roadmap.
 

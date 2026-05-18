@@ -268,6 +268,8 @@ needs every pending crash file processed during the worker run.
 ## 8. Add Notion Or GitHub
 
 Notion and GitHub are optional. Add only the modules your app uses.
+Callback-only mode is the safest default: MBA emits JSON and your app owns
+delivery, retry, storage, and schema decisions.
 
 ```kotlin
 val notionBackend = NotionTicketBackend(
@@ -296,6 +298,11 @@ MBAAndroid.setTicketBackends()
 
 Repeated crashes should update the existing local bug group and external record
 instead of creating duplicate parent tickets for the same fingerprint.
+
+Detailed setup:
+
+- [Notion integration guide](NOTION_INTEGRATION.md)
+- [GitHub integration guide](GITHUB_INTEGRATION.md)
 
 ## 9. Crash And ANR Flow
 

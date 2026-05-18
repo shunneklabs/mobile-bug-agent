@@ -72,6 +72,8 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 - [SDKOnly Android implementation guide](docs/SDKONLY_IMPLEMENTATION_GUIDE.md)
 - [SDKOnly mode overview](docs/MBA_AGENT_SDKONLY.md)
+- [Notion integration guide](docs/NOTION_INTEGRATION.md)
+- [GitHub integration guide](docs/GITHUB_INTEGRATION.md)
 - [Mobile agent and core architecture](docs/MOBILE_AGENT_AND_CORE_OVERVIEW.md)
 - [Monitoring and privacy boundary](docs/MONITORING_SECURITY_CLAIMS.md)
 - [Repository architecture](docs/ARCHITECTURE.md)
@@ -175,7 +177,8 @@ val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + MBA.exceptionHandl
 Optional Notion/GitHub delivery is configured by adding the integration module
 and registering ticket backends with `MBAAndroid.setTicketBackends(...)`. Apps
 that do not need Notion or GitHub can stay callback-only and handle the JSON in
-their own app layer.
+their own app layer. See [docs/NOTION_INTEGRATION.md](docs/NOTION_INTEGRATION.md)
+and [docs/GITHUB_INTEGRATION.md](docs/GITHUB_INTEGRATION.md) for setup details.
 
 Treat crash context like logs. Do not put emails, tokens, payment data, raw user
 input, or private content in exception messages, breadcrumbs, screen names, or
