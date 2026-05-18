@@ -7,6 +7,7 @@ import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.fingerprint.CrashFingerprint
 import dev.sunnat629.mba.core.model.*
 import dev.sunnat629.mba.core.pii.PIISanitizer
+import dev.sunnat629.mba.core.processing.CrashReportBuilder
 import dev.sunnat629.mba.core.store.LocalDedupCache
 
 class CrashAnalysisAgent(
@@ -100,15 +101,18 @@ class CrashAnalysisAgent(
         } catch (e: Exception) {
             MBALog.e(TAG, "\u274c AI analysis failed, using fallback", e)
             if (useLocalDedup) dedupCache.put(fingerprint)
+            val fallback = CrashReportBuilder.build(
+                raw.copy(
+                    stackTrace = sanitizedTrace,
+                    message = sanitizedMessage,
+                    breadcrumbs = sanitizedBreadcrumbs,
+                )
+            )
             CrashAnalysisResult.Fallback(
-                report = ProcessedCrashReport(
-                    raw = raw,
+                report = fallback.copy(
                     fingerprint = fingerprint,
-                    severity = Severity.MEDIUM,
                     confidence = 0.0f,
-                    title = "${raw.exceptionType} in ${raw.currentScreen ?: "unknown"}",
-                    description = "AI processing failed: ${e.message}. Raw stack trace attached.",
-                    sanitizedStackTrace = sanitizedTrace,
+                    description = "AI processing failed: ${e.message}. ${fallback.description}",
                 ),
                 error = e,
             )

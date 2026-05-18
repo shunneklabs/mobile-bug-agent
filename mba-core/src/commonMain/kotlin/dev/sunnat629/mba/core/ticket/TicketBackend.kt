@@ -49,4 +49,5 @@ public data class TicketUpdate(
     val deviceMatrix: String? = null,
     val githubIssueUrl: String? = null,
     val notionUrl: String? = null,
+    val report: ProcessedCrashReport? = null,
 )

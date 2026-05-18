@@ -477,7 +477,16 @@ public class NotionTicketBackend(
                 if (!httpResponse.isSchemaMismatch(errorBody)) {
                     return TicketResult.failure(name, "Notion API ${httpResponse.status}: $errorBody")
                 }
-                return TicketResult(ticketId = ticketId, backendName = name, success = true)
+                val schema = fetchDatabaseSchema(bugTicketDbId)
+                    ?: return TicketResult(ticketId = ticketId, backendName = name, success = true)
+                val compatibleProperties = properties.compatibleWith(schema)
+                if (compatibleProperties.isEmpty()) {
+                    return TicketResult(ticketId = ticketId, backendName = name, success = true)
+                }
+                val retryResponse = patchPage(ticketId, compatibleProperties)
+                if (!retryResponse.status.isSuccess()) {
+                    return TicketResult.failure(name, "Notion API ${retryResponse.status}: ${retryResponse.bodyAsText()}")
+                }
             }
             TicketResult(ticketId = ticketId, backendName = name, success = true)
         } catch (e: Exception) {
@@ -515,6 +524,42 @@ public class NotionTicketBackend(
         update.notionUrl?.let { url ->
             properties["Notion URL"] = NotionProperty.RichText(
                 listOf(NotionRichText(text = NotionTextContent(url)))
+            )
+        }
+        update.report?.takeIf { it.confidence > 0.0f }?.let { report ->
+            properties["Name"] = NotionProperty.Title(
+                listOf(NotionRichText(text = NotionTextContent(report.title)))
+            )
+            properties["Severity"] = NotionProperty.Select(
+                NotionSelectItem(name = report.severity.name)
+            )
+            properties["Description"] = NotionProperty.RichText(
+                listOf(NotionRichText(text = NotionTextContent(report.description.take(2000))))
+            )
+            properties["AI Confidence"] = NotionProperty.Number(report.confidence.toDouble())
+            report.possibleCause?.let { cause ->
+                properties["Possible Cause"] = NotionProperty.RichText(
+                    listOf(NotionRichText(text = NotionTextContent(cause.take(2000))))
+                )
+            }
+            report.stepsToReproduce?.let { steps ->
+                properties["Steps to Reproduce"] = NotionProperty.RichText(
+                    listOf(NotionRichText(text = NotionTextContent(steps.take(2000))))
+                )
+            }
+            report.raw.currentScreen?.let { screen ->
+                properties["Affected Screen"] = NotionProperty.RichText(
+                    listOf(NotionRichText(text = NotionTextContent(screen)))
+                )
+            }
+            properties["App Version"] = NotionProperty.RichText(
+                listOf(NotionRichText(text = NotionTextContent(report.raw.appVersion)))
+            )
+            properties["OS Version"] = NotionProperty.RichText(
+                listOf(NotionRichText(text = NotionTextContent("Android ${report.raw.device.osVersion} (API ${report.raw.device.sdkInt})")))
+            )
+            properties["Device Model"] = NotionProperty.RichText(
+                listOf(NotionRichText(text = NotionTextContent(report.raw.device.displayName)))
             )
         }
         return properties

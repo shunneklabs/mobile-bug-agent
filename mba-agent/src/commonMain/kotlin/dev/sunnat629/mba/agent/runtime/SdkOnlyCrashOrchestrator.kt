@@ -4,7 +4,7 @@ import dev.sunnat629.mba.agent.CrashAnalysisAgent
 import dev.sunnat629.mba.agent.CrashAnalysisResult
 import dev.sunnat629.mba.core.model.ProcessedCrashReport
 import dev.sunnat629.mba.core.model.RawCrashReport
-import dev.sunnat629.mba.core.model.Severity
+import dev.sunnat629.mba.core.processing.CrashReportBuilder
 
 public class SdkOnlyCrashOrchestrator(
     private val analysisAgent: CrashAnalysisAgent,
@@ -101,18 +101,10 @@ public class SdkOnlyCrashOrchestrator(
         )
 
     private fun RawCrashReport.toDuplicateFallbackReport(fingerprint: String): ProcessedCrashReport =
-        ProcessedCrashReport(
-            raw = this,
+        CrashReportBuilder.build(this).copy(
             fingerprint = fingerprint,
-            severity = Severity.MEDIUM,
             confidence = 0.0f,
-            title = "${exceptionType.substringAfterLast(".")} in ${currentScreen ?: "unknown screen"}",
             description = "Repeated crash occurrence grouped by fingerprint.",
-            stepsToReproduce = breadcrumbs.takeIf { it.isNotEmpty() }
-                ?.mapIndexed { index, breadcrumb -> "${index + 1}. $breadcrumb" }
-                ?.joinToString("\n"),
-            possibleCause = "$exceptionType${message?.let { ": $it" } ?: ""}",
-            sanitizedStackTrace = stackTrace,
         )
 
     private data class AnalysisOutput(

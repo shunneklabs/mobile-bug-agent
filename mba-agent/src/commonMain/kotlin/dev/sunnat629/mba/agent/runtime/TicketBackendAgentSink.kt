@@ -27,6 +27,8 @@ public class TicketBackendAgentSink(
                     occurrenceCount = event.group.occurrenceCount,
                     uniqueDeviceCount = event.group.uniqueDeviceCount,
                     newOccurrenceTime = event.occurrence.occurredAt,
+                    deviceMatrix = event.occurrence.deviceModel,
+                    report = event.report,
                 ),
             )
             if (backend is CrashOccurrenceTicketBackend) {

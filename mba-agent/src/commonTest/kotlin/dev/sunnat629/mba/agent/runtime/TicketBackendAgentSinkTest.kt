@@ -52,6 +52,7 @@ class TicketBackendAgentSinkTest {
         assertEquals(1, backend.updatedTickets)
         assertEquals(1, backend.createdOccurrences)
         assertEquals(2, backend.lastUpdate?.occurrenceCount)
+        assertEquals("Foo crashes", backend.lastUpdate?.report?.title)
     }
 
     @Test

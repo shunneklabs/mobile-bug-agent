@@ -12,6 +12,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.hours
 
@@ -186,5 +187,48 @@ class CrashAnalysisAgentTest {
 
         val created = factory.create()
         assertEquals(executor, created)
+    }
+
+    @Test
+    fun fallbackStillIncludesReproductionAndCause() = runTest {
+        val agent = CrashAnalysisAgent(
+            agentFactory = object : AgentFactory(
+                llmConfig = dev.sunnat629.mba.core.config.LLMConfig.NONE
+            ) {
+                override fun create(): CrashAnalysisExecutor = object : CrashAnalysisExecutor {
+                    override suspend fun parseStackTrace(sanitizedTrace: String): ParsedStackTrace {
+                        error("LLM unavailable")
+                    }
+
+                    override suspend fun classifySeverity(
+                        parsed: ParsedStackTrace,
+                        device: DeviceContext,
+                    ): SeverityResult {
+                        error("unreachable")
+                    }
+
+                    override suspend fun generateSummary(
+                        parsed: ParsedStackTrace,
+                        severity: SeverityResult,
+                        screen: String?,
+                        breadcrumbs: List<String>,
+                        device: DeviceContext,
+                        crashContext: String,
+                    ): CrashSummary {
+                        error("unreachable")
+                    }
+                }
+            },
+            piiSanitizer = PIISanitizer(),
+            dedupCache = LocalDedupCache(maxSize = 100, ttl = 24.hours),
+        )
+
+        val result = agent.process(testReport)
+
+        assertIs<CrashAnalysisResult.Fallback>(result)
+        assertEquals(0.0f, result.report.confidence)
+        assertNotNull(result.report.stepsToReproduce)
+        assertNotNull(result.report.possibleCause)
+        assertTrue(result.report.description.contains("AI processing failed"))
     }
 }

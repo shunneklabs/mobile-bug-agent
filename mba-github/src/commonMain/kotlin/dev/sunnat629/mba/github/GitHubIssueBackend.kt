@@ -87,8 +87,13 @@ public class GitHubIssueBackend(
                 ?: return TicketResult.failure(name, "Invalid ticket id: $ticketId (expected GitHub issue number)")
 
             val body = mutableMapOf<String, Any>()
+            update.report?.takeIf { it.confidence > 0.0f }?.let { report ->
+                body["title"] = report.title
+                body["body"] = buildIssueBody(report, update)
+                body["labels"] = buildSeverityLabels(report)
+            }
             val addDevice = update.addDevice
-            if (addDevice != null) {
+            if (addDevice != null && !body.containsKey("body")) {
                 val existingIssue = getIssue(issueNumber)
                 val updatedBody = buildString {
                     append(existingIssue?.body ?: "")
@@ -137,13 +142,16 @@ public class GitHubIssueBackend(
         return listOf(severityLabel, "mba/auto-generated")
     }
 
-    private fun buildIssueBody(report: ProcessedCrashReport): String = buildString {
+    private fun buildIssueBody(report: ProcessedCrashReport, update: TicketUpdate? = null): String = buildString {
         appendLine("## Crash Report")
         appendLine()
         appendLine("**Title:** ${report.title}")
         appendLine("**Severity:** ${report.severity} (confidence: ${"%.0f".format(report.confidence * 100)}%)")
         appendLine("**Fingerprint:** `${report.fingerprint}`")
         appendLine("**Occurred At:** ${report.raw.timestamp}")
+        update?.occurrenceCount?.let { appendLine("**Occurrences:** $it") }
+        update?.uniqueDeviceCount?.let { appendLine("**Unique Devices:** $it") }
+        update?.newOccurrenceTime?.let { appendLine("**Last Seen:** $it") }
         appendLine()
 
         appendLine("### Description")
