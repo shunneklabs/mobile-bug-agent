@@ -89,6 +89,11 @@ fun CrashTestScreen() {
                     val applied = SampleRuntime.setUseAgent(context, enabled)
                     status = "Agent: ${if (applied.useAgent) "Koog enabled" else "raw fallback"}. Trigger a crash to test it."
                 },
+                onHostedBackendChange = { enabled ->
+                    val requested = if (enabled) SampleDeliveryMode.HOSTED else SampleDeliveryMode.SDK_ONLY
+                    val applied = SampleRuntime.selectDeliveryMode(context, requested)
+                    status = "Processing route: ${applied.deliveryMode.label}. Trigger a crash to test it."
+                },
                 onReset = {
                     val applied = SampleRuntime.resetToBuildDefaults(context)
                     status = "Processing route reset to build defaults: ${applied.deliveryMode.label}, agent=${if (applied.useAgent) "on" else "raw fallback"}."
@@ -118,7 +123,7 @@ fun CrashTestScreen() {
                         MBA.addBreadcrumb("Expected grouping key: ${scenario.expectedGrouping}")
                         runScenario(scenario)
                         status = if (scenario.fatal) {
-                            "Fatal scenario '${scenario.title}' triggered. Reopen the app to process it."
+                            "${scenario.statusLabel} '${scenario.title}' triggered. Reopen the app to process it."
                         } else {
                             "Non-fatal scenario '${scenario.title}' logged. It will be processed by the SDK worker."
                         }
@@ -209,6 +214,7 @@ private fun ProcessingCard(
     hasGemini: Boolean,
     onModeSelect: (SampleDeliveryMode) -> Unit,
     onUseAgentChange: (Boolean) -> Unit,
+    onHostedBackendChange: (Boolean) -> Unit,
     onReset: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -237,6 +243,29 @@ private fun ProcessingCard(
                     label = "Hosted backend",
                     selected = settings.deliveryMode == SampleDeliveryMode.HOSTED,
                     onClick = { onModeSelect(SampleDeliveryMode.HOSTED) },
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Use hosted backend", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (settings.deliveryMode == SampleDeliveryMode.HOSTED) {
+                            "Send raw crashes to MBA Server"
+                        } else {
+                            "Process locally in SDKOnly mode"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = settings.deliveryMode == SampleDeliveryMode.HOSTED,
+                    onCheckedChange = onHostedBackendChange,
                 )
             }
 
@@ -400,7 +429,7 @@ private fun ScenarioCard(scenario: CrashScenario, onRun: () -> Unit) {
                     color = if (scenario.fatal) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.tertiaryContainer,
                 ) {
                     Text(
-                        if (scenario.fatal) "fatal" else "non-fatal",
+                        scenario.badgeLabel,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
                         style = MaterialTheme.typography.labelSmall,
                     )
@@ -417,11 +446,11 @@ private fun ScenarioCard(scenario: CrashScenario, onRun: () -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                 ) {
-                    Text("Trigger fatal crash")
+                    Text(scenario.actionLabel)
                 }
             } else {
                 OutlinedButton(onClick = onRun, modifier = Modifier.fillMaxWidth()) {
-                    Text("Log non-fatal error")
+                    Text(scenario.actionLabel)
                 }
             }
         }
@@ -434,6 +463,9 @@ private data class CrashScenario(
     val screen: String,
     val fatal: Boolean,
     val expectedGrouping: String,
+    val actionLabel: String = if (fatal) "Trigger fatal crash" else "Log non-fatal error",
+    val badgeLabel: String = if (fatal) "fatal" else "non-fatal",
+    val statusLabel: String = if (fatal) "Fatal scenario" else "Non-fatal scenario",
     val run: () -> Unit,
 )
 
@@ -453,6 +485,19 @@ private fun sampleScenarios(): List<CrashScenario> = listOf(
         fatal = true,
         expectedGrouping = "separate fingerprint",
         run = { listOf("one", "two")[5] },
+    ),
+    CrashScenario(
+        title = "Main thread ANR",
+        description = "Blocks the UI thread long enough for Android to report an ANR. On Android 11+, reopen the app to let MBA convert the previous ANR exit into a crash report.",
+        screen = "ANRScreen",
+        fatal = true,
+        expectedGrouping = "ANR exit reason fingerprint after restart",
+        actionLabel = "Trigger ANR",
+        badgeLabel = "ANR",
+        statusLabel = "ANR scenario",
+        run = {
+            Thread.sleep(20_000)
+        },
     ),
     CrashScenario(
         title = "Session state violation",
