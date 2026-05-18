@@ -1,5 +1,6 @@
 package dev.sunnat629.mba.github
 
+import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.model.ProcessedCrashReport
 import dev.sunnat629.mba.core.model.TicketResult
 import dev.sunnat629.mba.core.ticket.TicketBackend
@@ -12,6 +13,10 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.Json
 
 /**
@@ -50,6 +55,7 @@ public class GitHubIssueBackend(
     override suspend fun createTicket(report: ProcessedCrashReport): TicketResult {
         return try {
             val labels = buildSeverityLabels(report)
+            logPayload("create", report)
 
             val issueRequest = GitHubIssueRequest(
                 title = report.title,
@@ -86,16 +92,19 @@ public class GitHubIssueBackend(
             val issueNumber = ticketId.toIntOrNull()
                 ?: return TicketResult.failure(name, "Invalid ticket id: $ticketId (expected GitHub issue number)")
 
-            val body = mutableMapOf<String, Any>()
-            update.report?.takeIf { it.confidence > 0.0f }?.let { report ->
-                body["title"] = report.title
-                body["body"] = buildIssueBody(report, update)
-                body["labels"] = buildSeverityLabels(report)
+            var title: String? = null
+            var issueBody: String? = null
+            var labels: List<String>? = null
+            update.report?.let { report ->
+                logPayload("update", report)
+                title = report.title
+                issueBody = buildIssueBody(report, update)
+                labels = buildSeverityLabels(report)
             }
             val addDevice = update.addDevice
-            if (addDevice != null && !body.containsKey("body")) {
+            if (addDevice != null && issueBody == null) {
                 val existingIssue = getIssue(issueNumber)
-                val updatedBody = buildString {
+                issueBody = buildString {
                     append(existingIssue?.body ?: "")
                     appendLine()
                     appendLine()
@@ -103,14 +112,22 @@ public class GitHubIssueBackend(
                     appendLine()
                     append("**Additional device:** ${addDevice.displayName}")
                 }
-                body["body"] = updatedBody
+            }
+            val requestBody = buildJsonObject {
+                title?.let { put("title", it) }
+                issueBody?.let { put("body", it) }
+                labels?.let { values ->
+                    putJsonArray("labels") {
+                        values.forEach { label -> add(label) }
+                    }
+                }
             }
 
             val httpResponse = httpClient.patch("$BASE_URL/repos/$owner/$repo/issues/$issueNumber") {
                 header("Authorization", "Bearer $token")
                 header("Accept", "application/vnd.github.v3+json")
                 contentType(ContentType.Application.Json)
-                setBody(body)
+                setBody(requestBody)
             }
 
             if (!httpResponse.status.isSuccess()) {
@@ -140,6 +157,16 @@ public class GitHubIssueBackend(
             else -> "mba/unknown"
         }
         return listOf(severityLabel, "mba/auto-generated")
+    }
+
+    private fun logPayload(action: String, report: ProcessedCrashReport) {
+        MBALog.i(
+            "GitHub",
+            "GitHub $action payload: confidence=${report.confidence}, " +
+                "steps=${report.stepsToReproduce?.isNotBlank() == true}, " +
+                "cause=${report.possibleCause?.isNotBlank() == true}, " +
+                "title='${report.title}'",
+        )
     }
 
     private fun buildIssueBody(report: ProcessedCrashReport, update: TicketUpdate? = null): String = buildString {

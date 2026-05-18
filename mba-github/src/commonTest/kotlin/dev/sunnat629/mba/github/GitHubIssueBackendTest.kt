@@ -4,6 +4,8 @@ import dev.sunnat629.mba.core.model.DeviceContext
 import dev.sunnat629.mba.core.model.ProcessedCrashReport
 import dev.sunnat629.mba.core.model.RawCrashReport
 import dev.sunnat629.mba.core.model.Severity
+import dev.sunnat629.mba.core.ticket.TicketUpdate
+import dev.sunnat629.mba.github.model.GitHubIssueRequest
 import io.ktor.client.*
 import io.ktor.client.engine.mock.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -11,6 +13,7 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.utils.io.*
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -63,11 +66,36 @@ class GitHubIssueBackendTest {
     )
 
     @Test
-    fun issueBodyContainsAllRequiredSections() {
-        val backend = GitHubIssueBackend("fake-token", "test-owner", "test-repo")
-        // We can't call createTicket without a mock engine, but we can verify the body format
-        // by checking the backend name
-        assertEquals("GitHub", backend.name)
+    fun issueBodyContainsAllRequiredSections() = runTest {
+        var capturedIssue: GitHubIssueRequest? = null
+        val json = Json { ignoreUnknownKeys = true }
+        val mockEngine = MockEngine { request ->
+            capturedIssue = json.decodeFromString(String(request.body.toByteArray()))
+            respond(
+                content = """{"id":1,"number":42,"html_url":"https://github.com/test/test/issues/42","title":"test","state":"open"}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val httpClient = HttpClient(mockEngine) {
+            install(ContentNegotiation) {
+                json(json)
+            }
+        }
+
+        val backend = GitHubIssueBackend("fake-token", "test-owner", "test-repo", httpClient)
+        val result = backend.createTicket(testReport)
+
+        assertTrue(result.success)
+        val body = capturedIssue?.body.orEmpty()
+        assertTrue(body.contains("### Possible Cause"), body)
+        assertTrue(body.contains("Payment response is null"), body)
+        assertTrue(body.contains("### Steps to Reproduce"), body)
+        assertTrue(body.contains("1. Open cart"), body)
+        assertTrue(body.contains("2. Tap checkout"), body)
+
+        httpClient.close()
+        backend.close()
     }
 
     @Test
@@ -118,6 +146,53 @@ class GitHubIssueBackendTest {
 
         assertTrue(!result.success)
         assertTrue(result.errorMessage?.contains("GitHub API") == true)
+
+        httpClient.close()
+        backend.close()
+    }
+
+    @Test
+    fun updateTicketIncludesFallbackSectionsEvenWhenConfidenceIsZero() = runTest {
+        var capturedIssue: GitHubIssueRequest? = null
+        val json = Json { ignoreUnknownKeys = true }
+        val mockEngine = MockEngine { request ->
+            assertEquals("/repos/test-owner/test-repo/issues/42", request.url.encodedPath)
+            assertEquals(HttpMethod.Patch, request.method)
+            capturedIssue = json.decodeFromString(String(request.body.toByteArray()))
+            respond(
+                content = """{"id":1,"number":42,"html_url":"https://github.com/test/test/issues/42","title":"test","state":"open"}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val httpClient = HttpClient(mockEngine) {
+            install(ContentNegotiation) {
+                json(json)
+            }
+        }
+        val fallbackReport = testReport.copy(
+            confidence = 0.0f,
+            description = "Raw fallback report with stack-derived fields.",
+        )
+
+        val backend = GitHubIssueBackend("fake-token", "test-owner", "test-repo", httpClient)
+        val result = backend.updateTicket(
+            ticketId = "42",
+            update = TicketUpdate(
+                occurrenceCount = 2,
+                uniqueDeviceCount = 1,
+                report = fallbackReport,
+            ),
+        )
+
+        assertTrue(result.success)
+        val body = capturedIssue?.body.orEmpty()
+        assertTrue(body.contains("confidence: 0%"), body)
+        assertTrue(body.contains("### Possible Cause"), body)
+        assertTrue(body.contains("Payment response is null"), body)
+        assertTrue(body.contains("### Steps to Reproduce"), body)
+        assertTrue(body.contains("1. Open cart"), body)
+        assertTrue(body.contains("**Occurrences:** 2"), body)
 
         httpClient.close()
         backend.close()
