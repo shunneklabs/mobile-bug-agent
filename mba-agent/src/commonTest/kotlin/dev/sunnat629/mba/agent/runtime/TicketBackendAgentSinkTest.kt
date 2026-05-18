@@ -56,6 +56,27 @@ class TicketBackendAgentSinkTest {
     }
 
     @Test
+    fun duplicateNotionGroupCreatesNewParentWhenStoredPageIsArchived() = runTest {
+        val backend = ArchivedNotionBackend()
+        val sink = TicketBackendAgentSink(backend)
+
+        val result = sink.sync(
+            event(
+                isNewGroup = false,
+                notionTicketId = "trashed-parent",
+                occurrenceCount = 3,
+            )
+        )
+
+        assertTrue(result.success)
+        assertTrue(result.created)
+        assertEquals("notion-ticket-1", result.ticketId)
+        assertEquals(1, backend.createdTickets)
+        assertEquals(1, backend.updateAttempts)
+        assertEquals(0, backend.createdOccurrences)
+    }
+
+    @Test
     fun newGithubGroupCreatesIssue() = runTest {
         val backend = RecordingTicketBackend("GitHub")
         val sink = TicketBackendAgentSink(backend)
@@ -101,7 +122,7 @@ class TicketBackendAgentSinkTest {
         }
     }
 
-    private class RecordingOccurrenceBackend(name: String) :
+    private open class RecordingOccurrenceBackend(name: String) :
         RecordingTicketBackend(name),
         CrashOccurrenceTicketBackend {
 
@@ -118,6 +139,16 @@ class TicketBackendAgentSinkTest {
                 backendName = name,
                 success = true,
             )
+        }
+    }
+
+    private class ArchivedNotionBackend : RecordingOccurrenceBackend("Notion") {
+        var updateAttempts = 0
+            private set
+
+        override suspend fun updateTicket(ticketId: String, update: TicketUpdate): TicketResult {
+            updateAttempts++
+            return TicketResult.failure(name, "Notion page is archived or in trash: $ticketId")
         }
     }
 

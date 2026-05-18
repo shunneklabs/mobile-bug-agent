@@ -85,6 +85,10 @@ class CrashDeliveryPipelineTest {
         val event = assertNotNull(callbackEvent)
         assertFalse(event.agentic)
         assertEquals("RAW_FALLBACK", event.analysisSource)
+        assertEquals(0.0f, event.report.confidence)
+        assertEquals("boom", event.report.description)
+        assertEquals(null, event.report.stepsToReproduce)
+        assertEquals(null, event.report.possibleCause)
         assertEquals("Google Pixel (Android 15, API 35)", event.raw.device.displayName)
     }
 

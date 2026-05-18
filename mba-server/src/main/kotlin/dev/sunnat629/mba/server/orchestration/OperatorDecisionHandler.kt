@@ -4,6 +4,7 @@ import dev.sunnat629.mba.agent.CrashAnalysisResult
 import dev.sunnat629.mba.core.model.ProcessedCrashReport
 import dev.sunnat629.mba.core.model.RawCrashReport
 import dev.sunnat629.mba.core.model.Severity
+import dev.sunnat629.mba.core.ticket.CrashOccurrenceTicketBackend
 import dev.sunnat629.mba.core.ticket.TicketBackend
 import dev.sunnat629.mba.core.ticket.TicketUpdate
 import dev.sunnat629.mba.github.AutoFixResult
@@ -82,7 +83,9 @@ class OperatorDecisionHandler(
             severity = Severity.MEDIUM,
             confidence = 0.0f,
             title = "$exceptionType in ${currentScreen ?: "unknown"}",
-            description = "Duplicate crash selected by the operator. Full raw stack trace is attached for ticket creation.",
+            description = message?.takeIf { it.isNotBlank() }
+                ?: stackTrace.lineSequence().firstOrNull()?.takeIf { it.isNotBlank() }
+                ?: exceptionType,
             sanitizedStackTrace = stackTrace,
         )
 
@@ -108,6 +111,9 @@ class OperatorDecisionHandler(
         if (existingUrl != null && existingTicketId != null) {
             eventSink.progress(jobId, "Opening existing Notion grouped bug from operator action…", stage = "notion_ticket")
             withContext(ioDispatcher) { backend.updateTicket(existingTicketId, groupTicketUpdate(aggregated.group)) }
+            (backend as? CrashOccurrenceTicketBackend)?.let { notion ->
+                withContext(ioDispatcher) { notion.createCrashOccurrence(aggregated.report, existingTicketId) }
+            }
             eventSink.complete(jobId, existingUrl, artifactType = "notion_ticket")
             return
         }

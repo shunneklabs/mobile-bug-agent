@@ -79,6 +79,7 @@ This document describes the Mobile Bug Agent SDK, server, and demo architecture.
 │  │ │ AI Confidence / App Version / OS Version     │      │   │
 │  │ │ First Seen / Last Seen                       │      │   │
 │  │ │ Occurrences / Unique Devices                 │      │   │
+│  │ │ Parent Bug relation for occurrence rows      │      │   │
 │  │ └──────────────────────────────────────────────┘      │   │
 │  └──────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
@@ -175,7 +176,7 @@ This document describes the Mobile Bug Agent SDK, server, and demo architecture.
    │  NotionTicketBackend.createTicket(report)
    │  → Creates parent page in Bug Tickets DB
    │  → Updates parent page for duplicates
-   │  → Keeps one Notion row per grouped bug
+   │  → Creates linked occurrence row for duplicates
    │
    │  Optional GitHub path:
    │  → Create issue

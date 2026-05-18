@@ -104,7 +104,11 @@ public class SdkOnlyCrashOrchestrator(
         CrashReportBuilder.build(this).copy(
             fingerprint = fingerprint,
             confidence = 0.0f,
-            description = "Repeated crash occurrence grouped by fingerprint.",
+            description = message?.takeIf { it.isNotBlank() }
+                ?: stackTrace.lineSequence().firstOrNull()?.takeIf { it.isNotBlank() }
+                ?: exceptionType,
+            stepsToReproduce = null,
+            possibleCause = null,
         )
 
     private data class AnalysisOutput(

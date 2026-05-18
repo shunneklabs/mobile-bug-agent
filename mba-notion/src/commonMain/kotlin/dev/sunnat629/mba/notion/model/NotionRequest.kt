@@ -98,7 +98,9 @@ public data class NotionParagraphBlock(
 @Serializable
 public data class NotionPageResponse(
     val id: String,
-    val url: String? = null
+    val url: String? = null,
+    val archived: Boolean = false,
+    @SerialName("in_trash") val inTrash: Boolean = false,
 )
 
 @Serializable

@@ -31,7 +31,10 @@ public class TicketBackendAgentSink(
                     report = event.report,
                 ),
             )
-            if (backend is CrashOccurrenceTicketBackend) {
+            if (!update.success && backend.name.lowercase() == "notion" && update.isStaleArtifactFailure()) {
+                return backend.createTicket(event.report).toSinkResult(created = true)
+            }
+            if (update.success && backend is CrashOccurrenceTicketBackend) {
                 backend.createCrashOccurrence(event.report, existingTicketId)
             }
             update.toSinkResult(created = false)
@@ -55,4 +58,11 @@ public class TicketBackendAgentSink(
             success = success,
             errorMessage = errorMessage,
         )
+
+    private fun TicketResult.isStaleArtifactFailure(): Boolean {
+        val error = errorMessage.orEmpty().lowercase()
+        return error.contains("archived") ||
+            error.contains("trash") ||
+            error.contains("not found")
+    }
 }

@@ -17,6 +17,7 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class GitHubIssueBackendTest {
@@ -70,12 +71,23 @@ class GitHubIssueBackendTest {
         var capturedIssue: GitHubIssueRequest? = null
         val json = Json { ignoreUnknownKeys = true }
         val mockEngine = MockEngine { request ->
-            capturedIssue = json.decodeFromString(String(request.body.toByteArray()))
-            respond(
-                content = """{"id":1,"number":42,"html_url":"https://github.com/test/test/issues/42","title":"test","state":"open"}""",
-                status = HttpStatusCode.OK,
-                headers = headersOf(HttpHeaders.ContentType, "application/json")
-            )
+            when {
+                request.method == HttpMethod.Get && request.url.encodedPath == "/repos/test-owner/test-repo/issues" ->
+                    respond(
+                        content = """[]""",
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json")
+                    )
+                request.method == HttpMethod.Post && request.url.encodedPath == "/repos/test-owner/test-repo/issues" -> {
+                    capturedIssue = json.decodeFromString(String(request.body.toByteArray()))
+                    respond(
+                        content = """{"id":1,"number":42,"html_url":"https://github.com/test/test/issues/42","title":"test","state":"open"}""",
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json")
+                    )
+                }
+                else -> respond("unexpected: ${request.method.value} ${request.url.encodedPath}", HttpStatusCode.NotFound)
+            }
         }
         val httpClient = HttpClient(mockEngine) {
             install(ContentNegotiation) {
@@ -101,11 +113,21 @@ class GitHubIssueBackendTest {
     @Test
     fun severityLabelsAreCorrect() = runTest {
         val mockEngine = MockEngine { request ->
-            respond(
-                content = """{"id":1,"number":42,"html_url":"https://github.com/test/test/issues/42","title":"test","state":"open"}""",
-                status = HttpStatusCode.OK,
-                headers = headersOf(HttpHeaders.ContentType, "application/json")
-            )
+            when {
+                request.method == HttpMethod.Get && request.url.encodedPath == "/repos/test-owner/test-repo/issues" ->
+                    respond(
+                        content = """[]""",
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json")
+                    )
+                request.method == HttpMethod.Post && request.url.encodedPath == "/repos/test-owner/test-repo/issues" ->
+                    respond(
+                        content = """{"id":1,"number":42,"html_url":"https://github.com/test/test/issues/42","title":"test","state":"open"}""",
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json")
+                    )
+                else -> respond("unexpected: ${request.method.value} ${request.url.encodedPath}", HttpStatusCode.NotFound)
+            }
         }
 
         val httpClient = HttpClient(mockEngine) {
@@ -152,6 +174,49 @@ class GitHubIssueBackendTest {
     }
 
     @Test
+    fun createTicketReusesOpenIssueWithSameFingerprint() = runTest {
+        var postCalled = false
+        val mockEngine = MockEngine { request ->
+            when {
+                request.method == HttpMethod.Get && request.url.encodedPath == "/repos/test-owner/test-repo/issues" ->
+                    respond(
+                        content = """[{
+                            "id":1,
+                            "number":42,
+                            "html_url":"https://github.com/test/test/issues/42",
+                            "title":"existing",
+                            "state":"open",
+                            "body":"**Fingerprint:** `abc123def456`"
+                        }]""",
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json")
+                    )
+                request.method == HttpMethod.Post -> {
+                    postCalled = true
+                    respond("unexpected post", HttpStatusCode.InternalServerError)
+                }
+                else -> respond("unexpected: ${request.method.value} ${request.url.encodedPath}", HttpStatusCode.NotFound)
+            }
+        }
+
+        val httpClient = HttpClient(mockEngine) {
+            install(ContentNegotiation) {
+                json(Json { ignoreUnknownKeys = true })
+            }
+        }
+
+        val backend = GitHubIssueBackend("fake-token", "test-owner", "test-repo", httpClient)
+        val result = backend.createTicket(testReport)
+
+        assertTrue(result.success)
+        assertEquals("42", result.ticketId)
+        assertFalse(postCalled)
+
+        httpClient.close()
+        backend.close()
+    }
+
+    @Test
     fun updateTicketIncludesFallbackSectionsEvenWhenConfidenceIsZero() = runTest {
         var capturedIssue: GitHubIssueRequest? = null
         val json = Json { ignoreUnknownKeys = true }
@@ -187,12 +252,13 @@ class GitHubIssueBackendTest {
 
         assertTrue(result.success)
         val body = capturedIssue?.body.orEmpty()
-        assertTrue(body.contains("confidence: 0%"), body)
-        assertTrue(body.contains("### Possible Cause"), body)
-        assertTrue(body.contains("Payment response is null"), body)
-        assertTrue(body.contains("### Steps to Reproduce"), body)
-        assertTrue(body.contains("1. Open cart"), body)
+        assertFalse(body.contains("confidence: 0%"), body)
+        assertFalse(body.contains("### Possible Cause"), body)
+        assertFalse(body.contains("Payment response is null"), body)
+        assertFalse(body.contains("### Steps to Reproduce"), body)
+        assertFalse(body.contains("1. Open cart"), body)
         assertTrue(body.contains("**Occurrences:** 2"), body)
+        assertTrue(body.contains("NullPointerException"), body)
 
         httpClient.close()
         backend.close()

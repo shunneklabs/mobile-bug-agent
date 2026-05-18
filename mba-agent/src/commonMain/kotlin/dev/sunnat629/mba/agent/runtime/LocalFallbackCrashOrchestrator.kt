@@ -20,7 +20,12 @@ public class LocalFallbackCrashOrchestrator(
     private val skipGitIssue: Boolean = true,
 ) {
     public suspend fun process(raw: RawCrashReport): MBAAgentEvent {
-        val report = CrashReportBuilder.build(raw)
+        val report = CrashReportBuilder.build(raw).copy(
+            confidence = 0.0f,
+            description = raw.rawSummary(),
+            stepsToReproduce = null,
+            possibleCause = null,
+        )
         val aggregation = aggregationStore.upsert(report.raw, report)
         var event = aggregation.toEvent(report.raw, report)
 
@@ -72,4 +77,11 @@ public class LocalFallbackCrashOrchestrator(
             agentic = false,
             analysisSource = "RAW_FALLBACK",
         )
+
+    private fun RawCrashReport.rawSummary(): String =
+        message
+            ?.takeIf { it.isNotBlank() }
+            ?: stackTrace.lineSequence().firstOrNull()
+                ?.takeIf { it.isNotBlank() }
+            ?: exceptionType
 }

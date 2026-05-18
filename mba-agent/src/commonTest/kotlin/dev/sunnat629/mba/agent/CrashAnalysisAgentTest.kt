@@ -13,7 +13,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
-import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.hours
 
@@ -191,7 +191,7 @@ class CrashAnalysisAgentTest {
     }
 
     @Test
-    fun fallbackStillIncludesReproductionAndCause() = runTest {
+    fun fallbackUsesRawOnlyWhenAgentFails() = runTest {
         val agent = CrashAnalysisAgent(
             agentFactory = object : AgentFactory(
                 llmConfig = dev.sunnat629.mba.core.config.LLMConfig.NONE
@@ -228,9 +228,9 @@ class CrashAnalysisAgentTest {
 
         assertIs<CrashAnalysisResult.Fallback>(result)
         assertEquals(0.0f, result.report.confidence)
-        assertNotNull(result.report.stepsToReproduce)
-        assertNotNull(result.report.possibleCause)
-        assertTrue(result.report.description.contains("AI processing failed"))
+        assertNull(result.report.stepsToReproduce)
+        assertNull(result.report.possibleCause)
+        assertTrue(result.report.description.contains("Attempt to invoke method on null"))
     }
 
     @Test

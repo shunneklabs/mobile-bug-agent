@@ -15,6 +15,7 @@ In SDKOnly mode it can:
 
 - create one parent bug page for a new crash group
 - update the parent page when the same crash happens again
+- create a lightweight occurrence row linked to the parent for duplicate crashes
 - write Koog fields such as severity, confidence, steps to reproduce, and
   possible cause when the Notion database has matching properties
 - still create a useful page body when the database only has a title property
@@ -83,7 +84,7 @@ Recommended rich schema:
 | `Device Model` | Text | Manufacturer/model |
 | `Occurrences` | Number | Number of grouped occurrences |
 | `Unique Devices` | Number | Unique device count |
-| `Bug Type` | Select | `Bug Group` |
+| `Bug Type` | Select | `Bug Group`, `Crash Occurrence` |
 | `Status` | Status | `New`, `Triaged`, `In Progress`, etc. |
 | `External Sync State` | Select | `Notion Created`, `GitHub Created`, `Both Created` |
 | `First Seen` | Date | First occurrence time |
@@ -192,8 +193,10 @@ For a new group:
 For a duplicate:
 
 - Notion updates the existing parent page when the stored page id exists.
-- Occurrence count, unique devices, last seen, device details, and richer Koog
-  fields can be patched on the parent page.
+- Occurrence count, unique devices, last seen, and device details are patched
+  on the parent page.
+- Notion creates a lightweight child occurrence row linked by `Parent Bug`.
+- The duplicate occurrence does not overwrite parent Koog fields.
 
 It should not create a second parent page for the same `appId + environment +
 fingerprint`.

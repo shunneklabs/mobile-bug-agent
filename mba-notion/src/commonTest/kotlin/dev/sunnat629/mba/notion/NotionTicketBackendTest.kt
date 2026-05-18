@@ -216,16 +216,63 @@ class NotionTicketBackendTest {
     }
 
     @Test
-    fun updateTicketIncludesReportFieldsEvenWhenConfidenceIsZero() = runBlocking {
+    fun crashOccurrenceLinksToParentAndUsesRawSummary() = runBlocking {
         var capturedBody = ""
 
         val mockClient = createMockClient { request ->
             capturedBody = String(request.body.toByteArray())
             respond(
-                content = """{"object": "page"}""",
+                content = """{
+                    "id": "occurrence-1",
+                    "url": "https://notion.so/occurrence-1",
+                    "object": "page"
+                }""",
                 status = HttpStatusCode.OK,
                 headers = headersOf(HttpHeaders.ContentType, "application/json"),
             )
+        }
+
+        val backend = NotionTicketBackend(
+            apiKey = "secret_test",
+            bugTicketDbId = "db-456",
+            httpClient = mockClient,
+        )
+
+        val result = backend.createCrashOccurrence(
+            report = testReport.copy(confidence = 0.0f),
+            parentBugTicketId = "parent-1",
+        )
+
+        assertTrue(result.success)
+        assertTrue(capturedBody.contains("Parent Bug"), "Occurrence should link parent bug")
+        assertTrue(capturedBody.contains("Crash Occurrence"), "Occurrence should be marked as an occurrence")
+        assertTrue(capturedBody.contains("Fingerprint"), "Occurrence should include fingerprint")
+        assertTrue(capturedBody.contains("Description"), "Occurrence should include raw/fallback description")
+        assertFalse(capturedBody.contains("Possible Cause"), "Occurrence should not duplicate parent Koog fields")
+        assertFalse(capturedBody.contains("Steps to Reproduce"), "Occurrence should not duplicate parent Koog fields")
+    }
+
+    @Test
+    fun updateTicketIncludesReportFieldsEvenWhenConfidenceIsZero() = runBlocking {
+        var capturedBody = ""
+
+        val mockClient = createMockClient { request ->
+            when (request.method) {
+                HttpMethod.Get -> respond(
+                    content = """{"id": "page-123", "url": "https://notion.so/page-123", "archived": false, "in_trash": false}""",
+                    status = HttpStatusCode.OK,
+                    headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                )
+                HttpMethod.Patch -> {
+                    capturedBody = String(request.body.toByteArray())
+                    respond(
+                        content = """{"id": "page-123", "url": "https://notion.so/page-123"}""",
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                    )
+                }
+                else -> error("Unexpected request: ${request.method}")
+            }
         }
 
         val backend = NotionTicketBackend(
@@ -242,5 +289,33 @@ class NotionTicketBackendTest {
         assertTrue(result.success)
         assertTrue(capturedBody.contains("Fingerprint"), "Update should keep fingerprint")
         assertTrue(capturedBody.contains("AI Confidence"), "Update should keep zero confidence")
+        assertFalse(capturedBody.contains("Possible Cause"), "Fallback duplicate should not overwrite parent cause")
+        assertFalse(capturedBody.contains("Steps to Reproduce"), "Fallback duplicate should not overwrite parent steps")
+    }
+
+    @Test
+    fun updateTicketFailsWhenPageIsArchived() = runBlocking {
+        val mockClient = createMockClient { request ->
+            assertEquals(HttpMethod.Get, request.method)
+            respond(
+                content = """{"id": "page-123", "url": "https://notion.so/page-123", "archived": true, "in_trash": true}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+
+        val backend = NotionTicketBackend(
+            apiKey = "secret_test",
+            bugTicketDbId = "db-456",
+            httpClient = mockClient,
+        )
+
+        val result = backend.updateTicket(
+            ticketId = "page-123",
+            update = TicketUpdate(report = testReport),
+        )
+
+        assertFalse(result.success)
+        assertTrue(result.errorMessage.orEmpty().contains("archived"), result.errorMessage.orEmpty())
     }
 }

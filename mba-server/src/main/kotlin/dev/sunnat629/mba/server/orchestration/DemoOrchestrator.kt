@@ -5,6 +5,7 @@ import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.model.ProcessedCrashReport
 import dev.sunnat629.mba.core.model.RawCrashReport
 import dev.sunnat629.mba.core.model.Severity
+import dev.sunnat629.mba.core.ticket.CrashOccurrenceTicketBackend
 import dev.sunnat629.mba.core.ticket.TicketBackend
 import dev.sunnat629.mba.core.ticket.TicketUpdate
 import dev.sunnat629.mba.github.AutoFixResult
@@ -221,6 +222,9 @@ class DemoOrchestrator(
             val latestGroup = aggregationStore.getGroup(upsert.group.id) ?: upsert.group
             val update = groupTicketUpdate(latestGroup)
             val ticket = withContext(ioDispatcher) { notionBackend!!.updateTicket(existingNotionTicketId, update) }
+            (notionBackend as? CrashOccurrenceTicketBackend)?.let { backend ->
+                withContext(ioDispatcher) { backend.createCrashOccurrence(processed, existingNotionTicketId) }
+            }
             if (ticket.success) {
                 eventSink.complete(jobId, existingNotionUrl, artifactType = "notion_ticket")
             } else {
@@ -306,7 +310,9 @@ class DemoOrchestrator(
             severity = Severity.MEDIUM,
             confidence = 0.0f,
             title = "$exceptionType in ${currentScreen ?: "unknown"}",
-            description = "Crash occurrence grouped by fingerprint. AI enrichment was skipped or unavailable for this duplicate.",
+            description = message?.takeIf { it.isNotBlank() }
+                ?: stackTrace.lineSequence().firstOrNull()?.takeIf { it.isNotBlank() }
+                ?: exceptionType,
             sanitizedStackTrace = stackTrace,
         )
 }

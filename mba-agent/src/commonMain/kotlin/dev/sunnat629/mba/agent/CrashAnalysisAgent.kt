@@ -122,7 +122,10 @@ class CrashAnalysisAgent(
                 report = fallback.copy(
                     fingerprint = fingerprint,
                     confidence = 0.0f,
-                    description = "AI processing failed: ${e.message}. ${fallback.description}",
+                    description = sanitizedMessage ?: fallback.sanitizedStackTrace.lineSequence().firstOrNull()
+                        ?: raw.exceptionType,
+                    stepsToReproduce = null,
+                    possibleCause = null,
                 ),
                 error = e,
             )
