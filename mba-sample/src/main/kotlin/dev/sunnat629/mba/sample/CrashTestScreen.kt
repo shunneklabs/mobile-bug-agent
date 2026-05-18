@@ -474,6 +474,15 @@ private data class CrashScenario(
 
 private fun sampleScenarios(): List<CrashScenario> = listOf(
     CrashScenario(
+        title = "Fixable checkout",
+        shortDescription = "Missing payment token",
+        screen = "CheckoutScreen",
+        fatal = true,
+        expectedGrouping = "fixable checkout token crash",
+        marker = "FIX",
+        run = { FixableCheckoutBug.trigger() },
+    ),
+    CrashScenario(
         title = "Checkout token",
         shortDescription = "Null payment token",
         screen = "CheckoutScreen",
