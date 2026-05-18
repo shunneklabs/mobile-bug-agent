@@ -30,10 +30,15 @@ local.properties
 
 # Agent local planning artifacts
 /.agent/
+/.agents/
 /.junie/
 /issues
 /assets/
+/skills-lock.json
 
 # Local runtime/demo data
 /data/
 /mba-server/data/
+
+# Local architecture planning notes
+/scripts/sdk-only-agent-flow.md

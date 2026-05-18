@@ -18,6 +18,13 @@ public class MBAConfig internal constructor(
     internal val agentConfig: AgentConfig,
     public val debug: Boolean,
     /**
+     * When false, SDKOnly processing skips local LLM/Koog analysis and uses
+     * raw-derived fallback reports for callbacks and optional app-owned sinks.
+     *
+     * Default: `true`.
+     */
+    public val useAgent: Boolean = true,
+    /**
      * When true, every captured crash is flagged for the server's GitHub
      * auto-fix path (issue → branch → patch → draft PR). The server still
      * gates the actual PR on crash severity (HIGH/CRITICAL only).
@@ -48,7 +55,7 @@ public class MBAConfig internal constructor(
      *
      * ```kotlin
      * MBA.init(crashDir) {
-     *     mode = MBAMode.SdkOnly(llmApiKey = "...", ticketBackend = notionBackend)
+     *     mode = MBAMode.SdkOnly(llm = LLM.ollama(model = "llama3.2:latest"))
      *     debug = true
      * }
      * ```
@@ -62,6 +69,12 @@ public class MBAConfig internal constructor(
 
         /** Enable debug logging. Default false. */
         public var debug: Boolean = false
+
+        /**
+         * Enable local Koog/LLM analysis in SDKOnly mode. Set false when the
+         * app wants raw fallback callbacks/tickets without an LLM key.
+         */
+        public var useAgent: Boolean = true
 
         /**
          * Opt in to the server-side GitHub auto-fix path. Default `false`.
@@ -93,13 +106,28 @@ public class MBAConfig internal constructor(
                 "MBA mode must be set. Use MBAMode.SdkOnly(...) or MBAMode.Saas(...)"
             }
 
-            // Resolve LLM config: explicit llm > mode's llmApiKey > error
+            // Resolve LLM config: explicit builder llm > mode llm > legacy Gemini key.
             val resolvedLlm = llm ?: when (resolvedMode) {
                 is MBAMode.SdkOnly -> {
-                    require(resolvedMode.llmApiKey.isNotBlank()) {
-                        "SdkOnly mode requires a non-blank LLM API key."
+                    val modeLlm = resolvedMode.llm
+                    require(modeLlm != null || resolvedMode.llmApiKey.isNotBlank() || !useAgent) {
+                        "SdkOnly mode with useAgent=true requires an LLMConfig or legacy llmApiKey."
                     }
-                    LLM.gemini(resolvedMode.llmApiKey)
+                    if (useAgent) {
+                        (modeLlm ?: LLM.gemini(resolvedMode.llmApiKey)).also { config ->
+                            require(config.model.isNotBlank()) {
+                                "SdkOnly mode with useAgent=true requires a non-blank LLM model."
+                            }
+                            require(!config.requiresApiKey || config.apiKey.isNotBlank()) {
+                                "SdkOnly mode with ${config.provider} requires a non-blank LLM API key."
+                            }
+                            require(config.provider != LLM.Provider.CUSTOM || !config.endpoint.isNullOrBlank()) {
+                                "SdkOnly custom LLM provider requires a non-blank endpoint."
+                            }
+                        }
+                    } else {
+                        LLMConfig.NONE
+                    }
                 }
                 is MBAMode.Saas -> LLMConfig.NONE
                 is MBAMode.SelfHosted -> LLMConfig.NONE
@@ -111,6 +139,7 @@ public class MBAConfig internal constructor(
                 piiSanitizer = PIISanitizer(customPatterns = piiPatterns),
                 agentConfig = agentConfig,
                 debug = debug,
+                useAgent = useAgent,
                 autoFix = autoFix,
                 skipNotion = skipNotion,
             )

@@ -1,5 +1,7 @@
 package dev.sunnat629.mba.android
 
+import dev.sunnat629.mba.agent.runtime.RawCrashUploadResult
+import dev.sunnat629.mba.agent.runtime.RawCrashUploader
 import dev.sunnat629.mba.core.model.RawCrashReport
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -10,7 +12,6 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
@@ -23,21 +24,21 @@ internal class ServerReportUploader(
     private val projectKey: String?,
     private val serverApiKey: String?,
     private val httpClient: HttpClient = defaultClient(),
-) {
-    suspend fun upload(rawReport: RawCrashReport): BackendUploadResult {
+) : RawCrashUploader {
+    override suspend fun upload(rawReport: RawCrashReport): RawCrashUploadResult {
         val payload = Json.encodeToString(rawReport)
         val response: HttpResponse = httpClient.post("${endpoint.trimEnd('/')}/report") {
             contentType(ContentType.Application.Json)
             projectKey?.takeIf { it.isNotBlank() }?.let { header("X-MBA-Project-Key", it) }
-            serverApiKey?.takeIf { it.isNotBlank() }?.let { header(HttpHeaders.Authorization, "Bearer $it") }
+            serverApiKey?.takeIf { it.isNotBlank() }?.let { header("X-MBA-API-Key", it) }
             setBody(payload)
         }
 
         return if (response.status == HttpStatusCode.Accepted) {
             val accepted = response.body<BackendAcceptedResponse>()
-            BackendUploadResult.Accepted(accepted.jobId, accepted.status)
+            RawCrashUploadResult.Accepted(accepted.jobId, accepted.status)
         } else {
-            BackendUploadResult.Rejected(response.status.value, response.status.description)
+            RawCrashUploadResult.Rejected(response.status.value, response.status.description)
         }
     }
 
@@ -52,11 +53,6 @@ internal class ServerReportUploader(
             }
         }
     }
-}
-
-internal sealed interface BackendUploadResult {
-    data class Accepted(val jobId: String, val status: String) : BackendUploadResult
-    data class Rejected(val statusCode: Int, val reason: String) : BackendUploadResult
 }
 
 @Serializable

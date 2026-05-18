@@ -143,6 +143,7 @@ public class GitHubIssueBackend(
         appendLine("**Title:** ${report.title}")
         appendLine("**Severity:** ${report.severity} (confidence: ${"%.0f".format(report.confidence * 100)}%)")
         appendLine("**Fingerprint:** `${report.fingerprint}`")
+        appendLine("**Occurred At:** ${report.raw.timestamp}")
         appendLine()
 
         appendLine("### Description")
@@ -175,12 +176,13 @@ public class GitHubIssueBackend(
         }
 
         appendLine("### Device Context")
-        appendLine("- **Device:** ${report.raw.device.displayName}")
-        appendLine("- **OS:** Android ${report.raw.device.osVersion} (API ${report.raw.device.sdkInt})")
+        appendLine("- **Device Model:** ${report.raw.device.displayName}")
+        appendLine("- **OS Version:** Android ${report.raw.device.osVersion} (API ${report.raw.device.sdkInt})")
         appendLine("- **Locale:** ${report.raw.device.locale}")
         appendLine("- **Memory:** ${report.raw.device.availableMemoryMb}MB / ${report.raw.device.totalMemoryMb}MB")
         appendLine("- **App Version:** ${report.raw.appVersion}")
         appendLine("- **Build Type:** ${report.raw.buildType}")
+        report.raw.currentScreen?.let { appendLine("- **Current Screen:** $it") }
         appendLine()
 
         if (report.raw.breadcrumbs.isNotEmpty()) {

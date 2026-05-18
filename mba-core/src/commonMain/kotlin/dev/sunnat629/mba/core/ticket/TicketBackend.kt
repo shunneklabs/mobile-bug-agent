@@ -28,9 +28,25 @@ public interface TicketBackend {
     public suspend fun updateTicket(ticketId: String, update: TicketUpdate): TicketResult
 }
 
+/**
+ * Optional extension for ticket backends that can store raw crash occurrence
+ * rows linked to a parent grouped bug ticket.
+ */
+public interface CrashOccurrenceTicketBackend : TicketBackend {
+    public suspend fun createCrashOccurrence(
+        report: ProcessedCrashReport,
+        parentBugTicketId: String,
+    ): TicketResult
+}
+
 @Serializable
 public data class TicketUpdate(
     val addDevice: DeviceContext? = null,
     val incrementCount: Boolean = false,
     val newOccurrenceTime: Instant? = null,
+    val occurrenceCount: Int? = null,
+    val uniqueDeviceCount: Int? = null,
+    val deviceMatrix: String? = null,
+    val githubIssueUrl: String? = null,
+    val notionUrl: String? = null,
 )

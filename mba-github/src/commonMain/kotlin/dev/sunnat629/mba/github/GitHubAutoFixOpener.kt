@@ -159,6 +159,7 @@ public class GitHubAutoFixOpener(
         appendLine()
         appendLine("**Severity:** ${report.severity} (confidence: ${"%.0f".format(report.confidence * 100)}%)")
         appendLine("**Fingerprint:** `${report.fingerprint}`")
+        appendLine("**Occurred At:** ${report.raw.timestamp}")
         appendLine()
         appendLine("### Description")
         appendLine(report.description)
@@ -179,8 +180,11 @@ public class GitHubAutoFixOpener(
             appendLine(it); appendLine()
         }
         appendLine("### Device")
-        appendLine("- ${report.raw.device.displayName} (Android ${report.raw.device.osVersion} / API ${report.raw.device.sdkInt})")
-        appendLine("- App ${report.raw.appVersion} (${report.raw.buildType})")
+        appendLine("- **Device Model:** ${report.raw.device.displayName}")
+        appendLine("- **OS Version:** Android ${report.raw.device.osVersion} (API ${report.raw.device.sdkInt})")
+        appendLine("- **App Version:** ${report.raw.appVersion}")
+        appendLine("- **Build Type:** ${report.raw.buildType}")
+        report.raw.currentScreen?.let { appendLine("- **Current Screen:** $it") }
         appendLine()
         if (report.sanitizedStackTrace.isNotBlank()) {
             appendLine("### Stack trace")

@@ -82,14 +82,18 @@ open class AgentFactory(
             model = config.model,
             json = json,
         )
+        LLM.Provider.OPENROUTER,
+        LLM.Provider.MISTRAL,
+        LLM.Provider.DEEPSEEK,
+        LLM.Provider.DASHSCOPE,
         LLM.Provider.ANTHROPIC -> throw NotImplementedError(
-            "Anthropic provider is planned but not yet implemented."
+            "${config.provider} is supported through Koog. Legacy HTTP caller is not implemented."
         )
         LLM.Provider.OLLAMA -> throw NotImplementedError(
-            "Ollama provider is planned but not yet implemented."
+            "Ollama is supported through Koog. Legacy HTTP caller is not implemented."
         )
         LLM.Provider.CUSTOM -> throw NotImplementedError(
-            "Custom provider requires endpoint configuration. Not yet implemented."
+            "Custom OpenAI-compatible providers are supported through Koog. Legacy HTTP caller is not implemented."
         )
     }
 }
@@ -107,6 +111,7 @@ internal interface CrashAnalysisExecutor {
         screen: String?,
         breadcrumbs: List<String>,
         device: DeviceContext,
+        crashContext: String,
     ): CrashSummary
 }
 
@@ -153,10 +158,12 @@ internal class LegacyMultiStepExecutor(
         screen: String?,
         breadcrumbs: List<String>,
         device: DeviceContext,
+        crashContext: String,
     ): CrashSummary {
         val input = buildString {
             appendLine("Parsed trace: ${json.encodeToString(parsed)}")
             appendLine("Severity: ${severity.severity} (${severity.reasoning})")
+            appendLine(crashContext)
             screen?.let { appendLine("Current screen: $it") }
             if (breadcrumbs.isNotEmpty()) {
                 appendLine("Breadcrumbs: ${breadcrumbs.joinToString(" \u2192 ")}")

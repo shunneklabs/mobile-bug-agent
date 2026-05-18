@@ -12,7 +12,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MBASampleTheme(darkTheme = true, dynamicColor = false) {
-                BoothCrashScreen()
+                CrashTestScreen()
             }
         }
     }

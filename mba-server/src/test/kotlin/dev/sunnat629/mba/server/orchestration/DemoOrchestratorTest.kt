@@ -9,6 +9,8 @@ import dev.sunnat629.mba.core.model.TicketResult
 import dev.sunnat629.mba.core.ticket.TicketBackend
 import dev.sunnat629.mba.core.ticket.TicketUpdate
 import dev.sunnat629.mba.github.AutoFixResult
+import dev.sunnat629.mba.server.persistence.CrashAggregationStore
+import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -34,7 +36,8 @@ class DemoOrchestratorTest {
                 githubTool = null,
             ).process("job-1", raw)
 
-            assertEquals(listOf("start", "progress", "progress", "progress", "progress", "complete"), sink.events.map { it.type })
+            assertEquals(listOf("start", "progress", "progress", "progress", "progress", "progress", "complete"), sink.events.map { it.type })
+            assertTrue(sink.events.any { it.message.contains("Created bug group") })
             assertTrue(sink.events.any { it.message.contains("Routing severity MEDIUM") })
             assertEquals("analysis://fingerprint-1", sink.events.last().message)
         }
@@ -165,6 +168,7 @@ class DemoOrchestratorTest {
         severityRouter = severityRouter,
         notionBackend = notionBackend,
         githubAutoFixTool = githubTool,
+        aggregationStore = CrashAggregationStore(createTempDirectory().toString()),
         ioDispatcher = Dispatchers.Unconfined,
     )
 

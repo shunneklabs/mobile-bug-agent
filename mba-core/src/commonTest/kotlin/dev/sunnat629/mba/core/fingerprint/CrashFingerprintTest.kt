@@ -3,6 +3,7 @@ package dev.sunnat629.mba.core.fingerprint
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 
 class CrashFingerprintTest {
 
@@ -97,5 +98,22 @@ class CrashFingerprintTest {
         // SHA-256 hex = 64 characters, all hex
         assertEquals(64, fp.length)
         assertTrue(fp.all { it in '0'..'9' || it in 'a'..'f' })
+    }
+
+    @Test
+    fun volatileIdsAndTimestampsDoNotChangeFingerprint() {
+        val trace1 = """
+            java.lang.IllegalStateException: sessionId=123e4567-e89b-12d3-a456-426614174000 at 2026-05-17T10:15:30Z
+            at com.example.app.CrashReporter.report(CrashReporter.kt:10)
+        """.trimIndent()
+        val trace2 = """
+            java.lang.IllegalStateException: sessionId=987e6543-e21b-45d3-a456-426614174999 at 2026-05-17T11:22:33Z
+            at com.example.app.CrashReporter.report(CrashReporter.kt:10)
+        """.trimIndent()
+
+        val fp1 = CrashFingerprint.compute("java.lang.IllegalStateException", trace1)
+        val fp2 = CrashFingerprint.compute("java.lang.IllegalStateException", trace2)
+
+        assertEquals(fp1, fp2)
     }
 }

@@ -13,6 +13,7 @@ class CrashAnalysisAgent(
     private val agentFactory: AgentFactory,
     private val piiSanitizer: PIISanitizer,
     private val dedupCache: LocalDedupCache,
+    private val useLocalDedup: Boolean = true,
 ) {
     private companion object {
         const val TAG = "Agent"
@@ -36,7 +37,7 @@ class CrashAnalysisAgent(
 
         // 3. Local dedup
         MBALog.d(TAG, "[3/5] Dedup check for ${fingerprint.take(12)}...")
-        if (dedupCache.contains(fingerprint)) {
+        if (useLocalDedup && dedupCache.contains(fingerprint)) {
             dedupCache.touch(fingerprint)
             MBALog.w(TAG, "\u2b50 Duplicate detected: ${fingerprint.take(12)}... \u2014 skipping LLM")
             return CrashAnalysisResult.Duplicate(
@@ -65,11 +66,12 @@ class CrashAnalysisAgent(
                 screen = raw.currentScreen,
                 breadcrumbs = sanitizedBreadcrumbs,
                 device = raw.device,
+                crashContext = raw.summaryContext(),
             )
             MBALog.d(TAG, "  Summary: '${summary.title}'")
 
             // 5. Cache
-            dedupCache.put(fingerprint)
+            if (useLocalDedup) dedupCache.put(fingerprint)
             MBALog.i(TAG, "\u2705 New crash processed: '${summary.title}' [${severity.severity}]")
 
             CrashAnalysisResult.New(
@@ -84,8 +86,10 @@ class CrashAnalysisAgent(
                     confidence = severity.confidence,
                     title = summary.title,
                     description = summary.description,
-                    stepsToReproduce = summary.stepsToReproduce,
-                    possibleCause = summary.possibleCause,
+                    stepsToReproduce = summary.stepsToReproduce?.takeIf { it.isNotBlank() }
+                        ?: fallbackSteps(raw, sanitizedBreadcrumbs),
+                    possibleCause = summary.possibleCause?.takeIf { it.isNotBlank() }
+                        ?: fallbackPossibleCause(parsed, raw),
                     crashFile = parsed.crashFile,
                     crashLine = parsed.crashLine,
                     crashMethod = parsed.crashMethod,
@@ -95,7 +99,7 @@ class CrashAnalysisAgent(
             )
         } catch (e: Exception) {
             MBALog.e(TAG, "\u274c AI analysis failed, using fallback", e)
-            dedupCache.put(fingerprint)
+            if (useLocalDedup) dedupCache.put(fingerprint)
             CrashAnalysisResult.Fallback(
                 report = ProcessedCrashReport(
                     raw = raw,
@@ -110,6 +114,37 @@ class CrashAnalysisAgent(
             )
         }
     }
+
+    private fun RawCrashReport.summaryContext(): String = buildString {
+        appendLine("Crash metadata:")
+        appendLine("- Occurred At: $timestamp")
+        appendLine("- Exception: $exceptionType")
+        message?.let { appendLine("- Exception Message: $it") }
+        appendLine("- Thread: $threadName")
+        appendLine("- App Version: $appVersion")
+        appendLine("- Build Type: $buildType")
+        appendLine("- Device Model: ${device.displayName}")
+        appendLine("- OS Version: Android ${device.osVersion} (API ${device.sdkInt})")
+        currentScreen?.let { appendLine("- Current Screen: $it") }
+        if (customMetadata.isNotEmpty()) {
+            appendLine("- Custom Metadata: ${customMetadata.entries.joinToString { "${it.key}=${it.value}" }}")
+        }
+    }
+
+    private fun fallbackSteps(raw: RawCrashReport, breadcrumbs: List<String>): String =
+        when {
+            breadcrumbs.isNotEmpty() -> breadcrumbs.mapIndexed { index, breadcrumb -> "${index + 1}. $breadcrumb" }.joinToString("\n")
+            raw.currentScreen != null -> "1. Open ${raw.currentScreen}\n2. Repeat the action that triggered ${raw.exceptionType.substringAfterLast(".")}"
+            else -> "1. Launch app version ${raw.appVersion}\n2. Repeat the user action immediately before the crash"
+        }
+
+    private fun fallbackPossibleCause(parsed: ParsedStackTrace, raw: RawCrashReport): String =
+        buildString {
+            append(raw.exceptionType.substringAfterLast("."))
+            parsed.crashMethod?.let { append(" in $it") }
+            parsed.crashFile?.let { append(" (${it}${parsed.crashLine?.let { line -> ":$line" } ?: ""})") }
+            raw.message?.let { append(": $it") }
+        }
 }
 
 sealed class CrashAnalysisResult {

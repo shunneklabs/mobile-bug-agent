@@ -7,44 +7,113 @@
     <link rel="stylesheet" href="/booth-assets/booth.css">
 </head>
 <body>
-<header class="hero" id="hero">
-    <div>
-        <h1>Mobile Bug Agent</h1>
-        <p>Crashlytics catches your crashes. MBA fixes them.</p>
-    </div>
-    <div class="hero-right">
-        <div class="repo">github.com/shunneklabs/mobile-bug-agent</div>
-        <div class="qr-strip">
-            <span class="qr-label">Scan to try</span>
-            <div class="qr-placeholder" aria-label="Demo QR placeholder">QR</div>
+<div class="shell">
+    <div class="aurora aurora-one" aria-hidden="true"></div>
+    <div class="aurora aurora-two" aria-hidden="true"></div>
+    <div class="grid-glow" aria-hidden="true"></div>
+
+    <header class="hero" id="hero">
+        <div class="hero-copy">
+            <div class="eyebrow"><span class="live-dot"></span>KotlinConf booth demo</div>
+            <h1>Mobile Bug Agent</h1>
+            <p>Crash comes in. Koog reasons. GitHub and Notion light up. The booth sees every step live.</p>
+            <div class="hero-actions" aria-label="Demo highlights">
+                <span>Realtime SSE</span>
+                <span>Koog analysis</span>
+                <span>Operator mode</span>
+            </div>
         </div>
-    </div>
-</header>
+        <aside class="hero-card" aria-label="Team, repository, and scan panel">
+            <div class="team-strip" aria-label="MBA booth team">
+                <span class="team-label">Team</span>
+                <div class="team-members">
+                    <div class="team-member">
+                        <span class="avatar human">S</span>
+                        <div>
+                            <strong>Sunnat629</strong>
+                            <small>operator / builder</small>
+                        </div>
+                    </div>
+                    <div class="team-member">
+                        <span class="avatar agent">J</span>
+                        <div>
+                            <strong>Junie</strong>
+                            <small>AI coding teammate</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="hero-card-top">
+                <span>Target repo</span>
+                <strong>shunneklabs/mobile-bug-agent</strong>
+            </div>
+            <div class="qr-strip">
+                <div>
+                    <span class="qr-label">Scan to try</span>
+                    <p>Trigger the demo crash and watch MBA respond.</p>
+                </div>
+                <div class="qr-placeholder" aria-label="Demo QR placeholder">
+                    <span></span><span></span><span></span><span></span>
+                    <b>QR</b>
+                </div>
+            </div>
+        </aside>
+    </header>
 
-<section class="stats" id="stats"></section>
+    <section class="stats" id="stats" aria-label="Job statistics"></section>
 
-<main class="layout">
-    <section class="panel">
-        <h2>Pipeline</h2>
-        <div class="pipeline" id="pipeline"></div>
+    <main class="layout">
+        <section class="panel pipeline-panel">
+            <div class="panel-heading">
+                <span class="section-kicker">Flow</span>
+                <h2>Pipeline</h2>
+            </div>
+            <div class="pipeline" id="pipeline"></div>
+        </section>
+
+        <section class="panel terminal-panel">
+            <div class="panel-heading">
+                <span class="section-kicker">dev console</span>
+                <h2>Terminal</h2>
+            </div>
+            <div class="terminal" id="terminal"></div>
+        </section>
+
+        <section class="panel timeline-panel">
+            <div class="panel-heading">
+                <span class="section-kicker">event stream</span>
+                <h2>Timeline</h2>
+            </div>
+            <div class="timeline" id="timeline"></div>
+        </section>
+    </main>
+
+    <section class="panel aggregation-panel">
+        <div class="panel-heading">
+            <span class="section-kicker">aggregation</span>
+            <h2>Grouped Bugs</h2>
+        </div>
+        <div class="aggregation-grid">
+            <div>
+                <h3>Groups</h3>
+                <div id="bugGroups" class="aggregation-list"></div>
+            </div>
+            <div>
+                <h3>Raw Occurrences</h3>
+                <div id="crashOccurrences" class="aggregation-list compact"></div>
+            </div>
+        </div>
     </section>
 
-    <section class="panel">
-        <h2>Terminal</h2>
-        <div class="terminal" id="terminal"></div>
+    <section class="panel operator" id="operatorPanel" hidden>
+        <div class="panel-heading">
+            <span class="section-kicker">Debug</span>
+            <h2>Operator Controls</h2>
+        </div>
+        <div id="pendingDecisions"></div>
+        <button id="holdReset" class="danger">Hold 2s to reset dashboard</button>
     </section>
-
-    <section class="panel">
-        <h2>Timeline</h2>
-        <div class="timeline" id="timeline"></div>
-    </section>
-</main>
-
-<section class="panel operator" id="operatorPanel" hidden>
-    <h2>Operator Controls (debug)</h2>
-    <div id="pendingDecisions"></div>
-    <button id="holdReset" class="danger">Hold 2s to reset dashboard</button>
-</section>
+</div>
 
 <div id="ticker" class="ticker">MBA booth mode active · waiting for events…</div>
 <script src="/booth-assets/booth.js"></script>

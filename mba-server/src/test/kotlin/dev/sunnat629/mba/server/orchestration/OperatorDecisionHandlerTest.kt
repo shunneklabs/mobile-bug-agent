@@ -10,8 +10,10 @@ import dev.sunnat629.mba.core.model.TicketResult
 import dev.sunnat629.mba.core.ticket.TicketBackend
 import dev.sunnat629.mba.core.ticket.TicketUpdate
 import dev.sunnat629.mba.github.AutoFixResult
+import dev.sunnat629.mba.server.persistence.CrashAggregationStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -134,6 +136,7 @@ class OperatorDecisionHandlerTest {
             notionBackend = null,
             githubIssueBackend = github,
             githubAutoFixTool = null,
+            aggregationStore = CrashAggregationStore(createTempDirectory().toString()),
             ioDispatcher = Dispatchers.Unconfined,
         )
 
@@ -168,6 +171,7 @@ class OperatorDecisionHandlerTest {
                 autoFixReport = report
                 AutoFixResult.Success(7, "https://github.test/issues/7", "autofix/7")
             },
+            aggregationStore = CrashAggregationStore(createTempDirectory().toString()),
             ioDispatcher = Dispatchers.Unconfined,
         )
 
@@ -177,6 +181,55 @@ class OperatorDecisionHandlerTest {
         assertTrue(sink.events.any { it.message.contains("creating operator ticket from stored raw report") })
         assertTrue(sink.events.any { it.message.contains("branch 'autofix/7' ready") })
         assertTrue(sink.events.any { it.type == "pr" && it.message == "https://github.test/issues/7" })
+    }
+
+    @Test
+    fun `operator repeated Notion decision returns existing ticket without duplicate create`() = runBlocking {
+        val raw = rawReport()
+        val processed = processedReport(raw)
+        val sink = RecordingDemoEventSink()
+        val notion = RecordingTicketBackend(url = "https://notion.test/ticket-1")
+        val store = CrashAggregationStore(createTempDirectory().toString())
+        val handler = OperatorDecisionHandler(
+            analysisTool = CrashAnalysisTool { CrashAnalysisResult.New(processed) },
+            eventSink = sink,
+            notionBackend = notion,
+            githubIssueBackend = null,
+            githubAutoFixTool = null,
+            aggregationStore = store,
+            ioDispatcher = Dispatchers.Unconfined,
+        )
+
+        handler.handle("job-1", raw, OperatorDecision.Notion)
+        handler.handle("job-2", raw.copy(id = "crash-2"), OperatorDecision.Notion)
+
+        assertEquals(1, notion.createdReports.size)
+        assertEquals(1, notion.updatedTicketIds.size)
+        assertTrue(sink.events.count { it.type == "complete" && it.message == "https://notion.test/ticket-1" } >= 2)
+    }
+
+    @Test
+    fun `operator repeated GitHub decision returns existing issue without duplicate create`() = runBlocking {
+        val raw = rawReport()
+        val processed = processedReport(raw)
+        val sink = RecordingDemoEventSink()
+        val github = RecordingTicketBackend(ticketId = "42", url = "https://github.test/issues/42")
+        val store = CrashAggregationStore(createTempDirectory().toString())
+        val handler = OperatorDecisionHandler(
+            analysisTool = CrashAnalysisTool { CrashAnalysisResult.New(processed) },
+            eventSink = sink,
+            notionBackend = null,
+            githubIssueBackend = github,
+            githubAutoFixTool = null,
+            aggregationStore = store,
+            ioDispatcher = Dispatchers.Unconfined,
+        )
+
+        handler.handle("job-1", raw, OperatorDecision.GitHub)
+        handler.handle("job-2", raw.copy(id = "crash-2"), OperatorDecision.GitHub)
+
+        assertEquals(1, github.createdReports.size)
+        assertTrue(sink.events.count { it.type == "pr" && it.message == "https://github.test/issues/42" } >= 2)
     }
 
     @Test
@@ -193,6 +246,7 @@ class OperatorDecisionHandlerTest {
             notionBackend = RecordingTicketBackend(),
             githubIssueBackend = RecordingTicketBackend(),
             githubAutoFixTool = null,
+            aggregationStore = CrashAggregationStore(createTempDirectory().toString()),
             ioDispatcher = Dispatchers.Unconfined,
         )
 
@@ -218,6 +272,7 @@ class OperatorDecisionHandlerTest {
         githubIssueBackend = githubIssueBackend,
         githubConfigMessage = githubConfigMessage,
         githubAutoFixTool = autoFixTool,
+        aggregationStore = CrashAggregationStore(createTempDirectory().toString()),
         ioDispatcher = Dispatchers.Unconfined,
     )
 
@@ -292,6 +347,7 @@ class OperatorDecisionHandlerTest {
         private val url: String = "https://ticket.test/1",
     ) : TicketBackend {
         val createdReports = mutableListOf<ProcessedCrashReport>()
+        val updatedTicketIds = mutableListOf<String>()
 
         override val name: String = "Recording"
 
@@ -300,9 +356,12 @@ class OperatorDecisionHandlerTest {
             return TicketResult(ticketId = ticketId, backendName = name, url = url)
         }
 
-        override suspend fun updateTicket(ticketId: String, update: TicketUpdate): TicketResult = TicketResult(
-            ticketId = ticketId,
-            backendName = name,
-        )
+        override suspend fun updateTicket(ticketId: String, update: TicketUpdate): TicketResult {
+            updatedTicketIds += ticketId
+            return TicketResult(
+                ticketId = ticketId,
+                backendName = name,
+            )
+        }
     }
 }
