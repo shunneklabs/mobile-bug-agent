@@ -46,6 +46,14 @@ public object MBAAndroid {
         private set
 
     @Volatile
+    internal var agentJsonCallback: (suspend (String) -> Unit)? = null
+        private set
+
+    @Volatile
+    internal var agentBatchJsonCallback: (suspend (String) -> Unit)? = null
+        private set
+
+    @Volatile
     internal var notionSink: MBAAgentSink? = null
         private set
 
@@ -159,6 +167,8 @@ public object MBAAndroid {
         useAgent: Boolean = true,
         callback: MBAAgentCallback? = null,
         batchCallback: MBAAgentBatchCallback? = null,
+        jsonCallback: (suspend (String) -> Unit)? = null,
+        batchJsonCallback: (suspend (String) -> Unit)? = null,
         debug: Boolean = false,
     ) {
         val appContext = context.applicationContext
@@ -179,6 +189,8 @@ public object MBAAndroid {
         )
         agentCallback = callback
         agentBatchCallback = batchCallback
+        agentJsonCallback = jsonCallback
+        agentBatchJsonCallback = batchJsonCallback
 
         MBALog.i(TAG, "MBA processing config saved to SharedPreferences for WorkManager")
     }
@@ -189,6 +201,14 @@ public object MBAAndroid {
 
     public fun setAgentBatchCallback(callback: MBAAgentBatchCallback?) {
         agentBatchCallback = callback
+    }
+
+    public fun setAgentJsonCallback(callback: (suspend (String) -> Unit)?) {
+        agentJsonCallback = callback
+    }
+
+    public fun setAgentBatchJsonCallback(callback: (suspend (String) -> Unit)?) {
+        agentBatchJsonCallback = callback
     }
 
     /**
@@ -227,19 +247,25 @@ public object MBAAndroid {
         val json = eventJson.encodeToString(event)
         _agentEvents.emit(event)
         _agentEventJson.emit(json)
-        logAgentEventJson(json)
+        if (notifyAppCallback) {
+            logAgentEventJson(json)
+        }
         if (notifyAppCallback) {
             agentCallback?.onCrashAnalyzed(event)
+            agentJsonCallback?.invoke(json)
         }
     }
 
     internal suspend fun publishAgentBatchEvent(batch: MBAAgentBatchEvent) {
         val json = eventJson.encodeToString(batch)
+        val latestJson = eventJson.encodeToString(batch.latest)
         _agentEventBatches.emit(batch)
         _agentBatchEventJson.emit(json)
         logAgentBatchEventJson(json)
         agentCallback?.onCrashAnalyzed(batch.latest)
         agentBatchCallback?.onCrashesAnalyzed(batch)
+        agentJsonCallback?.invoke(latestJson)
+        agentBatchJsonCallback?.invoke(json)
     }
 
     private fun logAgentEventJson(json: String) {

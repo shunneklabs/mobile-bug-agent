@@ -9,8 +9,6 @@ import dev.sunnat629.mba.core.config.LLM
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 
 private const val TAG = "Sample"
 private const val PREFS_NAME = "mba_sample_runtime"
@@ -24,11 +22,6 @@ data class SampleProcessingSettings(
 )
 
 object SampleRuntime {
-    private val eventJson = Json {
-        encodeDefaults = true
-        prettyPrint = true
-    }
-
     private val defaultSettings: SampleProcessingSettings
         get() = SampleProcessingSettings(
             deliveryMode = BuildConfig.MBA_SAMPLE_MODE.toDeliveryMode(),
@@ -91,23 +84,25 @@ object SampleRuntime {
             llm = if (BuildConfig.GEMINI_API_KEY.isBlank()) null else LLM.gemini(BuildConfig.GEMINI_API_KEY),
             useAgent = appliedSettings.useAgent,
             callback = MBAAgentCallback { event ->
-                val callbackJson = eventJson.encodeToString(event)
                 MBALog.i(
                     TAG,
                     "SDKOnly latest callback: group=${event.group.id}, new=${event.isNewGroup}, " +
                         "agentic=${event.agentic}, source=${event.analysisSource}, " +
                         "title='${event.report.title}', severity=${event.report.severity}",
                 )
-                logChunkedJson("App-layer latest callback JSON", callbackJson)
             },
             batchCallback = MBAAgentBatchCallback { batch ->
-                val batchJson = eventJson.encodeToString(batch)
                 MBALog.i(
                     TAG,
                     "SDKOnly batch callback: latest=${batch.latest.group.id}, " +
                         "events=${batch.totalCount}, success=${batch.successCount}, failed=${batch.failCount}",
                 )
-                logChunkedJson("App-layer batch callback JSON", batchJson)
+            },
+            jsonCallback = { json ->
+                logChunkedJson("App-layer latest callback JSON", json)
+            },
+            batchJsonCallback = { json ->
+                logChunkedJson("App-layer batch callback JSON", json)
             },
             debug = true,
         )
