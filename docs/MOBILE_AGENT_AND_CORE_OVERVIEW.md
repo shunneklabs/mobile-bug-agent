@@ -188,9 +188,10 @@ exits after Android reports them on the next app start.
 
 ### SDKOnly
 
-SDKOnly mode keeps processing in the app. It can run local Koog/LLM analysis,
-fall back to raw reports, group duplicates locally, emit callbacks/JSON, and
-optionally deliver to app-owned Notion/GitHub integrations.
+SDKOnly mode keeps processing in the app. It can run local Koog/LLM analysis
+with the app-selected provider and model, fall back to raw reports, group
+duplicates locally, emit callbacks/JSON, and optionally deliver to app-owned
+Notion/GitHub integrations.
 
 ### Hosted
 

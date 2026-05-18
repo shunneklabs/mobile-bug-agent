@@ -22,9 +22,11 @@ Koog is already wired into the core crash-analysis path in `mba-agent`.
 - Added Koog `0.8.0` to the Gradle version catalog as `koog-agents`.
 - Made `AgentFactory` default to the Koog path through `useKoog = true`.
 - Added `KoogAgentFactory` to create Koog-backed prompt executors.
-- Added provider support for:
+- Added provider/model support for SDKOnly through Koog:
   - Gemini through Koog `GoogleLLMClient`.
   - OpenAI through Koog `OpenAILLMClient`.
+  - Anthropic, Ollama/local, OpenRouter, Mistral, DeepSeek, DashScope, and
+    OpenAI-compatible custom endpoints through the matching Koog clients.
 - Kept the old direct HTTP LLM callers behind a rollback/debug flag.
 - Added `KoogCrashAnalysisExecutor` for the three main crash-analysis steps:
   - Parse sanitized stack trace into `ParsedStackTrace`.

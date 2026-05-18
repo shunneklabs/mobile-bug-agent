@@ -80,7 +80,7 @@ fun CrashTestScreen() {
             ConfigCard(settings)
             ProcessingCard(
                 settings = settings,
-                hasGemini = BuildConfig.GEMINI_API_KEY.isNotBlank(),
+                hasLlm = SampleRuntime.hasLlmConfig,
                 onModeSelect = { requested ->
                     val applied = SampleRuntime.selectDeliveryMode(context, requested)
                     status = "Processing route: ${applied.deliveryMode.label}. Trigger a crash to test it."
@@ -172,7 +172,7 @@ private fun ModeCard(mode: SampleDeliveryMode) {
 
 @Composable
 private fun ConfigCard(settings: SampleProcessingSettings) {
-    val hasGemini = BuildConfig.GEMINI_API_KEY.isNotBlank()
+    val hasLlm = SampleRuntime.hasLlmConfig
     val hasNotion = BuildConfig.NOTION_API_KEY.isNotBlank() && BuildConfig.NOTION_TICKET_DB_ID.isNotBlank()
     val hasBackend = BuildConfig.MBA_BACKEND_ENDPOINT.isNotBlank()
     val hasGitHub = BuildConfig.GITHUB_TOKEN.isNotBlank() && BuildConfig.GITHUB_OWNER.isNotBlank() && BuildConfig.GITHUB_REPO.isNotBlank()
@@ -185,7 +185,7 @@ private fun ConfigCard(settings: SampleProcessingSettings) {
                 ConfigChip("Agent", if (settings.useAgent) "on" else "raw fallback")
                 ConfigChip("Mode default", BuildConfig.MBA_SAMPLE_MODE)
                 ConfigChip("Agent default", BuildConfig.MBA_SAMPLE_USE_AGENT)
-                ConfigChip("Gemini", if (hasGemini) "ready" else "missing")
+                ConfigChip("LLM", if (hasLlm) SampleRuntime.llmLabel else "missing")
                 ConfigChip("Notion", if (hasNotion) "ready" else "missing")
                 ConfigChip("Backend", if (hasBackend && settings.deliveryMode == SampleDeliveryMode.HOSTED) BuildConfig.MBA_BACKEND_ENDPOINT else "off")
                 ConfigChip("GitHub", if (hasGitHub) "${BuildConfig.GITHUB_OWNER}/${BuildConfig.GITHUB_REPO}" else "off")
@@ -211,7 +211,7 @@ private fun ConfigChip(label: String, value: String) {
 @Composable
 private fun ProcessingCard(
     settings: SampleProcessingSettings,
-    hasGemini: Boolean,
+    hasLlm: Boolean,
     onModeSelect: (SampleDeliveryMode) -> Unit,
     onUseAgentChange: (Boolean) -> Unit,
     onHostedBackendChange: (Boolean) -> Unit,
@@ -279,8 +279,8 @@ private fun ProcessingCard(
                     Text(
                         when {
                             settings.useAgent -> "LLM analysis enabled"
-                            hasGemini -> "Raw callback/ticket fallback"
-                            else -> "Raw fallback; Gemini key missing"
+                            hasLlm -> "Raw callback/ticket fallback"
+                            else -> "Raw fallback; LLM config missing"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -289,7 +289,7 @@ private fun ProcessingCard(
                 Switch(
                     checked = settings.useAgent,
                     onCheckedChange = onUseAgentChange,
-                    enabled = hasGemini,
+                    enabled = hasLlm,
                 )
             }
         }

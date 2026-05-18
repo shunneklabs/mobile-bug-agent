@@ -60,7 +60,7 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | Module | Role |
 |---|---|
 | `mba-core` | KMP shared API, models, config, crash capture, PII sanitizer, fingerprinting, dedup cache |
-| `mba-agent` | Koog-backed crash analysis pipeline with Gemini/OpenAI support and legacy fallback |
+| `mba-agent` | Koog-backed crash analysis pipeline with selectable provider/model support and raw fallback |
 | `mba-notion` | Notion API integration with linked Bug Tickets and Crash Reports databases |
 | `mba-github` | GitHub issue backend, source reader, guardrails, auto-fix branch and PR creator |
 | `mba-android` | Android crash handler, AndroidX Startup, WorkManager upload path |
@@ -85,7 +85,13 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
    NOTION_TOKEN=ntn_your_integration_token
    NOTION_TICKET_DB_ID_OR_URL=your_bug_tickets_db_id
    NOTION_CRASH_DB_ID_OR_URL=your_crash_reports_db_id
-   GEMINI_API_KEY=AIzaSy...
+   MBA_SAMPLE_LLM_PROVIDER=GEMINI
+   MBA_SAMPLE_LLM_API_KEY=AIzaSy...
+   MBA_SAMPLE_LLM_MODEL=gemini-2.0-flash
+   # For local models:
+   # MBA_SAMPLE_LLM_PROVIDER=OLLAMA
+   # MBA_SAMPLE_LLM_MODEL=llama3.2:latest
+   # MBA_SAMPLE_LLM_ENDPOINT=http://10.0.2.2:11434
    ```
 3. Build and run `mba-sample` on a device or emulator.
 4. Trigger a crash, relaunch, and confirm a Notion ticket or server job appears.
@@ -129,10 +135,15 @@ class ExampleApp : Application() {
 
         MBAAndroid.install(this)
 
+        val llmConfig = LLM.openAI(
+            apiKey = BuildConfig.MBA_LLM_API_KEY,
+            model = BuildConfig.MBA_LLM_MODEL,
+        )
+
         MBA.configure(
             MBAConfig.Builder().apply {
-                mode = MBAMode.SdkOnly(llmApiKey = BuildConfig.GEMINI_API_KEY)
-                useAgent = BuildConfig.GEMINI_API_KEY.isNotBlank()
+                mode = MBAMode.SdkOnly(llm = llmConfig)
+                useAgent = true
                 debug = BuildConfig.DEBUG
             }.build(),
         )
@@ -140,12 +151,8 @@ class ExampleApp : Application() {
         MBAAndroid.saveConfig(
             context = this,
             sendToBackend = false,
-            llm = if (BuildConfig.GEMINI_API_KEY.isBlank()) {
-                null
-            } else {
-                LLM.gemini(BuildConfig.GEMINI_API_KEY)
-            },
-            useAgent = BuildConfig.GEMINI_API_KEY.isNotBlank(),
+            llm = llmConfig,
+            useAgent = true,
             callback = { event ->
                 Log.i("MBA", "Crash group=${event.group.id}, title=${event.report.title}")
             },
@@ -183,6 +190,21 @@ Treat crash context like logs. Do not put emails, tokens, payment data, raw user
 input, or private content in exception messages, breadcrumbs, screen names, or
 custom metadata.
 
+SDKOnly does not bind you to Gemini. The app can choose any Koog-backed provider
+supported by MBA:
+
+```kotlin
+LLM.gemini(apiKey, model = "gemini-2.0-flash")
+LLM.openAI(apiKey, model = "gpt-4o-mini")
+LLM.anthropic(apiKey, model = "claude-sonnet-4-20250514")
+LLM.ollama(model = "llama3.2:latest", endpoint = "http://10.0.2.2:11434")
+LLM.openRouter(apiKey, model = "anthropic/claude-3.5-sonnet")
+LLM.mistral(apiKey, model = "mistral-large-latest")
+LLM.deepSeek(apiKey, model = "deepseek-chat")
+LLM.dashScope(apiKey, model = "qwen-plus")
+LLM.custom(apiKey = "", endpoint = "http://10.0.2.2:1234/v1", model = "local-model")
+```
+
 ## 🤖 Why Koog
 
 MBA uses [JetBrains Koog](https://github.com/JetBrains/koog) as the Kotlin-native AI agent runtime. Koog keeps the agent layer close to the rest of the codebase: prompts, tool calls, model clients, retries, and structured outputs stay in Kotlin instead of a separate Python service.
@@ -190,7 +212,9 @@ MBA uses [JetBrains Koog](https://github.com/JetBrains/koog) as the Kotlin-nativ
 Current shape:
 
 - `mba-agent` runs Koog by default for crash analysis.
-- Gemini and OpenAI clients sit behind the Koog-backed executor.
+- Gemini, OpenAI, Anthropic, Ollama/local, OpenRouter, Mistral, DeepSeek,
+  DashScope, and OpenAI-compatible custom endpoints sit behind the Koog-backed
+  executor.
 - A legacy direct HTTP path remains available while the demo orchestration matures.
 - Workstream D is wiring Notion/GitHub/source/guardrail actions into visible Koog tool events.
 
@@ -203,7 +227,7 @@ Current shape:
 - [x] **Android upload path** — AndroidX Startup plus WorkManager processing on next launch
 - [x] **Android ANR exits** — Android 11/API 30+ previous-process ANR detection after app restart
 - [x] **SDKOnly callbacks** — latest and batch object/JSON callbacks for app-owned workflows
-- [x] **Koog analysis** — Gemini/OpenAI analysis through `mba-agent`, with fallback path retained
+- [x] **Koog analysis** — selectable provider/model analysis through `mba-agent`, with fallback path retained
 - [x] **Notion integration** — linked Bug Tickets and Crash Reports databases
 - [x] **GitHub integration** — issue creation, source reader, reviewer lookup, guarded PR opener
 - [x] **Ktor server** — `/report`, `/jobs/{id}`, `/events`, `/version`, `/stats`, rate limit, persisted job state

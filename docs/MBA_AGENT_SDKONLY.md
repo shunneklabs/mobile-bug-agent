@@ -16,7 +16,7 @@ In SDKOnly mode, Mobile Bug Agent can:
 - record explicitly logged non-fatal errors
 - detect supported Android ANR exits after the next app start
 - build a structured raw crash report
-- run Koog/LLM crash analysis when configured
+- run Koog/LLM crash analysis with the app-selected provider and model
 - fall back to a raw technical report when analysis is disabled or fails
 - group repeated crashes by app, environment, and fingerprint
 - emit the latest processed event to app callbacks
@@ -79,8 +79,9 @@ snapshot to disk. Processing happens later, after the app starts again.
 
 ## Agent Analysis
 
-When local agent analysis is enabled and an LLM key is configured, the SDK runs
-Koog against the crash-context payload and produces a richer report:
+When local agent analysis is enabled and an LLM provider/model is configured,
+the SDK runs Koog against the crash-context payload and produces a richer
+report:
 
 - title
 - description
@@ -101,8 +102,8 @@ or forward the original technical context when needed.
 Raw fallback is used when:
 
 - local agent analysis is turned off
-- no LLM key is available
-- the configured LLM key is invalid
+- no usable LLM configuration is available
+- the configured LLM key, endpoint, or local model is invalid
 - Koog/LLM analysis fails
 - the app intentionally wants non-agentic crash payloads
 

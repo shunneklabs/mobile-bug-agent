@@ -69,7 +69,10 @@ values.
 For local development, `local.properties` is enough:
 
 ```properties
-GEMINI_API_KEY=your_gemini_key
+MBA_SAMPLE_LLM_PROVIDER=GEMINI
+MBA_SAMPLE_LLM_API_KEY=your_provider_key
+MBA_SAMPLE_LLM_MODEL=gemini-2.0-flash
+MBA_SAMPLE_LLM_ENDPOINT=
 NOTION_API_KEY=your_notion_token
 NOTION_TICKET_DB_ID_OR_URL=your_notion_database_id
 NOTION_CRASH_DB_ID_OR_URL=optional_crash_occurrence_database_id
@@ -101,10 +104,15 @@ class ExampleApp : Application() {
 
         MBAAndroid.install(this)
 
+        val llmConfig = LLM.openAI(
+            apiKey = BuildConfig.MBA_LLM_API_KEY,
+            model = BuildConfig.MBA_LLM_MODEL,
+        )
+
         MBA.configure(
             MBAConfig.Builder().apply {
-                mode = MBAMode.SdkOnly(llmApiKey = BuildConfig.GEMINI_API_KEY)
-                useAgent = BuildConfig.GEMINI_API_KEY.isNotBlank()
+                mode = MBAMode.SdkOnly(llm = llmConfig)
+                useAgent = true
                 debug = BuildConfig.DEBUG
             }.build(),
         )
@@ -112,12 +120,8 @@ class ExampleApp : Application() {
         MBAAndroid.saveConfig(
             context = this,
             sendToBackend = false,
-            llm = if (BuildConfig.GEMINI_API_KEY.isBlank()) {
-                null
-            } else {
-                LLM.gemini(BuildConfig.GEMINI_API_KEY)
-            },
-            useAgent = BuildConfig.GEMINI_API_KEY.isNotBlank(),
+            llm = llmConfig,
+            useAgent = true,
             callback = { event ->
                 Log.i("MBA", "Crash group=${event.group.id}, title=${event.report.title}")
             },
@@ -143,17 +147,40 @@ even if an app disables AndroidX Startup.
 
 ## 4. Choose Agent Or Raw Fallback
 
-Use local agent analysis when the app has an LLM key and wants richer reports:
+Use local agent analysis when the app has an LLM configuration and wants richer
+reports:
 
 ```kotlin
-mode = MBAMode.SdkOnly(llmApiKey = BuildConfig.GEMINI_API_KEY)
+mode = MBAMode.SdkOnly(
+    llm = LLM.anthropic(
+        apiKey = BuildConfig.MBA_LLM_API_KEY,
+        model = "claude-sonnet-4-20250514",
+    ),
+)
 useAgent = true
 ```
+
+SDKOnly supports provider and model selection through `LLMConfig`:
+
+```kotlin
+LLM.gemini(apiKey, model = "gemini-2.0-flash")
+LLM.openAI(apiKey, model = "gpt-4o-mini")
+LLM.anthropic(apiKey, model = "claude-sonnet-4-20250514")
+LLM.ollama(model = "llama3.2:latest", endpoint = "http://10.0.2.2:11434")
+LLM.openRouter(apiKey, model = "anthropic/claude-3.5-sonnet")
+LLM.mistral(apiKey, model = "mistral-large-latest")
+LLM.deepSeek(apiKey, model = "deepseek-chat")
+LLM.dashScope(apiKey, model = "qwen-plus")
+LLM.custom(apiKey = "", endpoint = "http://10.0.2.2:1234/v1", model = "local-model")
+```
+
+`LLM.custom(...)` is for OpenAI-compatible local or hosted gateways such as LM
+Studio, vLLM, LiteLLM, or an app-owned proxy.
 
 Use raw fallback when the app does not want local LLM analysis:
 
 ```kotlin
-mode = MBAMode.SdkOnly(llmApiKey = "")
+mode = MBAMode.SdkOnly()
 useAgent = false
 ```
 
@@ -203,7 +230,7 @@ returns results to the app. The app owns the next step.
 MBAAndroid.saveConfig(
     context = this,
     sendToBackend = false,
-    llm = LLM.gemini(BuildConfig.GEMINI_API_KEY),
+    llm = LLM.ollama(model = "llama3.2:latest", endpoint = "http://10.0.2.2:11434"),
     useAgent = true,
     callback = { event ->
         // Latest processed event from this worker run.

@@ -6,6 +6,7 @@ import dev.sunnat629.mba.agent.runtime.MBAAgentBatchCallback
 import dev.sunnat629.mba.agent.runtime.MBAAgentCallback
 import dev.sunnat629.mba.core.MBALog
 import dev.sunnat629.mba.core.config.LLM
+import dev.sunnat629.mba.core.config.LLMConfig
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,6 +33,39 @@ object SampleRuntime {
     val settings: StateFlow<SampleProcessingSettings> = _settings.asStateFlow()
 
     val deliveryMode: SampleDeliveryMode get() = _settings.value.deliveryMode
+
+    val hasLlmConfig: Boolean
+        get() = llmConfig() != null
+
+    val llmLabel: String
+        get() = buildString {
+            append(BuildConfig.MBA_SAMPLE_LLM_PROVIDER.ifBlank { "GEMINI" }.uppercase())
+            BuildConfig.MBA_SAMPLE_LLM_MODEL.ifBlank { null }?.let { append(" / ").append(it) }
+        }
+
+    fun llmConfig(): LLMConfig? {
+        val provider = BuildConfig.MBA_SAMPLE_LLM_PROVIDER.ifBlank { "GEMINI" }.uppercase()
+        val apiKey = BuildConfig.MBA_SAMPLE_LLM_API_KEY
+        val endpoint = BuildConfig.MBA_SAMPLE_LLM_ENDPOINT.ifBlank { null }
+        val model = BuildConfig.MBA_SAMPLE_LLM_MODEL.ifBlank { null }
+        val base = when (provider) {
+            LLM.Provider.GEMINI.name -> LLM.gemini(apiKey, endpoint = endpoint)
+            LLM.Provider.OPENAI.name -> LLM.openAI(apiKey, endpoint = endpoint)
+            LLM.Provider.ANTHROPIC.name -> LLM.anthropic(apiKey, endpoint = endpoint)
+            LLM.Provider.OLLAMA.name -> LLM.ollama(endpoint = endpoint ?: "http://10.0.2.2:11434")
+            LLM.Provider.OPENROUTER.name -> LLM.openRouter(apiKey, endpoint = endpoint)
+            LLM.Provider.MISTRAL.name -> LLM.mistral(apiKey, endpoint = endpoint)
+            LLM.Provider.DEEPSEEK.name -> LLM.deepSeek(apiKey, endpoint = endpoint)
+            LLM.Provider.DASHSCOPE.name -> LLM.dashScope(apiKey, endpoint = endpoint)
+            LLM.Provider.CUSTOM.name -> {
+                if (endpoint == null || model == null) return null
+                LLM.custom(apiKey = apiKey, endpoint = endpoint, model = model)
+            }
+            else -> return null
+        }
+        if (base.requiresApiKey && apiKey.isBlank()) return null
+        return model?.let(base::model) ?: base
+    }
 
     fun restore(context: Context): SampleProcessingSettings {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -81,7 +115,7 @@ object SampleRuntime {
             projectKey = "sample-app-debug",
             serverApiKey = BuildConfig.MBA_SERVER_API_KEY,
             sendToBackend = appliedSettings.deliveryMode == SampleDeliveryMode.HOSTED,
-            llm = if (BuildConfig.GEMINI_API_KEY.isBlank()) null else LLM.gemini(BuildConfig.GEMINI_API_KEY),
+            llm = llmConfig(),
             useAgent = appliedSettings.useAgent,
             callback = MBAAgentCallback { event ->
                 MBALog.i(
@@ -110,7 +144,7 @@ object SampleRuntime {
     }
 
     private fun SampleProcessingSettings.normalized(): SampleProcessingSettings =
-        if (useAgent && BuildConfig.GEMINI_API_KEY.isBlank()) copy(useAgent = false) else this
+        if (useAgent && !hasLlmConfig) copy(useAgent = false) else this
 
     private fun logChunkedJson(label: String, json: String) {
         MBALog.i(TAG, "$label:")

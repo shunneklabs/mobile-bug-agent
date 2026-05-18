@@ -53,9 +53,9 @@ This document describes the Mobile Bug Agent SDK, server, and demo architecture.
 │                              │ └────────────────────┘ │     │
 │  ┌─────────────────────┐     └────────────────────────┘     │
 │  │ Model Clients       │                                    │
-│  │ ├─ Gemini via Koog  │  API key in x-goog-api-key header │
-│  │ ├─ OpenAI via Koog  │  API key in Authorization header  │
-│  │ └─ Legacy fallback  │  Direct HTTP path retained        │
+│  │ ├─ Gemini/OpenAI/Anthropic via Koog                     │
+│  │ ├─ Ollama/local/OpenRouter/Mistral/DeepSeek/DashScope   │
+│  │ └─ Legacy fallback for older direct HTTP paths           │
 │  └─────────────────────┘                                    │
 └─────────────────────────────────────────────────────────────┘
 

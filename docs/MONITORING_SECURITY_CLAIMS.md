@@ -176,8 +176,9 @@ host app decides whether to store, upload, or discard the payload.
 
 ### SDKOnly With Agent Analysis
 
-Crash context is sent to the app-configured LLM provider for analysis. The
-processed result is returned to the app and optional local sinks.
+Crash context is sent to the app-configured LLM provider, model, endpoint, or
+local model runtime for analysis. The processed result is returned to the app
+and optional local sinks.
 
 ### SDKOnly With Notion or GitHub
 
