@@ -183,3 +183,87 @@ or raw personal data.
 
 See `MONITORING_SECURITY_CLAIMS.md` for the complete monitoring and privacy
 boundary.
+
+## Future Plans
+
+SDKOnly mode can grow into a stronger standalone mobile debugging agent while
+staying inside app-controlled boundaries. These are possible directions, not
+guaranteed timelines.
+
+### Stronger Local Intelligence
+
+Future SDKOnly analysis could improve:
+
+- crash fingerprint normalization across obfuscated/reformatted stack traces
+- duplicate grouping across app versions
+- confidence scoring for probable root cause
+- clearer reproduction steps from breadcrumbs and screen context
+- framework-aware analysis for Compose, coroutines, networking, database, and
+  dependency-injection failures
+- richer raw fallback when LLM analysis is unavailable
+
+### Better App-Layer Control
+
+Apps may need more control over what gets processed and delivered. Future
+SDKOnly APIs could support:
+
+- custom redaction hooks before analysis or delivery
+- custom grouping keys
+- custom severity routing
+- per-event delivery rules
+- callback-only mode with no external delivery
+- app-owned exporters for internal dashboards, Slack, Linear, Jira, Sentry, or
+  other systems
+
+### Offline-First Crash Operations
+
+SDKOnly can work even when a backend is not reachable. Future improvements could
+include:
+
+- richer local crash inbox APIs
+- local retry and backoff controls
+- local retention policies
+- manual flush controls
+- exportable crash bundles for QA and support workflows
+
+### More Platform Coverage
+
+As MBA moves further into KMP, the same core and agent model can support more
+platform adapters.
+
+Possible platform work includes:
+
+- JVM desktop/server adapters
+- iOS/Kotlin Multiplatform adapters where platform APIs allow it
+- shared models and grouping logic across Android, JVM, and iOS
+- platform-specific capture modules that feed the same agent pipeline
+
+Each platform still needs its own crash-capture strategy because Android, iOS,
+JVM, and native runtimes report failures differently.
+
+### ANR and Performance Diagnostics
+
+Current Android ANR support detects previous ANR exits on Android 11/API 30+
+after app restart. Future SDKOnly work could add:
+
+- main-thread stall watchdogs
+- configurable ANR thresholds
+- lightweight thread-state snapshots
+- slow startup or slow screen transition markers
+- performance breadcrumbs explicitly added by the app
+
+These features should remain opt-in and diagnostic-focused.
+
+### Privacy-Preserving Expansion
+
+Any future SDKOnly expansion should keep the same privacy model:
+
+- collect the minimum technical context needed to debug the failure
+- avoid screenshots, screen recordings, network payloads, databases, contacts,
+  media, precise location, and user behavior analytics
+- make app-provided context explicit
+- provide redaction hooks before LLM analysis or external delivery
+- keep external destinations controlled by the host app
+
+The long-term goal is a capable mobile debugging agent that helps developers
+understand failures without becoming a user-monitoring SDK.
