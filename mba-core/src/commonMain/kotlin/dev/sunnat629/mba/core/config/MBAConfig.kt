@@ -18,6 +18,13 @@ public class MBAConfig internal constructor(
     internal val agentConfig: AgentConfig,
     public val debug: Boolean,
     /**
+     * When false, SDKOnly processing skips local LLM/Koog analysis and uses
+     * raw-derived fallback reports for callbacks and optional app-owned sinks.
+     *
+     * Default: `true`.
+     */
+    public val useAgent: Boolean = true,
+    /**
      * When true, every captured crash is flagged for the server's GitHub
      * auto-fix path (issue → branch → patch → draft PR). The server still
      * gates the actual PR on crash severity (HIGH/CRITICAL only).
@@ -64,6 +71,12 @@ public class MBAConfig internal constructor(
         public var debug: Boolean = false
 
         /**
+         * Enable local Koog/LLM analysis in SDKOnly mode. Set false when the
+         * app wants raw fallback callbacks/tickets without an LLM key.
+         */
+        public var useAgent: Boolean = true
+
+        /**
          * Opt in to the server-side GitHub auto-fix path. Default `false`.
          * Server still gates the actual PR on crash severity (HIGH/CRITICAL).
          */
@@ -96,10 +109,10 @@ public class MBAConfig internal constructor(
             // Resolve LLM config: explicit llm > mode's llmApiKey > error
             val resolvedLlm = llm ?: when (resolvedMode) {
                 is MBAMode.SdkOnly -> {
-                    require(resolvedMode.llmApiKey.isNotBlank()) {
+                    require(resolvedMode.llmApiKey.isNotBlank() || !useAgent) {
                         "SdkOnly mode requires a non-blank LLM API key."
                     }
-                    LLM.gemini(resolvedMode.llmApiKey)
+                    if (useAgent) LLM.gemini(resolvedMode.llmApiKey) else LLMConfig.NONE
                 }
                 is MBAMode.Saas -> LLMConfig.NONE
                 is MBAMode.SelfHosted -> LLMConfig.NONE
@@ -111,6 +124,7 @@ public class MBAConfig internal constructor(
                 piiSanitizer = PIISanitizer(customPatterns = piiPatterns),
                 agentConfig = agentConfig,
                 debug = debug,
+                useAgent = useAgent,
                 autoFix = autoFix,
                 skipNotion = skipNotion,
             )

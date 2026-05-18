@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -31,9 +32,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.sunnat629.mba.core.MBA
@@ -50,7 +52,8 @@ fun CrashTestScreen() {
 
     var status by remember { mutableStateOf("Ready. Fatal scenarios close the app; reopen it to let WorkManager process the saved crash.") }
     val context = LocalContext.current
-    val mode = SampleRuntime.deliveryMode
+    val settings by SampleRuntime.settings.collectAsState()
+    val mode = settings.deliveryMode
     val integrationMode by SampleIntegrationRuntime.mode.collectAsState()
     val scenarios = remember { sampleScenarios() }
 
@@ -74,7 +77,23 @@ fun CrashTestScreen() {
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             ModeCard(mode)
-            ConfigCard(mode)
+            ConfigCard(settings)
+            ProcessingCard(
+                settings = settings,
+                hasGemini = BuildConfig.GEMINI_API_KEY.isNotBlank(),
+                onModeSelect = { requested ->
+                    val applied = SampleRuntime.selectDeliveryMode(context, requested)
+                    status = "Processing route: ${applied.deliveryMode.label}. Trigger a crash to test it."
+                },
+                onUseAgentChange = { enabled ->
+                    val applied = SampleRuntime.setUseAgent(context, enabled)
+                    status = "Agent: ${if (applied.useAgent) "Koog enabled" else "raw fallback"}. Trigger a crash to test it."
+                },
+                onReset = {
+                    val applied = SampleRuntime.resetToBuildDefaults(context)
+                    status = "Processing route reset to build defaults: ${applied.deliveryMode.label}, agent=${if (applied.useAgent) "on" else "raw fallback"}."
+                },
+            )
             IntegrationCard(
                 selected = integrationMode,
                 onSelect = { requested ->
@@ -147,9 +166,8 @@ private fun ModeCard(mode: SampleDeliveryMode) {
 }
 
 @Composable
-private fun ConfigCard(mode: SampleDeliveryMode) {
+private fun ConfigCard(settings: SampleProcessingSettings) {
     val hasGemini = BuildConfig.GEMINI_API_KEY.isNotBlank()
-    val useAgent = BuildConfig.MBA_SAMPLE_USE_AGENT.toBooleanStrictOrNull() ?: true
     val hasNotion = BuildConfig.NOTION_API_KEY.isNotBlank() && BuildConfig.NOTION_TICKET_DB_ID.isNotBlank()
     val hasBackend = BuildConfig.MBA_BACKEND_ENDPOINT.isNotBlank()
     val hasGitHub = BuildConfig.GITHUB_TOKEN.isNotBlank() && BuildConfig.GITHUB_OWNER.isNotBlank() && BuildConfig.GITHUB_REPO.isNotBlank()
@@ -158,11 +176,13 @@ private fun ConfigCard(mode: SampleDeliveryMode) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Configuration", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ConfigChip("Mode", BuildConfig.MBA_SAMPLE_MODE)
-                ConfigChip("Agent", if (useAgent) "on" else "raw fallback")
+                ConfigChip("Mode", settings.deliveryMode.label)
+                ConfigChip("Agent", if (settings.useAgent) "on" else "raw fallback")
+                ConfigChip("Mode default", BuildConfig.MBA_SAMPLE_MODE)
+                ConfigChip("Agent default", BuildConfig.MBA_SAMPLE_USE_AGENT)
                 ConfigChip("Gemini", if (hasGemini) "ready" else "missing")
                 ConfigChip("Notion", if (hasNotion) "ready" else "missing")
-                ConfigChip("Backend", if (hasBackend && mode == SampleDeliveryMode.HOSTED) BuildConfig.MBA_BACKEND_ENDPOINT else "off")
+                ConfigChip("Backend", if (hasBackend && settings.deliveryMode == SampleDeliveryMode.HOSTED) BuildConfig.MBA_BACKEND_ENDPOINT else "off")
                 ConfigChip("GitHub", if (hasGitHub) "${BuildConfig.GITHUB_OWNER}/${BuildConfig.GITHUB_REPO}" else "off")
             }
         }
@@ -180,6 +200,87 @@ private fun ConfigChip(label: String, value: String) {
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
             style = MaterialTheme.typography.labelMedium,
         )
+    }
+}
+
+@Composable
+private fun ProcessingCard(
+    settings: SampleProcessingSettings,
+    hasGemini: Boolean,
+    onModeSelect: (SampleDeliveryMode) -> Unit,
+    onUseAgentChange: (Boolean) -> Unit,
+    onReset: () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Processing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Active: ${settings.deliveryMode.label}, agent=${if (settings.useAgent) "Koog" else "raw fallback"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                OutlinedButton(onClick = onReset) {
+                    Text("Use defaults")
+                }
+            }
+
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ProcessingButton(
+                    label = "SDKOnly",
+                    selected = settings.deliveryMode == SampleDeliveryMode.SDK_ONLY,
+                    onClick = { onModeSelect(SampleDeliveryMode.SDK_ONLY) },
+                )
+                ProcessingButton(
+                    label = "Hosted backend",
+                    selected = settings.deliveryMode == SampleDeliveryMode.HOSTED,
+                    onClick = { onModeSelect(SampleDeliveryMode.HOSTED) },
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Use Koog agent", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        when {
+                            settings.useAgent -> "LLM analysis enabled"
+                            hasGemini -> "Raw callback/ticket fallback"
+                            else -> "Raw fallback; Gemini key missing"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = settings.useAgent,
+                    onCheckedChange = onUseAgentChange,
+                    enabled = hasGemini,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProcessingButton(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    if (selected) {
+        Button(onClick = onClick) {
+            Text(label)
+        }
+    } else {
+        OutlinedButton(onClick = onClick) {
+            Text(label)
+        }
     }
 }
 

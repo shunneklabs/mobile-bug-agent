@@ -2,29 +2,12 @@ package dev.sunnat629.mba.sample
 
 import android.app.Application
 import dev.sunnat629.mba.android.MBAAndroid
-import dev.sunnat629.mba.agent.runtime.MBAAgentCallback
 import dev.sunnat629.mba.core.MBA
 import dev.sunnat629.mba.core.MBALog
-import dev.sunnat629.mba.core.config.LLM
 import dev.sunnat629.mba.core.config.MBAConfig
 import dev.sunnat629.mba.core.config.MBAMode
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 
 private const val TAG = "Sample"
-private const val LOG_CHUNK_SIZE = 3500
-private val agentEventJson = Json {
-    encodeDefaults = true
-    prettyPrint = true
-}
-private val sampleDeliveryMode: SampleDeliveryMode
-    get() = if (BuildConfig.MBA_SAMPLE_MODE.equals("sdkOnly", ignoreCase = true) ||
-        BuildConfig.MBA_SAMPLE_MODE.equals("sdk-only", ignoreCase = true)
-    ) {
-        SampleDeliveryMode.SDK_ONLY
-    } else {
-        SampleDeliveryMode.HOSTED
-    }
 
 class MBASampleApp : Application() {
     override fun onCreate() {
@@ -42,7 +25,8 @@ class MBASampleApp : Application() {
         MBALog.d(TAG, "MBA_SAMPLE_USE_AGENT: ${BuildConfig.MBA_SAMPLE_USE_AGENT}")
         MBALog.d(TAG, "========================================")
 
-        val mode = sampleDeliveryMode
+        val settings = SampleRuntime.restore(this)
+        val mode = settings.deliveryMode
 
         MBA.configure(
             MBAConfig.Builder().apply {
@@ -51,6 +35,7 @@ class MBASampleApp : Application() {
                     SampleDeliveryMode.HOSTED -> MBAMode.Saas(projectKey = "sample-app-debug")
                 }
                 debug = true
+                useAgent = settings.useAgent
                 autoFix = mode == SampleDeliveryMode.HOSTED
                 skipNotion = false
             }.build()
@@ -59,49 +44,9 @@ class MBASampleApp : Application() {
         // Restore app-layer integrations before WorkManager processes pending crashes.
         val integrationMode = SampleIntegrationRuntime.restore(this)
 
-        // Save local processing/backend config before enqueueing WorkManager.
-        // Emulator default is 10.0.2.2. Physical devices must use the Mac LAN URL,
-        // for example MBA_SAMPLE_BACKEND_ENDPOINT=http://192.168.1.42:8080.
-        MBAAndroid.saveConfig(
-            context = this,
-            backendEndpoint = BuildConfig.MBA_BACKEND_ENDPOINT,
-            projectKey = "sample-app-debug",
-            serverApiKey = BuildConfig.MBA_SERVER_API_KEY,
-            sendToBackend = mode == SampleDeliveryMode.HOSTED,
-            llm = if (BuildConfig.GEMINI_API_KEY.isBlank()) null else LLM.gemini(BuildConfig.GEMINI_API_KEY),
-            useAgent = BuildConfig.MBA_SAMPLE_USE_AGENT.toBooleanStrictOrNull() ?: true,
-            callback = MBAAgentCallback { event ->
-                val callbackJson = agentEventJson.encodeToString(event)
-                MBALog.i(
-                    TAG,
-                    "SDKOnly callback: group=${event.group.id}, new=${event.isNewGroup}, " +
-                        "agentic=${event.agentic}, source=${event.analysisSource}, " +
-                        "title='${event.report.title}', severity=${event.report.severity}",
-                )
-                logCallbackJson(callbackJson)
-            },
-            debug = true,
-        )
-
         // Install crash handler + enqueue WorkManager after config and sinks are ready.
         MBAAndroid.install(this)
 
         MBALog.d(TAG, "MBA SDK initialized in ${mode.label} with ${integrationMode.label}. Crashes are processed on next launch.")
     }
-
-    private fun logCallbackJson(json: String) {
-        MBALog.i(TAG, "App-layer SDKOnly callback JSON:")
-        json.chunked(LOG_CHUNK_SIZE).forEachIndexed { index, chunk ->
-            MBALog.i(TAG, "App-layer SDKOnly callback JSON[$index]: $chunk")
-        }
-    }
-}
-
-enum class SampleDeliveryMode(val label: String) {
-    SDK_ONLY("SDKOnly"),
-    HOSTED("Hosted backend"),
-}
-
-object SampleRuntime {
-    val deliveryMode: SampleDeliveryMode get() = sampleDeliveryMode
 }
