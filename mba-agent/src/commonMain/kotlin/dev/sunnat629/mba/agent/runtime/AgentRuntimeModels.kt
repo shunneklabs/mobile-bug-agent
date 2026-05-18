@@ -51,6 +51,9 @@ public data class MBAAgentEvent(
     val raw: RawCrashReport,
     val externalState: ExternalArtifactState,
     val isNewGroup: Boolean,
+    val agentic: Boolean = true,
+    val analysisSource: String = "KOOG",
+    val analysisError: String? = null,
 )
 
 public fun interface MBAAgentCallback {

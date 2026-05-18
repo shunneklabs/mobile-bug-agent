@@ -149,6 +149,7 @@ private fun ModeCard(mode: SampleDeliveryMode) {
 @Composable
 private fun ConfigCard(mode: SampleDeliveryMode) {
     val hasGemini = BuildConfig.GEMINI_API_KEY.isNotBlank()
+    val useAgent = BuildConfig.MBA_SAMPLE_USE_AGENT.toBooleanStrictOrNull() ?: true
     val hasNotion = BuildConfig.NOTION_API_KEY.isNotBlank() && BuildConfig.NOTION_TICKET_DB_ID.isNotBlank()
     val hasBackend = BuildConfig.MBA_BACKEND_ENDPOINT.isNotBlank()
     val hasGitHub = BuildConfig.GITHUB_TOKEN.isNotBlank() && BuildConfig.GITHUB_OWNER.isNotBlank() && BuildConfig.GITHUB_REPO.isNotBlank()
@@ -158,6 +159,7 @@ private fun ConfigCard(mode: SampleDeliveryMode) {
             Text("Configuration", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 ConfigChip("Mode", BuildConfig.MBA_SAMPLE_MODE)
+                ConfigChip("Agent", if (useAgent) "on" else "raw fallback")
                 ConfigChip("Gemini", if (hasGemini) "ready" else "missing")
                 ConfigChip("Notion", if (hasNotion) "ready" else "missing")
                 ConfigChip("Backend", if (hasBackend && mode == SampleDeliveryMode.HOSTED) BuildConfig.MBA_BACKEND_ENDPOINT else "off")

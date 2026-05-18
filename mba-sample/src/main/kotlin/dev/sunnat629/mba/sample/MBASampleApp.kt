@@ -32,6 +32,7 @@ class MBASampleApp : Application() {
         MBALog.d(TAG, "MBA_BACKEND_ENDPOINT: ${BuildConfig.MBA_BACKEND_ENDPOINT}")
         MBALog.d(TAG, "MBA_SERVER_API_KEY: ${if (BuildConfig.MBA_SERVER_API_KEY.isNotBlank()) "loaded" else "!! EMPTY !!" }")
         MBALog.d(TAG, "MBA_SAMPLE_MODE: ${BuildConfig.MBA_SAMPLE_MODE}")
+        MBALog.d(TAG, "MBA_SAMPLE_USE_AGENT: ${BuildConfig.MBA_SAMPLE_USE_AGENT}")
         MBALog.d(TAG, "========================================")
 
         val mode = sampleDeliveryMode
@@ -61,10 +62,12 @@ class MBASampleApp : Application() {
             serverApiKey = BuildConfig.MBA_SERVER_API_KEY,
             sendToBackend = mode == SampleDeliveryMode.HOSTED,
             llm = if (BuildConfig.GEMINI_API_KEY.isBlank()) null else LLM.gemini(BuildConfig.GEMINI_API_KEY),
+            useAgent = BuildConfig.MBA_SAMPLE_USE_AGENT.toBooleanStrictOrNull() ?: true,
             callback = MBAAgentCallback { event ->
                 MBALog.i(
                     TAG,
                     "SDKOnly callback: group=${event.group.id}, new=${event.isNewGroup}, " +
+                        "agentic=${event.agentic}, source=${event.analysisSource}, " +
                         "title='${event.report.title}', severity=${event.report.severity}",
                 )
             },

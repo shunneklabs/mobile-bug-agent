@@ -17,6 +17,7 @@ import dev.sunnat629.mba.core.MBALog
  * - mba_llm_provider
  * - mba_llm_api_key
  * - mba_llm_model
+ * - mba_use_agent
  * - mba_debug
  */
 internal object MBAPreferences {
@@ -32,6 +33,7 @@ internal object MBAPreferences {
     private const val KEY_LLM_PROVIDER = "mba_llm_provider"
     private const val KEY_LLM_API_KEY = "mba_llm_api_key"
     private const val KEY_LLM_MODEL = "mba_llm_model"
+    private const val KEY_USE_AGENT = "mba_use_agent"
     private const val KEY_DEBUG = "mba_debug"
 
     fun save(
@@ -44,6 +46,7 @@ internal object MBAPreferences {
         llmProvider: String?,
         llmApiKey: String?,
         llmModel: String?,
+        useAgent: Boolean,
         debug: Boolean,
     ) {
         prefs(context).edit()
@@ -55,6 +58,7 @@ internal object MBAPreferences {
             .putString(KEY_LLM_PROVIDER, llmProvider ?: "")
             .putString(KEY_LLM_API_KEY, llmApiKey ?: "")
             .putString(KEY_LLM_MODEL, llmModel ?: "")
+            .putBoolean(KEY_USE_AGENT, useAgent)
             .putBoolean(KEY_DEBUG, debug)
             .apply()
         MBALog.i(TAG, "Config saved to SharedPreferences")
@@ -83,6 +87,9 @@ internal object MBAPreferences {
 
     fun loadLlmModel(context: Context): String? =
         prefs(context).getString(KEY_LLM_MODEL, null)?.ifBlank { null }
+
+    fun loadUseAgent(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_USE_AGENT, true)
 
     fun loadDebug(context: Context): Boolean =
         prefs(context).getBoolean(KEY_DEBUG, false)

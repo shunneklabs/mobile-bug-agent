@@ -18,6 +18,7 @@ import kotlinx.coroutines.CancellationException
 public class CrashDeliveryPipeline(
     private val rawUploader: RawCrashUploader? = null,
     private val sdkOnlyOrchestrator: SdkOnlyCrashOrchestrator? = null,
+    private val localFallbackOrchestrator: LocalFallbackCrashOrchestrator? = null,
     private val fallbackTicketBackend: TicketBackend? = null,
     private val fallbackDedupCache: LocalDedupCache = LocalDedupCache(),
 ) {
@@ -43,8 +44,20 @@ public class CrashDeliveryPipeline(
 
         sdkOnlyOrchestrator?.let { orchestrator ->
             MBALog.d(TAG, "Running SDKOnly Koog agent for '${rawReport.exceptionType}'")
+            try {
+                val event = orchestrator.process(rawReport)
+                return CrashDeliveryResult.sdkOnly(event)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                MBALog.e(TAG, "SDKOnly Koog agent failed; falling back to raw local processing", error)
+            }
+        }
+
+        localFallbackOrchestrator?.let { orchestrator ->
+            MBALog.d(TAG, "Running non-agentic local fallback for '${rawReport.exceptionType}'")
             val event = orchestrator.process(rawReport)
-            return CrashDeliveryResult.sdkOnly(event)
+            return CrashDeliveryResult.localFallback(event)
         }
 
         val fallbackReport = CrashReportBuilder.build(rawReport)
@@ -121,6 +134,18 @@ public data class CrashDeliveryResult(
                 ),
             )
 
+        public fun localFallback(event: MBAAgentEvent): CrashDeliveryResult =
+            CrashDeliveryResult(
+                channel = CrashDeliveryChannel.RAW_FALLBACK,
+                success = true,
+                agentEvent = event,
+                ticketResult = TicketResult(
+                    ticketId = "raw-fallback",
+                    backendName = "RawFallback",
+                    success = true,
+                ),
+            )
+
         public fun duplicate(fingerprint: String): CrashDeliveryResult =
             CrashDeliveryResult(
                 channel = CrashDeliveryChannel.DUPLICATE,
@@ -154,6 +179,7 @@ public data class CrashDeliveryResult(
 public enum class CrashDeliveryChannel {
     BACKEND,
     SDK_ONLY,
+    RAW_FALLBACK,
     FALLBACK_TICKET,
     DUPLICATE,
     NONE,

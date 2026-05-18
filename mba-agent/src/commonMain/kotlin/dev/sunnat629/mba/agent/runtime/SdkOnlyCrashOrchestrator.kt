@@ -16,13 +16,33 @@ public class SdkOnlyCrashOrchestrator(
     private val skipGitIssue: Boolean = true,
 ) {
     public suspend fun process(raw: RawCrashReport): MBAAgentEvent {
-        val report = when (val result = analysisAgent.process(raw)) {
-            is CrashAnalysisResult.New -> result.report
-            is CrashAnalysisResult.Fallback -> result.report
-            is CrashAnalysisResult.Duplicate -> raw.toDuplicateFallbackReport(result.report.fingerprint)
+        val analysis = when (val result = analysisAgent.process(raw)) {
+            is CrashAnalysisResult.New -> AnalysisOutput(
+                report = result.report,
+                agentic = true,
+                source = "KOOG",
+            )
+            is CrashAnalysisResult.Fallback -> AnalysisOutput(
+                report = result.report,
+                agentic = false,
+                source = "RAW_FALLBACK",
+                error = result.error.message,
+            )
+            is CrashAnalysisResult.Duplicate -> AnalysisOutput(
+                report = raw.toDuplicateFallbackReport(result.report.fingerprint),
+                agentic = false,
+                source = "LOCAL_DUPLICATE",
+            )
         }
+        val report = analysis.report
         val aggregation = aggregationStore.upsert(report.raw, report)
-        var event = aggregation.toEvent(report.raw, report)
+        var event = aggregation.toEvent(
+            raw = report.raw,
+            report = report,
+            agentic = analysis.agentic,
+            analysisSource = analysis.source,
+            analysisError = analysis.error,
+        )
 
         callback?.onCrashAnalyzed(event)
 
@@ -55,7 +75,13 @@ public class SdkOnlyCrashOrchestrator(
         return event
     }
 
-    private fun LocalAggregationResult.toEvent(raw: RawCrashReport, report: ProcessedCrashReport): MBAAgentEvent =
+    private fun LocalAggregationResult.toEvent(
+        raw: RawCrashReport,
+        report: ProcessedCrashReport,
+        agentic: Boolean,
+        analysisSource: String,
+        analysisError: String?,
+    ): MBAAgentEvent =
         MBAAgentEvent(
             mode = "SDK_ONLY",
             group = group,
@@ -69,6 +95,9 @@ public class SdkOnlyCrashOrchestrator(
                 githubIssueUrl = group.githubIssueUrl,
             ),
             isNewGroup = isNewGroup,
+            agentic = agentic,
+            analysisSource = analysisSource,
+            analysisError = analysisError,
         )
 
     private fun RawCrashReport.toDuplicateFallbackReport(fingerprint: String): ProcessedCrashReport =
@@ -85,4 +114,11 @@ public class SdkOnlyCrashOrchestrator(
             possibleCause = "$exceptionType${message?.let { ": $it" } ?: ""}",
             sanitizedStackTrace = stackTrace,
         )
+
+    private data class AnalysisOutput(
+        val report: ProcessedCrashReport,
+        val agentic: Boolean,
+        val source: String,
+        val error: String? = null,
+    )
 }

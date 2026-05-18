@@ -7,6 +7,7 @@ import dev.sunnat629.mba.agent.AgentFactory
 import dev.sunnat629.mba.agent.CrashAnalysisAgent
 import dev.sunnat629.mba.agent.runtime.CrashDeliveryPipeline
 import dev.sunnat629.mba.agent.runtime.FileLocalCrashAggregationStore
+import dev.sunnat629.mba.agent.runtime.LocalFallbackCrashOrchestrator
 import dev.sunnat629.mba.agent.runtime.MBAAgentCallback
 import dev.sunnat629.mba.agent.runtime.SdkOnlyCrashOrchestrator
 import dev.sunnat629.mba.core.MBALog
@@ -54,6 +55,7 @@ internal class CrashUploadWorker(
         val serverApiKey = MBAPreferences.loadServerApiKey(context)
         val sendToBackend = MBAPreferences.loadSendToBackend(context)
         val llmConfig = loadLlmConfig(context)
+        val useAgent = MBAPreferences.loadUseAgent(context)
         val debug = MBAPreferences.loadDebug(context)
         val notionSink = MBAAndroid.notionSink
         val githubSink = MBAAndroid.githubSink
@@ -70,7 +72,7 @@ internal class CrashUploadWorker(
             return Result.failure()
         }
 
-        MBALog.d(TAG, "Config loaded: crashDir=$crashDir, backend=${backendEndpoint ?: "none"}, llm=${llmConfig?.provider ?: "none"}")
+        MBALog.d(TAG, "Config loaded: crashDir=$crashDir, backend=${backendEndpoint ?: "none"}, llm=${llmConfig?.provider ?: "none"}, useAgent=$useAgent")
 
         // 2. Read pending crash files
         val pendingCrashes = PendingCrashProcessor.readPending(crashDir)
@@ -92,7 +94,11 @@ internal class CrashUploadWorker(
                 )
             }
         val dedupCache = LocalDedupCache(maxSize = 500, ttl = 24.hours)
-        val sdkOnlyOrchestrator = llmConfig?.let { config ->
+        val aggregationStore = FileLocalCrashAggregationStore(
+            File(context.filesDir, "mba-agent/aggregation-store.json")
+        )
+        val callback = MBAAgentCallback { event -> MBAAndroid.publishAgentEvent(event) }
+        val sdkOnlyOrchestrator = llmConfig?.takeIf { useAgent }?.let { config ->
             val factory = AgentFactory(config)
             SdkOnlyCrashOrchestrator(
                 analysisAgent = CrashAnalysisAgent(
@@ -101,19 +107,26 @@ internal class CrashUploadWorker(
                     dedupCache = dedupCache,
                     useLocalDedup = false,
                 ),
-                aggregationStore = FileLocalCrashAggregationStore(
-                    File(context.filesDir, "mba-agent/aggregation-store.json")
-                ),
-                callback = MBAAgentCallback { event -> MBAAndroid.publishAgentEvent(event) },
+                aggregationStore = aggregationStore,
+                callback = callback,
                 notionSink = notionSink,
                 githubSink = githubSink,
                 skipNotion = notionSink == null,
                 skipGitIssue = githubSink == null,
             )
         }
+        val fallbackOrchestrator = LocalFallbackCrashOrchestrator(
+            aggregationStore = aggregationStore,
+            callback = callback,
+            notionSink = notionSink,
+            githubSink = githubSink,
+            skipNotion = notionSink == null,
+            skipGitIssue = githubSink == null,
+        )
         val deliveryPipeline = CrashDeliveryPipeline(
             rawUploader = serverUploader,
             sdkOnlyOrchestrator = sdkOnlyOrchestrator,
+            localFallbackOrchestrator = fallbackOrchestrator,
             fallbackTicketBackend = fallbackTicketBackend,
             fallbackDedupCache = dedupCache,
         )

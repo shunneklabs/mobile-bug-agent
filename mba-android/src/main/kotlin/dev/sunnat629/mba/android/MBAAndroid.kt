@@ -138,6 +138,7 @@ public object MBAAndroid {
         serverApiKey: String? = null,
         sendToBackend: Boolean = backendEndpoint != null,
         llm: LLMConfig? = null,
+        useAgent: Boolean = true,
         callback: MBAAgentCallback? = null,
         debug: Boolean = false,
     ) {
@@ -154,6 +155,7 @@ public object MBAAndroid {
             llmProvider = llm?.provider?.name,
             llmApiKey = llm?.apiKey,
             llmModel = llm?.model,
+            useAgent = useAgent,
             debug = debug,
         )
         agentCallback = callback

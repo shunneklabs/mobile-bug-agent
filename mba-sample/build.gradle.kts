@@ -38,6 +38,9 @@ android {
         val sampleMode = props.getProperty("MBA_SAMPLE_MODE")
             ?: System.getenv("MBA_SAMPLE_MODE")
             ?: "hosted"
+        val sampleUseAgent = props.getProperty("MBA_SAMPLE_USE_AGENT")
+            ?: System.getenv("MBA_SAMPLE_USE_AGENT")
+            ?: "true"
         val githubToken = props.getProperty("GITHUB_TOKEN")
             ?: System.getenv("GITHUB_TOKEN")
             ?: ""
@@ -59,6 +62,7 @@ android {
         buildConfigField("String", "MBA_SERVER_API_KEY", "\"${serverApiKey.escapedForBuildConfig()}\"")
         buildConfigField("String", "MBA_BACKEND_ENDPOINT", "\"${backendEndpoint.escapedForBuildConfig()}\"")
         buildConfigField("String", "MBA_SAMPLE_MODE", "\"${sampleMode.escapedForBuildConfig()}\"")
+        buildConfigField("String", "MBA_SAMPLE_USE_AGENT", "\"${sampleUseAgent.escapedForBuildConfig()}\"")
         buildConfigField("String", "GITHUB_TOKEN", "\"${githubToken.escapedForBuildConfig()}\"")
         buildConfigField("String", "GITHUB_OWNER", "\"${githubOwner.escapedForBuildConfig()}\"")
         buildConfigField("String", "GITHUB_REPO", "\"${githubRepo.escapedForBuildConfig()}\"")
