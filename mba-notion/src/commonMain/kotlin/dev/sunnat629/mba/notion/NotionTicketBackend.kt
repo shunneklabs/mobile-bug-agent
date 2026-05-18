@@ -18,28 +18,18 @@ import kotlinx.serialization.json.Json
 /**
  * Notion implementation of [TicketBackend].
  *
- * Dual-database strategy:
- * - **Bug Tickets DB** (`bugTicketDbId`): ALL issues go here.
- * - **Crash Reports DB** (`crashReportDbId`): Only crash-related issues (optional).
- * - The two are linked via the Crash Report ↔ Bug Ticket relation.
+ * Single-database strategy:
+ * - **Bug Tickets DB** (`bugTicketDbId`): grouped bugs and linked occurrences.
  *
  * @param apiKey Notion integration token.
  * @param bugTicketDbId Required. Database ID for bug tickets (all issues).
- * @param crashReportDbId Optional. Database ID for crash reports (crash-only).
  */
 public class NotionTicketBackend(
     private val apiKey: String,
     private val bugTicketDbId: String,
-    private val crashReportDbId: String? = null,
     private val httpClient: HttpClient = defaultHttpClient(),
     private val notionApiVersion: String = "2022-06-28",
 ) : CrashOccurrenceTicketBackend, AutoCloseable {
-
-    // Legacy constructor for backward compat
-    public constructor(
-        apiKey: String,
-        databaseId: String,
-    ) : this(apiKey = apiKey, bugTicketDbId = databaseId)
 
     private companion object {
         private fun defaultHttpClient(): HttpClient = HttpClient {
@@ -59,27 +49,7 @@ public class NotionTicketBackend(
 
     override suspend fun createTicket(report: ProcessedCrashReport): TicketResult {
         return try {
-            // 1. Always create Bug Ticket
-            val bugTicketResult = createBugTicket(report)
-            if (!bugTicketResult.success) return bugTicketResult
-
-            // 2. If crash-related AND crashReportDbId is configured, also create Crash Report
-            var crashReportPageId: String? = null
-            if (crashReportDbId != null && report.raw.isFatal) {
-                val crashResult = createCrashReport(report, bugTicketPageUrl = bugTicketResult.ticketId)
-                crashReportPageId = if (crashResult.success) crashResult.ticketId else null
-            } else if (crashReportDbId != null && report.sanitizedStackTrace.isNotBlank()) {
-                // Non-fatal but has a stack trace — also a crash report
-                val crashResult = createCrashReport(report, bugTicketPageUrl = bugTicketResult.ticketId)
-                crashReportPageId = if (crashResult.success) crashResult.ticketId else null
-            }
-
-            // 3. If crash report was created, link it back to the bug ticket
-            if (crashReportPageId != null) {
-                linkCrashReportToBugTicket(bugTicketResult.ticketId, crashReportPageId)
-            }
-
-            bugTicketResult
+            createBugTicket(report)
         } catch (e: Exception) {
             TicketResult.failure(name, e.message ?: "Unknown error")
         }
@@ -135,7 +105,13 @@ public class NotionTicketBackend(
         properties["Occurrences"] = NotionProperty.Number(1.0)
         properties["Unique Devices"] = NotionProperty.Number(1.0)
         properties["Bug Type"] = NotionProperty.Select(NotionSelectItem(name = "Bug Group"))
+        properties["Status"] = NotionProperty.Status(NotionSelectItem(name = "New"))
+        properties["External Sync State"] = NotionProperty.Select(NotionSelectItem(name = "Notion Created"))
+        properties["First Seen"] = NotionProperty.Date(NotionDate(report.raw.timestamp.toString()))
         properties["Last Seen"] = NotionProperty.Date(NotionDate(report.raw.timestamp.toString()))
+        properties["Device ID Hash"] = NotionProperty.RichText(
+            listOf(NotionRichText(text = NotionTextContent(report.deviceHash())))
+        )
         // Possible Cause (text)
         report.possibleCause?.let { cause ->
             properties["Possible Cause"] = NotionProperty.RichText(
@@ -152,13 +128,7 @@ public class NotionTicketBackend(
         // Page body content
         val children = buildCrashBody(report)
         if (report.sanitizedStackTrace.isNotBlank()) {
-            children.add(NotionBlock(
-                type = "code",
-                code = NotionCodeBlock(
-                    rich_text = listOf(NotionRichText(text = NotionTextContent(report.sanitizedStackTrace.take(2000)))),
-                    language = "kotlin"
-                )
-            ))
+            children.addStackTrace(report)
         }
 
         return postNotionPage(bugTicketDbId, properties, children)
@@ -173,6 +143,16 @@ public class NotionTicketBackend(
             properties["Name"] = NotionProperty.Title(
                 listOf(NotionRichText(text = NotionTextContent("${report.raw.exceptionType.substringAfterLast(".")} occurrence")))
             )
+            properties["Severity"] = NotionProperty.Select(
+                NotionSelectItem(name = report.severity.name)
+            )
+            properties["Fingerprint"] = NotionProperty.RichText(
+                listOf(NotionRichText(text = NotionTextContent(report.fingerprint)))
+            )
+            properties["Description"] = NotionProperty.RichText(
+                listOf(NotionRichText(text = NotionTextContent(report.description.take(2000))))
+            )
+            properties["AI Confidence"] = NotionProperty.Number(report.confidence.toDouble())
             properties["Bug Type"] = NotionProperty.Select(NotionSelectItem(name = "Crash Occurrence"))
             properties["Affected Screen"] = NotionProperty.RichText(
                 listOf(NotionRichText(text = NotionTextContent(report.raw.currentScreen ?: "unknown")))
@@ -191,21 +171,33 @@ public class NotionTicketBackend(
                 listOf(NotionRichText(text = NotionTextContent(report.raw.device.displayName)))
             )
             properties["Last Seen"] = NotionProperty.Date(NotionDate(report.raw.timestamp.toString()))
+            properties["Device ID Hash"] = NotionProperty.RichText(
+                listOf(NotionRichText(text = NotionTextContent(report.deviceHash())))
+            )
+            properties["Status"] = NotionProperty.Status(NotionSelectItem(name = "New"))
+            properties["External Sync State"] = NotionProperty.Select(NotionSelectItem(name = "Notion Created"))
             properties["Parent Bug"] = NotionProperty.Relation(listOf(NotionRelationItem(parentBugTicketId)))
+            report.possibleCause?.let { cause ->
+                properties["Possible Cause"] = NotionProperty.RichText(
+                    listOf(NotionRichText(text = NotionTextContent(cause.take(2000))))
+                )
+            }
+            report.stepsToReproduce?.let { steps ->
+                properties["Steps to Reproduce"] = NotionProperty.RichText(
+                    listOf(NotionRichText(text = NotionTextContent(steps.take(2000))))
+                )
+            }
 
-            val children = listOf(
+            val children = buildCrashBody(report)
+            if (report.sanitizedStackTrace.isNotBlank()) {
+                children.addStackTrace(report)
+            }
+            children.add(0,
                 NotionBlock(
                     type = "paragraph",
                     paragraph = NotionParagraphBlock(
                         listOf(NotionRichText(text = NotionTextContent(
-                            buildString {
-                                appendLine("Repeated occurrence of parent bug.")
-                                appendLine("Occurred At: ${report.raw.timestamp}")
-                                appendLine("Device Model: ${report.raw.device.displayName}")
-                                appendLine("OS Version: Android ${report.raw.device.osVersion} (API ${report.raw.device.sdkInt})")
-                                appendLine("App Version: ${report.raw.appVersion}")
-                                report.raw.currentScreen?.let { appendLine("Screen: $it") }
-                            }.take(2000)
+                            "Repeated occurrence of parent bug."
                         )))
                     )
                 )
@@ -214,91 +206,6 @@ public class NotionTicketBackend(
         } catch (e: Exception) {
             TicketResult.failure(name, e.message ?: "Unknown error")
         }
-    }
-
-    // ================================================================ //
-    //  Crash Reports DB (crash-only)
-    // ================================================================ //
-
-    private suspend fun createCrashReport(
-        report: ProcessedCrashReport,
-        bugTicketPageUrl: String,
-    ): TicketResult {
-        val dbId = crashReportDbId ?: return TicketResult.failure(name, "No crash report DB configured")
-
-        val properties = mutableMapOf<String, NotionProperty>()
-
-        // Title (title)
-        properties["Title"] = NotionProperty.Title(
-            listOf(NotionRichText(text = NotionTextContent(report.title)))
-        )
-        // Severity (select)
-        properties["Severity"] = NotionProperty.Select(
-            NotionSelectItem(name = report.severity.name)
-        )
-        // Fingerprint (text)
-        properties["Fingerprint"] = NotionProperty.RichText(
-            listOf(NotionRichText(text = NotionTextContent(report.fingerprint)))
-        )
-        // Stack Trace (text)
-        properties["Stack Trace"] = NotionProperty.RichText(
-            listOf(NotionRichText(text = NotionTextContent(report.sanitizedStackTrace.take(2000))))
-        )
-        // Exception Type (select)
-        val exceptionShort = report.raw.exceptionType.substringAfterLast(".").let { type ->
-            when {
-                type.contains("NullPointer") -> "NullPointerException"
-                type.contains("IllegalState") -> "IllegalStateException"
-                type.contains("OutOfMemory") -> "OutOfMemoryError"
-                type.contains("Security") -> "SecurityException"
-                else -> "Other"
-            }
-        }
-        properties["Exception Type"] = NotionProperty.Select(NotionSelectItem(name = exceptionShort))
-        // Affected Devices (text)
-        properties["Affected Devices"] = NotionProperty.RichText(
-            listOf(NotionRichText(text = NotionTextContent(report.raw.device.displayName)))
-        )
-        // Crash File (text)
-        report.crashFile?.let {
-            properties["Crash File"] = NotionProperty.RichText(
-                listOf(NotionRichText(text = NotionTextContent(it)))
-            )
-        }
-        // Crash Line (number)
-        report.crashLine?.let {
-            properties["Crash Line"] = NotionProperty.Number(it.toDouble())
-        }
-        // AI Confidence (number, percent)
-        properties["AI Confidence"] = NotionProperty.Number(report.confidence.toDouble())
-        // App Version (text)
-        properties["App Version"] = NotionProperty.RichText(
-            listOf(NotionRichText(text = NotionTextContent(report.raw.appVersion)))
-        )
-        properties["Occurred At"] = NotionProperty.Date(NotionDate(report.raw.timestamp.toString()))
-        properties["Device Model"] = NotionProperty.RichText(
-            listOf(NotionRichText(text = NotionTextContent(report.raw.device.displayName)))
-        )
-        // OS Versions (text)
-        properties["OS Versions"] = NotionProperty.RichText(
-            listOf(NotionRichText(text = NotionTextContent(
-                "Android ${report.raw.device.osVersion} (API ${report.raw.device.sdkInt})"
-            )))
-        )
-        // Occurrence Count (number)
-        properties["Occurrence Count"] = NotionProperty.Number(1.0)
-
-        // Page body
-        val children = buildCrashBody(report)
-        children.add(NotionBlock(
-            type = "code",
-            code = NotionCodeBlock(
-                rich_text = listOf(NotionRichText(text = NotionTextContent(report.sanitizedStackTrace.take(2000)))),
-                language = "kotlin"
-            )
-        ))
-
-        return postNotionPage(dbId, properties, children)
     }
 
     private fun buildCrashBody(report: ProcessedCrashReport): MutableList<NotionBlock> {
@@ -331,30 +238,6 @@ public class NotionTicketBackend(
                 )
             )
         )
-    }
-
-    // ================================================================ //
-    //  Link Crash Report ↔ Bug Ticket via relation
-    // ================================================================ //
-
-    private suspend fun linkCrashReportToBugTicket(bugTicketPageId: String, crashReportPageId: String) {
-        try {
-            // Update Bug Ticket: set "Crash Report" relation to the crash report page
-            httpClient.patch("https://api.notion.com/v1/pages/$bugTicketPageId") {
-                header("Authorization", "Bearer $apiKey")
-                header("Notion-Version", notionApiVersion)
-                contentType(ContentType.Application.Json)
-                setBody(mapOf(
-                    "properties" to mapOf(
-                        "Crash Report" to mapOf(
-                            "relation" to listOf(mapOf("id" to crashReportPageId))
-                        )
-                    )
-                ))
-            }
-        } catch (_: Exception) {
-            // Best effort — don't fail the whole ticket creation if linking fails
-        }
     }
 
     // ================================================================ //
@@ -465,6 +348,8 @@ public class NotionTicketBackend(
             is NotionProperty.Select -> "select"
             is NotionProperty.Number -> "number"
             is NotionProperty.Date -> "date"
+            is NotionProperty.Url -> "url"
+            is NotionProperty.Status -> "status"
             is NotionProperty.Relation -> "relation"
         }
 
@@ -517,21 +402,24 @@ public class NotionTicketBackend(
             properties["Occurred At"] = NotionProperty.Date(NotionDate(time.toString()))
         }
         update.githubIssueUrl?.let { url ->
-            properties["GitHub Issue"] = NotionProperty.RichText(
-                listOf(NotionRichText(text = NotionTextContent(url)))
-            )
+            properties["GitHub Issue URL"] = NotionProperty.Url(url)
+            properties["External Sync State"] = NotionProperty.Select(NotionSelectItem(name = "Both Created"))
         }
         update.notionUrl?.let { url ->
-            properties["Notion URL"] = NotionProperty.RichText(
-                listOf(NotionRichText(text = NotionTextContent(url)))
-            )
+            properties["Notion Ticket URL"] = NotionProperty.Url(url)
+            if (update.githubIssueUrl == null) {
+                properties["External Sync State"] = NotionProperty.Select(NotionSelectItem(name = "Notion Created"))
+            }
         }
-        update.report?.takeIf { it.confidence > 0.0f }?.let { report ->
+        update.report?.let { report ->
             properties["Name"] = NotionProperty.Title(
                 listOf(NotionRichText(text = NotionTextContent(report.title)))
             )
             properties["Severity"] = NotionProperty.Select(
                 NotionSelectItem(name = report.severity.name)
+            )
+            properties["Fingerprint"] = NotionProperty.RichText(
+                listOf(NotionRichText(text = NotionTextContent(report.fingerprint)))
             )
             properties["Description"] = NotionProperty.RichText(
                 listOf(NotionRichText(text = NotionTextContent(report.description.take(2000))))
@@ -561,8 +449,31 @@ public class NotionTicketBackend(
             properties["Device Model"] = NotionProperty.RichText(
                 listOf(NotionRichText(text = NotionTextContent(report.raw.device.displayName)))
             )
+            properties["Device ID Hash"] = NotionProperty.RichText(
+                listOf(NotionRichText(text = NotionTextContent(report.deviceHash())))
+            )
         }
         return properties
+    }
+
+    private fun MutableList<NotionBlock>.addStackTrace(report: ProcessedCrashReport) {
+        add(NotionBlock(
+            type = "code",
+            code = NotionCodeBlock(
+                rich_text = listOf(NotionRichText(text = NotionTextContent(report.sanitizedStackTrace.take(2000)))),
+                language = "kotlin"
+            )
+        ))
+    }
+
+    private fun ProcessedCrashReport.deviceHash(): String {
+        val value = "${raw.device.manufacturer}|${raw.device.model}|${raw.device.osVersion}|${raw.device.sdkInt}"
+        var hash = 0xcbf29ce484222325uL
+        for (char in value) {
+            hash = hash xor char.code.toULong()
+            hash *= 0x100000001b3uL
+        }
+        return hash.toString(16).padStart(16, '0')
     }
 
     private suspend fun patchPage(ticketId: String, properties: Map<String, NotionProperty>): HttpResponse =

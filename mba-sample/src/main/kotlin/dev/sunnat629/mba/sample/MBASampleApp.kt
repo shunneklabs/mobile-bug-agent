@@ -18,7 +18,6 @@ class MBASampleApp : Application() {
         MBALog.d(TAG, "========================================")
         MBALog.d(TAG, "NOTION_API_KEY:      ${if (BuildConfig.NOTION_API_KEY.isNotBlank()) "loaded" else "!! EMPTY !!" }")
         MBALog.d(TAG, "NOTION_TICKET_DB_ID: ${if (BuildConfig.NOTION_TICKET_DB_ID.isNotBlank()) "loaded" else "!! EMPTY !!" }")
-        MBALog.d(TAG, "NOTION_CRASH_DB_ID:  ${if (BuildConfig.NOTION_CRASH_DB_ID.isNotBlank()) "loaded" else "!! EMPTY !!" }")
         MBALog.d(TAG, "GEMINI_API_KEY:      ${if (BuildConfig.GEMINI_API_KEY.isNotBlank()) "loaded" else "!! EMPTY !!" }")
         MBALog.d(TAG, "MBA_BACKEND_ENDPOINT: ${BuildConfig.MBA_BACKEND_ENDPOINT}")
         MBALog.d(TAG, "MBA_SERVER_API_KEY: ${if (BuildConfig.MBA_SERVER_API_KEY.isNotBlank()) "loaded" else "!! EMPTY !!" }")

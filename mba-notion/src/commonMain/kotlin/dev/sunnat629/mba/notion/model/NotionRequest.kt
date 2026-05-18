@@ -38,6 +38,14 @@ public sealed class NotionProperty {
     public data class Date(val date: NotionDate) : NotionProperty()
 
     @Serializable
+    @SerialName("url")
+    public data class Url(val url: String) : NotionProperty()
+
+    @Serializable
+    @SerialName("status")
+    public data class Status(val status: NotionSelectItem) : NotionProperty()
+
+    @Serializable
     @SerialName("relation")
     public data class Relation(val relation: List<NotionRelationItem>) : NotionProperty()
 }

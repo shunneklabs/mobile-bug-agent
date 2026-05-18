@@ -85,47 +85,26 @@ Recommended rich schema:
 | `Occurrences` | Number | Number of grouped occurrences |
 | `Unique Devices` | Number | Unique device count |
 | `Bug Type` | Select | `Bug Group`, `Crash Occurrence` |
+| `Status` | Status | `New`, `Triaged`, `In Progress`, etc. |
+| `External Sync State` | Select | `Notion Created`, `GitHub Created`, `Both Created` |
+| `First Seen` | Date | First occurrence time |
 | `Last Seen` | Date | Latest occurrence time |
+| `Device ID Hash` | Text | Stable per-device grouping hash |
 | `Possible Cause` | Text | Koog/fallback cause hypothesis |
 | `Steps to Reproduce` | Text | Koog/fallback reproduction steps |
-| `GitHub Issue` | Text | Optional GitHub issue URL |
-| `Notion URL` | Text | Optional self-reference |
+| `GitHub Issue URL` | URL | Optional GitHub issue URL |
+| `Notion Ticket URL` | URL | Optional self-reference |
 
 MBA checks the Notion database schema. Unknown or missing properties are
 omitted automatically. That means a minimal database works, but the rich schema
 gives better filtering and dashboard views.
 
-## 4. Optional Crash Occurrence Database
-
-For booth/demo style workflows, you can also create a second database for raw
-occurrence rows. This is optional. If you do not pass a crash occurrence
-database id, MBA stores duplicate details in the parent bug update and page
-body only.
-
-Recommended occurrence schema:
-
-| Property | Type | Purpose |
-|---|---|---|
-| `Name` | Title | Occurrence title |
-| `Bug Type` | Select | `Crash Occurrence` |
-| `Parent Bug` | Relation | Relation to the bug database |
-| `Affected Screen` | Text | Current screen |
-| `Device Matrix` | Text | Device details |
-| `App Version` | Text | App version |
-| `Occurred At` | Date | Occurrence timestamp |
-| `OS Version` | Text | Android version/API |
-| `Device Model` | Text | Manufacturer/model |
-| `Last Seen` | Date | Occurrence timestamp |
-
-For production apps, prefer keeping high-volume raw occurrences in app/server
-storage and writing only grouped bug pages to Notion.
-
-## 5. Share The Database With The Integration
+## 4. Share The Database With The Integration
 
 The integration token can only write to pages/databases that have been shared
 with it.
 
-For each Notion database you use:
+For the Notion database you use:
 
 1. Open the database in Notion.
 2. Share or connect the database/page with your Notion integration.
@@ -134,7 +113,7 @@ For each Notion database you use:
 If the integration is not shared with the database, Notion API calls fail even
 when the token is valid.
 
-## 6. Get The Database ID
+## 5. Get The Database ID
 
 Open the Notion database in a browser and copy the database URL. Extract the
 database id from the URL and pass that id to `NotionTicketBackend`.
@@ -143,12 +122,11 @@ The sample app uses:
 
 ```properties
 NOTION_TICKET_DB_ID_OR_URL=your_bug_database_id_or_url
-NOTION_CRASH_DB_ID_OR_URL=optional_occurrence_database_id_or_url
 ```
 
 Despite the sample property name, pass the database id for the current SDK.
 
-## 7. Wire The SDK
+## 6. Wire The SDK
 
 Create the backend in your app layer:
 
@@ -156,7 +134,6 @@ Create the backend in your app layer:
 val notionBackend = NotionTicketBackend(
     apiKey = BuildConfig.NOTION_API_KEY,
     bugTicketDbId = BuildConfig.NOTION_TICKET_DB_ID,
-    crashReportDbId = BuildConfig.NOTION_CRASH_DB_ID.ifBlank { null },
 )
 ```
 
@@ -191,7 +168,6 @@ class ExampleApp : Application() {
             notionBackend = NotionTicketBackend(
                 apiKey = BuildConfig.NOTION_API_KEY,
                 bugTicketDbId = BuildConfig.NOTION_TICKET_DB_ID,
-                crashReportDbId = BuildConfig.NOTION_CRASH_DB_ID.ifBlank { null },
             ),
         )
 
@@ -206,7 +182,7 @@ class ExampleApp : Application() {
 }
 ```
 
-## 8. Duplicate Behavior
+## 7. Duplicate Behavior
 
 MBA groups crashes by fingerprint.
 

@@ -28,7 +28,6 @@ object SampleIntegrationRuntime {
             NotionTicketBackend(
                 apiKey = BuildConfig.NOTION_API_KEY,
                 bugTicketDbId = BuildConfig.NOTION_TICKET_DB_ID,
-                crashReportDbId = BuildConfig.NOTION_CRASH_DB_ID.ifBlank { null },
             )
         } else {
             null

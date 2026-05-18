@@ -17,7 +17,7 @@ application {
 tasks.named<JavaExec>("run") {
     environment("GEMINI_API_KEY", localProps.getProperty("GEMINI_API_KEY", ""))
     environment("NOTION_API_KEY", localProps.getProperty("NOTION_TOKEN", ""))
-    environment("NOTION_DATABASE_ID", localProps.getProperty("NOTION_CRASH_DB_ID_OR_URL", ""))
+    environment("NOTION_DATABASE_ID", localProps.getProperty("NOTION_TICKET_DB_ID_OR_URL", ""))
     environment("MBA_SERVER_API_KEY", localProps.getProperty("MBA_SERVER_API_KEY", ""))
     // GitHub auto-fix path (optional — only required when a client sends autoFix=true)
     environment("GITHUB_TOKEN", localProps.getProperty("GITHUB_TOKEN", ""))

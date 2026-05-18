@@ -1,6 +1,7 @@
 package dev.sunnat629.mba.notion
 
 import dev.sunnat629.mba.core.model.*
+import dev.sunnat629.mba.core.ticket.TicketUpdate
 import io.ktor.client.*
 import io.ktor.client.engine.mock.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -46,6 +47,7 @@ class NotionTicketBackendTest {
         title = "Checkout crash on payment",
         description = "NPE in Foo.bar",
         possibleCause = "Null response from API",
+        stepsToReproduce = "1. Open checkout\n2. Tap pay",
         sanitizedStackTrace = "at com.example.Foo.bar(Foo.kt:42)",
     )
 
@@ -205,5 +207,75 @@ class NotionTicketBackendTest {
 
         assertTrue(capturedBody.contains("Name"), "Should use default title field name")
         assertTrue(capturedBody.contains("Severity"), "Should use default severity field name")
+        assertTrue(capturedBody.contains("Fingerprint"), "Should include fingerprint")
+        assertTrue(capturedBody.contains("AI Confidence"), "Should include AI confidence")
+        assertTrue(capturedBody.contains("Possible Cause"), "Should include cause")
+        assertTrue(capturedBody.contains("Steps to Reproduce"), "Should include reproduction steps")
+        assertTrue(capturedBody.contains("First Seen"), "Should include first seen")
+        assertTrue(capturedBody.contains("Device ID Hash"), "Should include stable device hash")
+    }
+
+    @Test
+    fun crashOccurrenceIncludesAnalysisFields() = runBlocking {
+        var capturedBody = ""
+
+        val mockClient = createMockClient { request ->
+            capturedBody = String(request.body.toByteArray())
+            respond(
+                content = """{
+                    "id": "occurrence-1",
+                    "url": "https://notion.so/occurrence-1",
+                    "object": "page"
+                }""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+
+        val backend = NotionTicketBackend(
+            apiKey = "secret_test",
+            bugTicketDbId = "db-456",
+            httpClient = mockClient,
+        )
+
+        val result = backend.createCrashOccurrence(testReport, "parent-1")
+        assertTrue(result.success)
+
+        assertTrue(capturedBody.contains("Fingerprint"), "Occurrence should include fingerprint")
+        assertTrue(capturedBody.contains("AI Confidence"), "Occurrence should include AI confidence")
+        assertTrue(capturedBody.contains("Severity"), "Occurrence should include severity")
+        assertTrue(capturedBody.contains("Description"), "Occurrence should include description")
+        assertTrue(capturedBody.contains("Possible Cause"), "Occurrence should include cause")
+        assertTrue(capturedBody.contains("Steps to Reproduce"), "Occurrence should include reproduction steps")
+        assertTrue(capturedBody.contains("Parent Bug"), "Occurrence should link parent bug")
+    }
+
+    @Test
+    fun updateTicketIncludesReportFieldsEvenWhenConfidenceIsZero() = runBlocking {
+        var capturedBody = ""
+
+        val mockClient = createMockClient { request ->
+            capturedBody = String(request.body.toByteArray())
+            respond(
+                content = """{"object": "page"}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+
+        val backend = NotionTicketBackend(
+            apiKey = "secret_test",
+            bugTicketDbId = "db-456",
+            httpClient = mockClient,
+        )
+
+        val result = backend.updateTicket(
+            ticketId = "page-123",
+            update = TicketUpdate(report = testReport.copy(confidence = 0.0f)),
+        )
+
+        assertTrue(result.success)
+        assertTrue(capturedBody.contains("Fingerprint"), "Update should keep fingerprint")
+        assertTrue(capturedBody.contains("AI Confidence"), "Update should keep zero confidence")
     }
 }

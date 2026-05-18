@@ -33,7 +33,6 @@ android {
         vectorDrawables { useSupportLibrary = true }
 
         val notionKey = projectPropOrEnv("NOTION_TOKEN") ?: localProps.getProperty("notion.api.key") ?: ""
-        val crashDbId = projectPropOrEnv("NOTION_CRASH_DB_ID_OR_URL") ?: ""
         val ticketDbId = projectPropOrEnv("NOTION_TICKET_DB_ID_OR_URL") ?: ""
         val geminiKey = projectPropOrEnv("GEMINI_API_KEY") ?: ""
         val serverApiKey = projectPropOrEnv("MBA_SERVER_API_KEY")
@@ -54,7 +53,6 @@ android {
             ?: ""
 
         buildConfigField("String", "NOTION_API_KEY", "\"${notionKey.escapedForBuildConfig()}\"")
-        buildConfigField("String", "NOTION_CRASH_DB_ID", "\"${crashDbId.escapedForBuildConfig()}\"")
         buildConfigField("String", "NOTION_TICKET_DB_ID", "\"${ticketDbId.escapedForBuildConfig()}\"")
         buildConfigField("String", "GEMINI_API_KEY", "\"${geminiKey.escapedForBuildConfig()}\"")
         buildConfigField("String", "MBA_SERVER_API_KEY", "\"${serverApiKey.escapedForBuildConfig()}\"")

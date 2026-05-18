@@ -66,25 +66,20 @@ This document describes the Mobile Bug Agent SDK, server, and demo architecture.
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │ NotionTicketBackend                                   │   │
 │  │                                                       │   │
-│  │ Dual-DB strategy:                                     │   │
-│  │ ┌─────────────────┐    ┌──────────────────────┐      │   │
-│  │ │ 🐛 Bug Tickets  │◄──►│ 🔴 Crash Reports     │      │   │
-│  │ │ (ALL issues)    │    │ (crash-only)         │      │   │
-│  │ │                 │    │                      │      │   │
-│  │ │ Name (title)    │    │ Title (title)        │      │   │
-│  │ │ Severity        │    │ Severity             │      │   │
-│  │ │ Description     │    │ Stack Trace          │      │   │
-│  │ │ Fingerprint     │    │ Fingerprint          │      │   │
-│  │ │ Device Matrix   │    │ Exception Type       │      │   │
-│  │ │ Affected Screen │    │ Affected Devices     │      │   │
-│  │ │ Possible Cause  │    │ Crash File / Line    │      │   │
-│  │ │ Steps to Repro  │    │ AI Confidence        │      │   │
-│  │ │ AI Confidence   │    │ App Version          │      │   │
-│  │ │ App Version     │    │ OS Versions          │      │   │
-│  │ │ Occurrences     │    │ Occurrence Count     │      │   │
-│  │ │ Status          │    │ Status               │      │   │
-│  │ │ Crash Report ──►│────│◄── Bug Ticket        │      │   │
-│  │ └─────────────────┘    └──────────────────────┘      │   │
+│  │ Single-DB strategy:                                   │   │
+│  │ ┌──────────────────────────────────────────────┐      │   │
+│  │ │ 🐛 Bug Tickets                               │      │   │
+│  │ │ (groups + linked occurrences)                │      │   │
+│  │ │                                              │      │   │
+│  │ │ Name (title)                                 │      │   │
+│  │ │ Severity / Status / Bug Type                 │      │   │
+│  │ │ Description / Possible Cause / Steps         │      │   │
+│  │ │ Fingerprint / Device ID Hash                 │      │   │
+│  │ │ Device Matrix / Affected Screen              │      │   │
+│  │ │ AI Confidence / App Version / OS Version     │      │   │
+│  │ │ Occurrences / Unique Devices / Last Seen     │      │   │
+│  │ │ Parent Bug relation for duplicate rows       │      │   │
+│  │ └──────────────────────────────────────────────┘      │   │
 │  └──────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 
@@ -178,9 +173,9 @@ This document describes the Mobile Bug Agent SDK, server, and demo architecture.
    │
 7. ROUTING + WORK CREATION
    │  NotionTicketBackend.createTicket(report)
-   │  → Creates page in Bug Tickets DB (always)
-   │  → Creates page in Crash Reports DB (if crash)
-   │  → Links them via relation property
+   │  → Creates parent page in Bug Tickets DB
+   │  → Updates parent page for duplicates
+   │  → Creates linked occurrence rows in same DB
    │
    │  Optional GitHub path:
    │  → Create issue
