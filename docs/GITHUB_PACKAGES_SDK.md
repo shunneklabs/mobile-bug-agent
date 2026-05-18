@@ -68,19 +68,22 @@ gpr.key=github_pat_with_package_write
 Then run:
 
 ```bash
-scripts/publish-sdk.sh github 0.1.0-kotlinconf-SNAPSHOT
+./gradlew publish -PMBA_VERSION=0.1.0-kotlinconf-SNAPSHOT
 ```
 
 For local validation without pushing to GitHub Packages:
 
 ```bash
-scripts/publish-sdk.sh local 0.1.0-local
+./gradlew publishToMavenLocal -PMBA_VERSION=0.1.0-local
 ```
 
 Then compile the sample against the locally published artifacts:
 
 ```bash
-scripts/publish-sdk.sh check-local 0.1.0-local
+./gradlew :mba-sample:compileDebugKotlin \
+  -PMBA_USE_MAVEN_LOCAL=true \
+  -PMBA_SAMPLE_USE_PUBLISHED_SDK=true \
+  -PMBA_SAMPLE_SDK_VERSION=0.1.0-local
 ```
 
 ## Consuming From An External Android App
