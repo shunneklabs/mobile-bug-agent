@@ -516,6 +516,8 @@ private fun sampleScenarios(): List<CrashScenario> = listOf(
                 metadata = mapOf(
                     "sample.scenario" to "session-state",
                     "sample.user_tier" to "demo",
+                    "sample.intentional" to "true",
+                    "sample.demo_note" to "intentional non-fatal scenario; used to demo fix pipeline",
                 ),
             )
         },
