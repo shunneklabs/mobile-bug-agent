@@ -16,7 +16,7 @@ package dev.sunnat629.mba.core.config
 public object LLM {
     public fun gemini(
         apiKey: String,
-        model: String = "gemini-2.0-flash",
+        model: String = "gemini-2.5-flash",
         endpoint: String? = null,
     ): LLMConfig = LLMConfig(Provider.GEMINI, apiKey, model, endpoint)
 

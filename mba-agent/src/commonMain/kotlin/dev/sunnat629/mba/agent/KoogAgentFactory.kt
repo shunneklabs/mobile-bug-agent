@@ -3,12 +3,14 @@ package dev.sunnat629.mba.agent
 import ai.koog.prompt.dsl.prompt
 import ai.koog.prompt.executor.clients.anthropic.AnthropicClientSettings
 import ai.koog.prompt.executor.clients.anthropic.AnthropicLLMClient
+import ai.koog.prompt.executor.clients.modelsById
 import ai.koog.prompt.executor.clients.dashscope.DashscopeClientSettings
 import ai.koog.prompt.executor.clients.dashscope.DashscopeLLMClient
 import ai.koog.prompt.executor.clients.deepseek.DeepSeekClientSettings
 import ai.koog.prompt.executor.clients.deepseek.DeepSeekLLMClient
 import ai.koog.prompt.executor.clients.google.GoogleLLMClient
 import ai.koog.prompt.executor.clients.google.GoogleClientSettings
+import ai.koog.prompt.executor.clients.google.GoogleModels
 import ai.koog.prompt.executor.clients.mistralai.MistralAIClientSettings
 import ai.koog.prompt.executor.clients.mistralai.MistralAILLMClient
 import ai.koog.prompt.executor.clients.openai.OpenAIClientSettings
@@ -18,6 +20,7 @@ import ai.koog.prompt.executor.clients.openrouter.OpenRouterLLMClient
 import ai.koog.prompt.executor.llms.MultiLLMPromptExecutor
 import ai.koog.prompt.executor.model.PromptExecutor
 import ai.koog.prompt.executor.ollama.client.OllamaClient
+import ai.koog.prompt.llm.LLMCapability
 import ai.koog.prompt.llm.LLMProvider
 import ai.koog.prompt.llm.LLModel
 import dev.sunnat629.mba.agent.model.CrashSummary
@@ -56,6 +59,38 @@ internal fun extractJsonObjectPayload(response: String): String {
     }
 
     return trimmed.substring(firstBrace)
+}
+
+internal fun koogModelForConfig(llmConfig: LLMConfig): LLModel {
+    val provider = llmConfig.koogProvider()
+    return when (llmConfig.provider) {
+        LLM.Provider.GEMINI -> GoogleModels.modelsById()[llmConfig.model]
+            ?: fallbackChatModel(provider, llmConfig.model)
+        else -> fallbackChatModel(provider, llmConfig.model)
+    }
+}
+
+private fun fallbackChatModel(provider: LLMProvider, model: String): LLModel =
+    LLModel(
+        provider = provider,
+        id = model,
+        capabilities = listOf(
+            LLMCapability.Completion,
+            LLMCapability.Temperature,
+            LLMCapability.MultipleChoices,
+        ),
+    )
+
+private fun LLMConfig.koogProvider(): LLMProvider = when (provider) {
+    LLM.Provider.GEMINI -> LLMProvider.Google
+    LLM.Provider.OPENAI -> LLMProvider.OpenAI
+    LLM.Provider.ANTHROPIC -> LLMProvider.Anthropic
+    LLM.Provider.OLLAMA -> LLMProvider.Ollama
+    LLM.Provider.OPENROUTER -> LLMProvider.OpenRouter
+    LLM.Provider.MISTRAL -> LLMProvider.MistralAI
+    LLM.Provider.DEEPSEEK -> LLMProvider.DeepSeek
+    LLM.Provider.DASHSCOPE -> LLMProvider.Alibaba
+    LLM.Provider.CUSTOM -> LLMProvider.OpenAI
 }
 
 /**
@@ -133,7 +168,7 @@ internal class KoogAgentFactory(
     }
 
     private val koogModel: LLModel by lazy {
-        LLModel(llmConfig.koogProvider(), llmConfig.model)
+        koogModelForConfig(llmConfig)
     }
 
     private val executor: CrashAnalysisExecutor by lazy {
@@ -147,17 +182,6 @@ internal class KoogAgentFactory(
         // Koog PromptExecutor owns its clients; no explicit close needed yet.
     }
 
-    private fun LLMConfig.koogProvider(): LLMProvider = when (provider) {
-        LLM.Provider.GEMINI -> LLMProvider.Google
-        LLM.Provider.OPENAI -> LLMProvider.OpenAI
-        LLM.Provider.ANTHROPIC -> LLMProvider.Anthropic
-        LLM.Provider.OLLAMA -> LLMProvider.Ollama
-        LLM.Provider.OPENROUTER -> LLMProvider.OpenRouter
-        LLM.Provider.MISTRAL -> LLMProvider.MistralAI
-        LLM.Provider.DEEPSEEK -> LLMProvider.DeepSeek
-        LLM.Provider.DASHSCOPE -> LLMProvider.Alibaba
-        LLM.Provider.CUSTOM -> LLMProvider.OpenAI
-    }
 }
 
 /**

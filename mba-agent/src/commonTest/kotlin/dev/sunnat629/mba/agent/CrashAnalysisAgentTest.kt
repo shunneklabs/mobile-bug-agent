@@ -1,5 +1,6 @@
 package dev.sunnat629.mba.agent
 
+import ai.koog.prompt.llm.LLMCapability
 import dev.sunnat629.mba.agent.model.CrashSummary
 import dev.sunnat629.mba.agent.model.CombinedCrashAnalysis
 import dev.sunnat629.mba.agent.model.ParsedStackTrace
@@ -188,6 +189,16 @@ class CrashAnalysisAgentTest {
 
         val created = factory.create()
         assertEquals(executor, created)
+    }
+
+    @Test
+    fun geminiKoogModelUsesKnownCapabilities() {
+        val model = koogModelForConfig(
+            dev.sunnat629.mba.core.config.LLM.gemini("test-key")
+        )
+
+        assertEquals("gemini-2.5-flash", model.id)
+        assertTrue(model.supports(LLMCapability.Completion))
     }
 
     @Test
