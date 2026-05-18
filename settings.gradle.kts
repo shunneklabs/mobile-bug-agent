@@ -38,12 +38,22 @@ dependencyResolutionManagement {
             credentials {
                 username = providers.gradleProperty("gpr.user")
                     .orElse(providers.environmentVariable("GITHUB_ACTOR"))
-                    .orElse(localProperties.getProperty("GITHUB_PACKAGES_USER") ?: "")
+                    .orElse(
+                        localProperties.getProperty("GITHUB_PACKAGES_USER")
+                            ?: localProperties.getProperty("GITHUB_USER")
+                            ?: localProperties.getProperty("GITHUB_USERNAME")
+                            ?: ""
+                    )
                     .get()
                 password = providers.gradleProperty("gpr.key")
                     .orElse(providers.environmentVariable("GITHUB_TOKEN"))
                     .orElse(providers.environmentVariable("GH_TOKEN"))
-                    .orElse(localProperties.getProperty("GITHUB_PACKAGES_TOKEN") ?: "")
+                    .orElse(
+                        localProperties.getProperty("GITHUB_PACKAGES_TOKEN")
+                            ?: localProperties.getProperty("GITHUB_TOKEN")
+                            ?: localProperties.getProperty("GH_TOKEN")
+                            ?: ""
+                    )
                     .get()
             }
         }

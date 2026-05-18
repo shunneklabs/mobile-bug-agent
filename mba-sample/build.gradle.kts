@@ -91,23 +91,9 @@ android {
 }
 
 dependencies {
-    val usePublishedMbaSdk = projectPropOrEnv("MBA_SAMPLE_USE_PUBLISHED_SDK")
-        ?.toBooleanStrictOrNull()
-        ?: false
-    val mbaSdkVersion = projectPropOrEnv("MBA_SAMPLE_SDK_VERSION")
-        ?: providers.gradleProperty("MBA_VERSION")
-            .orElse("0.1.0-kotlinconf-SNAPSHOT")
-            .get()
-
-    if (usePublishedMbaSdk) {
-        implementation("dev.sunnat629.mba:mba-android:$mbaSdkVersion")
-        implementation("dev.sunnat629.mba:mba-notion:$mbaSdkVersion")
-        implementation("dev.sunnat629.mba:mba-github:$mbaSdkVersion")
-    } else {
-        implementation(project(":mba-android"))
-        implementation(project(":mba-notion"))
-        implementation(project(":mba-github"))
-    }
+    implementation(libs.mba.android)
+    implementation(libs.mba.notion)
+    implementation(libs.mba.github)
 
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.core)

@@ -32,7 +32,7 @@ local.properties
 /.agent/
 /.agents/
 /.junie/
-/issues
+/issues/
 /assets/
 /skills-lock.json
 

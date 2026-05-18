@@ -8,6 +8,7 @@ kotlinx-io = "0.9.0"
 kotlinx-atomicfu = "0.32.1"
 kotlincrypto-sha2 = "0.8.0"
 koog = "0.8.0"
+mbaAndroid = "0.1.0-kotlinconf.1"
 uuid = "0.8.4"
 kermit = "2.1.0"
 logback = "1.5.32"
@@ -52,6 +53,9 @@ koog-agents = { module = "ai.koog:koog-agents", version.ref = "koog" }
 
 # Community
 kotlincrypto-sha2 = { module = "org.kotlincrypto.hash:sha2", version.ref = "kotlincrypto-sha2" }
+mba-android = { module = "dev.sunnat629.mba:mba-android", version.ref = "mbaAndroid" }
+mba-github = { module = "dev.sunnat629.mba:mba-github", version.ref = "mbaAndroid" }
+mba-notion = { module = "dev.sunnat629.mba:mba-notion", version.ref = "mbaAndroid" }
 uuid = { module = "com.benasher44:uuid", version.ref = "uuid" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 
