@@ -21,6 +21,7 @@ import ai.koog.prompt.executor.ollama.client.OllamaClient
 import ai.koog.prompt.llm.LLMProvider
 import ai.koog.prompt.llm.LLModel
 import dev.sunnat629.mba.agent.model.CrashSummary
+import dev.sunnat629.mba.agent.model.CombinedCrashAnalysis
 import dev.sunnat629.mba.agent.model.ParsedStackTrace
 import dev.sunnat629.mba.agent.model.SeverityResult
 import dev.sunnat629.mba.agent.prompts.SystemPrompt
@@ -169,7 +170,55 @@ internal class KoogCrashAnalysisExecutor(
     private val json: Json,
 ) : CrashAnalysisExecutor {
 
+    private var lastTrace: String? = null
+    private var lastAnalysis: CombinedCrashAnalysis? = null
+
+    override suspend fun analyzeCrash(
+        sanitizedTrace: String,
+        device: DeviceContext,
+        screen: String?,
+        breadcrumbs: List<String>,
+        crashContext: String,
+    ): CombinedCrashAnalysis {
+        if (sanitizedTrace == lastTrace && lastAnalysis != null) {
+            return lastAnalysis!!
+        }
+
+        val input = buildString {
+            appendLine(COMBINED_ANALYSIS_PROMPT)
+            appendLine()
+            appendLine("=== CRASH CONTEXT ===")
+            appendLine(crashContext)
+            screen?.let { appendLine("- Current Screen: $it") }
+            if (breadcrumbs.isNotEmpty()) {
+                appendLine("- Breadcrumbs:")
+                breadcrumbs.forEachIndexed { index, breadcrumb ->
+                    appendLine("  ${index + 1}. $breadcrumb")
+                }
+            }
+            appendLine("- Device: ${device.displayName}")
+            appendLine("- OS: Android ${device.osVersion} (API ${device.sdkInt})")
+            appendLine()
+            appendLine("=== STACK TRACE ===")
+            appendLine(sanitizedTrace)
+        }
+
+        val prompt = prompt("analyze_crash_full") {
+            system(SystemPrompt.CRASH_ANALYST)
+            user(input)
+        }
+        val response = promptExecutor.execute(prompt, model)
+            .joinToString("") { it.content }
+        val analysis = json.decodeFromString<CombinedCrashAnalysis>(extractJsonObjectPayload(response))
+        lastTrace = sanitizedTrace
+        lastAnalysis = analysis
+        return analysis
+    }
+
     override suspend fun parseStackTrace(sanitizedTrace: String): ParsedStackTrace {
+        lastAnalysis?.takeIf { sanitizedTrace == lastTrace }?.let {
+            return it.toParsedStackTrace()
+        }
         val prompt = prompt("parse_stack_trace") {
             system(SystemPrompt.CRASH_ANALYST)
             user("${ToolPrompts.STACK_TRACE_PARSER}\n\nStack trace:\n$sanitizedTrace")
@@ -183,6 +232,9 @@ internal class KoogCrashAnalysisExecutor(
         parsed: ParsedStackTrace,
         device: DeviceContext,
     ): SeverityResult {
+        lastAnalysis?.let {
+            return it.toSeverityResult()
+        }
         val input = buildString {
             appendLine("Parsed trace: ${json.encodeToString(parsed)}")
             appendLine("Device: ${device.displayName}, Memory: ${device.availableMemoryMb}MB/${device.totalMemoryMb}MB")
@@ -204,6 +256,9 @@ internal class KoogCrashAnalysisExecutor(
         device: DeviceContext,
         crashContext: String,
     ): CrashSummary {
+        lastAnalysis?.let {
+            return it.toCrashSummary()
+        }
         val input = buildString {
             appendLine("Parsed trace: ${json.encodeToString(parsed)}")
             appendLine("Severity: ${severity.severity} (${severity.reasoning})")
@@ -221,5 +276,37 @@ internal class KoogCrashAnalysisExecutor(
         val response = promptExecutor.execute(prompt, model)
             .joinToString("") { it.content }
         return json.decodeFromString<CrashSummary>(extractJsonObjectPayload(response))
+    }
+
+    private companion object {
+        val COMBINED_ANALYSIS_PROMPT: String = """
+            Analyze this Android crash and return ONE JSON object:
+            {
+              "rootException": "java.lang.NullPointerException",
+              "rootMessage": "Attempt to invoke method on null",
+              "crashFile": "CheckoutViewModel.kt",
+              "crashLine": 87,
+              "crashMethod": "processPayment",
+              "isAppCode": true,
+              "frameworkContext": "Coroutine after ViewModel cleared",
+              "severity": "HIGH",
+              "confidence": 0.85,
+              "severityReasoning": "Main thread crash in payment flow",
+              "title": "Checkout crashes during payment processing",
+              "description": "NullPointerException in CheckoutViewModel.processPayment on app version/build from context.",
+              "stepsToReproduce": "1. Open checkout\n2. Start payment\n3. Repeat the last recorded action",
+              "possibleCause": "Payment response is null before processPayment reads it"
+            }
+
+            Rules:
+            - Return JSON only. No markdown fences.
+            - stepsToReproduce MUST be non-null. Use breadcrumbs and current screen when present.
+            - possibleCause MUST be non-null. Tie it to exception type, app frame, method, lifecycle, or ANR context.
+            - description MUST mention failing method/file when known and include app version/build context when provided.
+            - Focus on app frames, not android.*, androidx.*, java.*, or kotlin.* frames.
+            - Severity: CRITICAL for data loss/security/payment blocker, HIGH for main user flow crash, MEDIUM for edge case, LOW for cosmetic/rare.
+            - Use confidence between 0.0 and 1.0. If unsure, use 0.5 rather than 0.0.
+            - Set nullable location fields to null only when they cannot be determined.
+        """.trimIndent()
     }
 }

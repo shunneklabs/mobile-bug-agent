@@ -160,7 +160,8 @@ val notionBackend = NotionTicketBackend(
 )
 ```
 
-Register it after `MBA.configure(...)` and before pending crashes are processed:
+Register it after `MBA.configure(...)` and before calling
+`MBAAndroid.flushPendingCrashes(...)`:
 
 ```kotlin
 MBAAndroid.setTicketBackends(
@@ -174,6 +175,8 @@ A complete SDKOnly setup:
 class ExampleApp : Application() {
     override fun onCreate() {
         super.onCreate()
+
+        MBAAndroid.install(this)
 
         val llmConfig = LLM.gemini(BuildConfig.GEMINI_API_KEY)
 
@@ -198,7 +201,7 @@ class ExampleApp : Application() {
             debug = BuildConfig.DEBUG,
         )
 
-        MBAAndroid.install(this)
+        MBAAndroid.flushPendingCrashes(this)
     }
 }
 ```
@@ -245,5 +248,5 @@ fingerprint`.
 No Notion page is created:
 
 - Confirm `MBAAndroid.setTicketBackends(notionBackend = ...)` runs before
-  `MBAAndroid.install(...)` processes pending crashes.
+  `MBAAndroid.flushPendingCrashes(...)`.
 - Confirm the sample/app delivery mode is not callback-only.

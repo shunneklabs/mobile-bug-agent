@@ -3,12 +3,6 @@ package dev.sunnat629.mba.sample
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,7 +46,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -163,17 +156,6 @@ private fun KotlinConfHero(
     settings: SampleProcessingSettings,
     integrationMode: SampleIntegrationMode,
 ) {
-    val pulse by rememberInfiniteTransition(label = "agent-pulse")
-        .animateFloat(
-            initialValue = 0.55f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 1100, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse,
-            ),
-            label = "agent-alpha",
-        )
-
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
@@ -210,7 +192,7 @@ private fun KotlinConfHero(
                         .padding(start = 12.dp)
                         .size(42.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF47D18C).copy(alpha = pulse)),
+                        .background(Color(0xFF47D18C)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text("K", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
@@ -522,18 +504,7 @@ private fun ScenarioIndex(index: Int) {
 
 @Composable
 private fun ScenarioBadge(scenario: CrashScenario) {
-    val alpha by rememberInfiniteTransition(label = "scenario-badge-${scenario.title}")
-        .animateFloat(
-            initialValue = if (scenario.fatal) 0.72f else 1f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse,
-            ),
-            label = "scenario-badge-alpha",
-        )
     Surface(
-        modifier = Modifier.graphicsLayer { this.alpha = alpha },
         shape = MaterialTheme.shapes.small,
         color = if (scenario.fatal) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.tertiaryContainer,
     ) {

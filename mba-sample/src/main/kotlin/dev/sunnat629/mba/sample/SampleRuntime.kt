@@ -96,6 +96,9 @@ object SampleRuntime {
                     TAG,
                     "SDKOnly latest callback: group=${event.group.id}, new=${event.isNewGroup}, " +
                         "agentic=${event.agentic}, source=${event.analysisSource}, " +
+                        "confidence=${event.report.confidence}, " +
+                        "steps=${event.report.stepsToReproduce?.isNotBlank() == true}, " +
+                        "cause=${event.report.possibleCause?.isNotBlank() == true}, " +
                         "title='${event.report.title}', severity=${event.report.severity}",
                 )
             },

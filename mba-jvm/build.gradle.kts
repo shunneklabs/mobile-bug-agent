@@ -4,6 +4,8 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+apply(from = rootProject.file("gradle/publishing.gradle.kts"))
+
 kotlin {
     explicitApi()
 }
@@ -15,4 +17,15 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
 
     testImplementation(kotlin("test"))
+}
+
+afterEvaluate {
+    extensions.configure<org.gradle.api.publish.PublishingExtension>("publishing") {
+        publications {
+            create<org.gradle.api.publish.maven.MavenPublication>("jvm") {
+                from(components["java"])
+                artifactId = "mba-jvm"
+            }
+        }
+    }
 }

@@ -1,6 +1,7 @@
 package dev.sunnat629.mba.agent
 
 import dev.sunnat629.mba.agent.model.CrashSummary
+import dev.sunnat629.mba.agent.model.CombinedCrashAnalysis
 import dev.sunnat629.mba.agent.model.ParsedStackTrace
 import dev.sunnat629.mba.agent.model.SeverityResult
 import dev.sunnat629.mba.agent.prompts.SystemPrompt
@@ -103,6 +104,14 @@ open class AgentFactory(
  * Production: backed by LLM. Tests: use a mock.
  */
 internal interface CrashAnalysisExecutor {
+    suspend fun analyzeCrash(
+        sanitizedTrace: String,
+        device: DeviceContext,
+        screen: String?,
+        breadcrumbs: List<String>,
+        crashContext: String,
+    ): CombinedCrashAnalysis? = null
+
     suspend fun parseStackTrace(sanitizedTrace: String): ParsedStackTrace
     suspend fun classifySeverity(parsed: ParsedStackTrace, device: DeviceContext): SeverityResult
     suspend fun generateSummary(

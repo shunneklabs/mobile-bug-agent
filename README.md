@@ -74,6 +74,7 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - [SDKOnly mode overview](docs/MBA_AGENT_SDKONLY.md)
 - [Notion integration guide](docs/NOTION_INTEGRATION.md)
 - [GitHub integration guide](docs/GITHUB_INTEGRATION.md)
+- [GitHub Packages SDK integration](docs/GITHUB_PACKAGES_SDK.md)
 - [Mobile agent and core architecture](docs/MOBILE_AGENT_AND_CORE_OVERVIEW.md)
 - [Monitoring and privacy boundary](docs/MONITORING_SECURITY_CLAIMS.md)
 - [Repository architecture](docs/ARCHITECTURE.md)
@@ -157,6 +158,8 @@ class ExampleApp : Application() {
             },
             debug = BuildConfig.DEBUG,
         )
+
+        MBAAndroid.flushPendingCrashes(this)
     }
 }
 ```

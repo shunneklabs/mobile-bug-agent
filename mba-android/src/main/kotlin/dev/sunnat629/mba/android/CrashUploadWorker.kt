@@ -144,6 +144,18 @@ internal class CrashUploadWorker(
                 if (deliveryResult.success) {
                     MBALog.i(TAG, "Crash processed: ${file.name} via ${deliveryResult.channel} -> ticket=${ticketResult?.ticketId?.take(12) ?: "none"}")
                     deliveryResult.agentEvent?.let { event ->
+                        MBALog.i(
+                            TAG,
+                            "Agent result: source=${event.analysisSource}, agentic=${event.agentic}, " +
+                                "confidence=${event.report.confidence}, " +
+                                "steps=${event.report.stepsToReproduce?.isNotBlank() == true}, " +
+                                "cause=${event.report.possibleCause?.isNotBlank() == true}, " +
+                                "notion=${event.externalState.notionTicketId ?: "none"}, " +
+                                "github=${event.externalState.githubIssueId ?: "none"}",
+                        )
+                        event.analysisError?.let { error ->
+                            MBALog.w(TAG, "Agent analysis error: $error")
+                        }
                         processedEvents += event
                         MBAAndroid.publishAgentEvent(event, notifyAppCallback = false)
                     }

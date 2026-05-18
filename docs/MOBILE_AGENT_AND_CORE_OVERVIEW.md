@@ -121,7 +121,8 @@ At install time, MBA:
 - installs the fatal crash handler
 - captures app/device metadata
 - checks for a previous ANR exit when supported
-- schedules a WorkManager job to process pending crash files
+- waits for the app to call `MBAAndroid.flushPendingCrashes(...)` after SDK
+  settings and optional sinks are ready
 
 Fatal crashes are caught through the process/thread uncaught exception handler,
 not Activity lifecycle callbacks. The app can add better context by calling:
@@ -153,13 +154,15 @@ When the app opens again:
 
 ```text
 1. MBA installs again during app startup.
-2. WorkManager starts CrashUploadWorker.
-3. Pending crash JSON files are read.
-4. Each crash is processed by hosted mode or SDKOnly mode.
-5. Local grouping updates the matching bug group.
-6. Optional Notion/GitHub sinks run if configured.
-7. Successfully processed crash files are deleted.
-8. Callbacks, JSON callbacks, and flows receive the result.
+2. The app restores SDK config and optional Notion/GitHub sinks.
+3. The app calls `MBAAndroid.flushPendingCrashes(...)`.
+4. WorkManager starts CrashUploadWorker.
+5. Pending crash JSON files are read.
+6. Each crash is processed by hosted mode or SDKOnly mode.
+7. Local grouping updates the matching bug group.
+8. Optional Notion/GitHub sinks run if configured.
+9. Successfully processed crash files are deleted.
+10. Callbacks, JSON callbacks, and flows receive the result.
 ```
 
 If several crashes are pending, the worker processes all of them. Apps can use

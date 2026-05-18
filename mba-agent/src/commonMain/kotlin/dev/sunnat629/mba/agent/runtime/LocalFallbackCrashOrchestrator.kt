@@ -39,7 +39,7 @@ public class LocalFallbackCrashOrchestrator(
             }
         }
 
-        if (!skipGitIssue && aggregation.isNewGroup) {
+        if (!skipGitIssue && (aggregation.isNewGroup || event.group.githubIssueId != null)) {
             val githubResult = githubSink?.sync(event)
             if (githubResult?.success == true && githubResult.ticketId != null) {
                 aggregationStore.markGitHubSynced(event.group.id, githubResult.ticketId, githubResult.url)

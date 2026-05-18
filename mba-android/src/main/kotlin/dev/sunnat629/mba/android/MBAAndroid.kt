@@ -27,8 +27,8 @@ import java.util.concurrent.TimeUnit
  * This:
  * 1. Sets the UncaughtExceptionHandler
  * 2. Installs the core crash handler (MBA.install)
- * 3. Enqueues CrashUploadWorker via WorkManager to process any
- *    crash files from previous sessions
+ * 3. Apps call [flushPendingCrashes] after saving SDKOnly settings/sinks to
+ *    process crash files from previous sessions
  */
 public object MBAAndroid {
 
@@ -117,10 +117,7 @@ public object MBAAndroid {
         // after the app starts again.
         ANRExitReporter.capturePreviousAnrIfAny(appContext, crashDir, metadata)
 
-        // 3. Enqueue WorkManager to process pending crashes from previous sessions
-        enqueueCrashUploadWorker(appContext)
-
-        MBALog.i(TAG, "MBAAndroid installed. WorkManager enqueued for pending crashes.")
+        MBALog.i(TAG, "MBAAndroid installed. Call flushPendingCrashes() after SDK settings are ready.")
     }
 
     private fun androidAppMetadata(context: Context): Map<String, String> {
@@ -198,6 +195,17 @@ public object MBAAndroid {
         agentBatchJsonCallback = batchJsonCallback
 
         MBALog.i(TAG, "MBA processing config saved to SharedPreferences for WorkManager")
+    }
+
+    /**
+     * Process crashes captured from previous app runs.
+     *
+     * Call after [saveConfig] and after optional Notion/GitHub backends are
+     * registered. This avoids consuming a pending crash before app-layer sinks
+     * are ready after a process restart.
+     */
+    public fun flushPendingCrashes(context: Context) {
+        enqueueCrashUploadWorker(context.applicationContext)
     }
 
     public fun setAgentCallback(callback: MBAAgentCallback?) {
@@ -303,11 +311,11 @@ public object MBAAndroid {
 
         WorkManager.getInstance(context).enqueueUniqueWork(
             WORK_NAME,
-            ExistingWorkPolicy.KEEP, // Don't duplicate if already running
+            ExistingWorkPolicy.REPLACE,
             workRequest,
         )
 
-        MBALog.d(TAG, "CrashUploadWorker enqueued (unique: $WORK_NAME, policy: KEEP)")
+        MBALog.d(TAG, "CrashUploadWorker enqueued (unique: $WORK_NAME, policy: REPLACE)")
     }
 
     private const val LOG_CHUNK_SIZE = 3500
