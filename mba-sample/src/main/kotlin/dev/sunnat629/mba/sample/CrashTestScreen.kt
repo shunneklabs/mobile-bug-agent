@@ -1,8 +1,14 @@
 package dev.sunnat629.mba.sample
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -25,9 +32,9 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -35,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -45,7 +53,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -53,26 +66,52 @@ import dev.sunnat629.mba.core.MBA
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CrashTestScreen() {
     LaunchedEffect(Unit) {
-        MBA.setScreen("KotlinConfCrashLab")
-        MBA.addBreadcrumb("Opened KotlinConfCrashLab")
+        MBA.setScreen("MobileBugAgent")
+        MBA.addBreadcrumb("Opened Mobile Bug Agent")
     }
 
-    var status by remember {
-        mutableStateOf("Ready. Trigger a scenario, reopen the app after a fatal crash, and watch SDKOnly process the saved report.")
-    }
     val context = LocalContext.current
     val settings by SampleRuntime.settings.collectAsState()
     val integrationMode by SampleIntegrationRuntime.mode.collectAsState()
     val scenarios = remember { sampleScenarios() }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var showSettings by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf("Ready") }
+
+    if (showSettings) {
+        SettingsSheet(
+            sheetState = sheetState,
+            settings = settings,
+            integrationMode = integrationMode,
+            onDismiss = { showSettings = false },
+            onUseAgentChange = { enabled ->
+                val applied = SampleRuntime.setUseAgent(context, enabled)
+                status = if (applied.useAgent) "MBA analysis on" else "Raw mode on"
+            },
+            onDeliverySelect = { requested ->
+                val applied = SampleIntegrationRuntime.select(context, requested)
+                status = "Delivery: ${applied.label}"
+            },
+            onReset = {
+                val applied = SampleRuntime.resetToBuildDefaults(context)
+                status = if (applied.useAgent) "Defaults restored: MBA on" else "Defaults restored: raw"
+            },
+        )
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("KotlinConf Crash Lab") },
+                title = { Text("Mobile Bug Agent") },
+                actions = {
+                    IconButton(onClick = { showSettings = true }) {
+                        SettingsGlyph()
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
@@ -85,46 +124,17 @@ fun CrashTestScreen() {
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            KotlinConfHero(settings = settings, integrationMode = integrationMode)
-
-            AgentControls(
+            HeroPanel(
                 settings = settings,
-                hasLlm = SampleRuntime.hasLlmConfig,
-                onUseAgentChange = { enabled ->
-                    val applied = SampleRuntime.setUseAgent(context, enabled)
-                    status = if (applied.useAgent) {
-                        "Koog agent is on. Next crash will include title, cause, severity, and reproduction hints."
-                    } else {
-                        "Raw fallback is on. Next crash will emit technical JSON without LLM analysis."
-                    }
-                },
-                onReset = {
-                    val applied = SampleRuntime.resetToBuildDefaults(context)
-                    status = "Reset for KotlinConf: SDKOnly, backend off, agent=${if (applied.useAgent) "on" else "raw fallback"}."
-                },
+                integrationMode = integrationMode,
+                status = status,
             )
 
-            IntegrationPanel(
-                selected = integrationMode,
-                onSelect = { requested ->
-                    val applied = SampleIntegrationRuntime.select(context, requested)
-                    status = "App-layer delivery changed to ${applied.label}. SDKOnly will still emit callback JSON first."
-                },
-            )
-
-            StatusBanner(status)
-
-            SectionHeader(
-                title = "Crash Scenarios",
-                body = "Each scenario is deterministic, so repeated runs should update the same local bug group instead of creating duplicate parent tickets.",
-            )
-
-            scenarios.forEachIndexed { index, scenario ->
-                ScenarioCard(
-                    index = index + 1,
+            scenarios.forEach { scenario ->
+                ScenarioRow(
                     scenario = scenario,
                     onRun = {
                         MBA.setScreen(scenario.screen)
@@ -132,245 +142,287 @@ fun CrashTestScreen() {
                         MBA.addBreadcrumb("Expected grouping key: ${scenario.expectedGrouping}")
                         runScenario(scenario)
                         status = if (scenario.fatal) {
-                            "${scenario.statusLabel} triggered. Reopen the app to process '${scenario.title}'."
+                            "Crash saved. Reopen app."
                         } else {
-                            "Logged '${scenario.title}'. The worker will process it through SDKOnly callbacks."
+                            "Error logged"
                         }
                     },
                 )
             }
 
-            HorizontalDivider()
-
-            SectionHeader(
-                title = "Event Flow",
-                body = "SDKOnly captures the crash, stores it privately, processes it after restart, groups duplicates locally, emits latest and batch callbacks, then optional app-layer Notion/GitHub sinks run if selected.",
-            )
             Spacer(Modifier.height(8.dp))
         }
     }
 }
 
 @Composable
-private fun KotlinConfHero(
+private fun HeroPanel(
     settings: SampleProcessingSettings,
     integrationMode: SampleIntegrationMode,
+    status: String,
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        color = Color(0xFF0F3329),
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
+        shape = MaterialTheme.shapes.extraLarge,
+        color = Color.Transparent,
         contentColor = Color.White,
-        tonalElevation = 3.dp,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
+        tonalElevation = 2.dp,
     ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF161616),
+                            Color(0xFF20342E),
+                            Color(0xFF171717),
+                        )
+                    )
+                ),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top,
+            HeroPattern(Modifier.matchParentSize())
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top,
                 ) {
-                    Text(
-                        "KotlinConf SDKOnly Agent",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                    )
-                    Text(
-                        "Crash capture, Koog analysis, duplicate grouping, and app-owned delivery in one Android demo.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFFD7EFE5),
-                    )
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        Text(
+                            "Crash to ticket",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                        )
+                        Text(
+                            "Trigger a test issue. MBA groups it and sends it to your tools.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFFE8EFEA),
+                        )
+                    }
+                    BrandMark()
                 }
-                Box(
-                    modifier = Modifier
-                        .padding(start = 12.dp)
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF47D18C)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("K", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
-                }
-            }
 
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                HeroPill("Mode", settings.deliveryMode.label)
-                HeroPill("Backend", "off")
-                HeroPill("Agent", if (settings.useAgent) "Koog" else "raw")
-                HeroPill("Delivery", integrationMode.label)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StatusPill(if (settings.useAgent) "MBA analysis" else "Raw mode")
+                    StatusPill(integrationMode.label)
+                    StatusPill("SDKOnly")
+                }
+
+                AnimatedContent(
+                    targetState = status,
+                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                    label = "status",
+                ) { text ->
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        color = Color.White.copy(alpha = 0.12f),
+                        contentColor = Color.White,
+                    ) {
+                        Text(
+                            text,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun HeroPill(label: String, value: String) {
+private fun HeroPattern(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val gold = Color(0xFFD4AF37).copy(alpha = 0.20f)
+        val green = Color(0xFF47D18C).copy(alpha = 0.12f)
+        drawCircle(green, radius = size.width * 0.42f, center = Offset(size.width * 0.95f, size.height * 0.10f))
+        drawArc(
+            color = gold,
+            startAngle = 205f,
+            sweepAngle = 110f,
+            useCenter = false,
+            topLeft = Offset(size.width * 0.66f, size.height * 0.08f),
+            size = Size(size.width * 0.48f, size.width * 0.48f),
+            style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round),
+        )
+        drawLine(
+            color = Color.White.copy(alpha = 0.10f),
+            start = Offset(size.width * 0.08f, size.height * 0.92f),
+            end = Offset(size.width * 0.72f, size.height * 0.92f),
+            strokeWidth = 1.dp.toPx(),
+        )
+    }
+}
+
+@Composable
+private fun BrandMark() {
+    Box(
+        modifier = Modifier
+            .padding(start = 12.dp)
+            .size(48.dp)
+            .clip(CircleShape)
+            .background(Color(0xFFD4AF37)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text("MBA", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Black, color = Color(0xFF171717))
+    }
+}
+
+@Composable
+private fun StatusPill(text: String) {
     Surface(
         shape = MaterialTheme.shapes.medium,
-        color = Color.White.copy(alpha = 0.14f),
+        color = Color.White.copy(alpha = 0.12f),
         contentColor = Color.White,
     ) {
         Text(
-            "$label: $value",
+            text,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
             style = MaterialTheme.typography.labelMedium,
         )
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun AgentControls(
-    settings: SampleProcessingSettings,
-    hasLlm: Boolean,
-    onUseAgentChange: (Boolean) -> Unit,
-    onReset: () -> Unit,
-) {
+private fun ScenarioRow(scenario: CrashScenario, onRun: () -> Unit) {
     ElevatedCard(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("KotlinConf Route", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                SeverityDot(scenario)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(scenario.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     Text(
-                        "SaaS is disabled for this event build. The sample always runs SDKOnly with backend upload off.",
+                        scenario.shortDescription,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                TextButton(onClick = onReset) {
-                    Text("Reset")
-                }
             }
 
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ConfigChip("SDKOnly", "locked")
-                ConfigChip("Backend", "off")
-                ConfigChip("Gemini", if (hasLlm) "ready" else "missing")
-                ConfigChip("Build", BuildConfig.VERSION_NAME)
-            }
-
-            val agentColor by animateColorAsState(
-                targetValue = if (settings.useAgent) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                label = "agent-control-color",
-            )
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
+            Button(
+                onClick = onRun,
+                modifier = Modifier
+                    .height(44.dp)
+                    .widthIn(min = 92.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFD4AF37),
+                    contentColor = Color(0xFF171717),
+                ),
                 shape = MaterialTheme.shapes.medium,
-                color = agentColor,
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text("Use Koog agent", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-                        Crossfade(
-                            targetState = Triple(settings.useAgent, hasLlm, settings.deliveryMode),
-                            label = "agent-caption",
-                        ) { (enabled, llmReady, _) ->
-                            Text(
-                                when {
-                                    enabled -> "LLM analysis adds title, severity, steps, and possible cause."
-                                    llmReady -> "Raw fallback selected; callbacks still include crash and device metadata."
-                                    else -> "Add GEMINI_API_KEY to enable agent analysis."
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                    Switch(
-                        checked = settings.useAgent,
-                        onCheckedChange = onUseAgentChange,
-                        enabled = hasLlm,
-                    )
-                }
+                Text(scenario.actionLabel, fontWeight = FontWeight.Bold)
             }
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun IntegrationPanel(
-    selected: SampleIntegrationMode,
-    onSelect: (SampleIntegrationMode) -> Unit,
-) {
-    val hasNotion = SampleIntegrationRuntime.hasNotionConfig
-    val hasGitHub = SampleIntegrationRuntime.hasGitHubConfig
-
-    ElevatedCard(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+private fun SeverityDot(scenario: CrashScenario) {
+    Surface(
+        modifier = Modifier.size(38.dp),
+        shape = CircleShape,
+        color = if (scenario.fatal) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary,
+        contentColor = if (scenario.fatal) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onTertiary,
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("App-layer Delivery", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text(
-                    "SDKOnly emits JSON first. The app decides whether to ignore it, store it, or forward it to Notion and GitHub.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+        Box(contentAlignment = Alignment.Center) {
+            Text(scenario.marker, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Black)
+        }
+    }
+}
 
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                DeliveryChip(
-                    label = "Callback only",
-                    selected = selected == SampleIntegrationMode.CALLBACK_ONLY,
-                    enabled = true,
-                    onClick = { onSelect(SampleIntegrationMode.CALLBACK_ONLY) },
-                )
-                DeliveryChip(
-                    label = "Notion",
-                    selected = selected == SampleIntegrationMode.NOTION,
-                    enabled = hasNotion,
-                    onClick = { onSelect(SampleIntegrationMode.NOTION) },
-                )
-                DeliveryChip(
-                    label = "GitHub",
-                    selected = selected == SampleIntegrationMode.GITHUB,
-                    enabled = hasGitHub,
-                    onClick = { onSelect(SampleIntegrationMode.GITHUB) },
-                )
-                DeliveryChip(
-                    label = "Both",
-                    selected = selected == SampleIntegrationMode.BOTH,
-                    enabled = hasNotion && hasGitHub,
-                    onClick = { onSelect(SampleIntegrationMode.BOTH) },
-                )
-            }
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun SettingsSheet(
+    sheetState: androidx.compose.material3.SheetState,
+    settings: SampleProcessingSettings,
+    integrationMode: SampleIntegrationMode,
+    onDismiss: () -> Unit,
+    onUseAgentChange: (Boolean) -> Unit,
+    onDeliverySelect: (SampleIntegrationMode) -> Unit,
+    onReset: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            Text("Settings", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 
-            AnimatedVisibility(visible = selected != SampleIntegrationMode.CALLBACK_ONLY) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.tertiaryContainer,
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        "Selected sinks receive grouped bug updates. Callback JSON still stays available for app-owned handling.",
-                        modifier = Modifier.padding(12.dp),
-                        style = MaterialTheme.typography.bodySmall,
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("MBA analysis", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (SampleRuntime.hasLlmConfig) "Adds title, cause, severity, steps." else "Gemini key missing.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = settings.useAgent,
+                        onCheckedChange = onUseAgentChange,
+                        enabled = SampleRuntime.hasLlmConfig,
                     )
                 }
             }
 
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ConfigChip("Notion keys", if (hasNotion) "ready" else "missing")
-                ConfigChip("GitHub keys", if (hasGitHub) "ready" else "missing")
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Delivery", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DeliveryChip("Callback", integrationMode == SampleIntegrationMode.CALLBACK_ONLY, true) {
+                        onDeliverySelect(SampleIntegrationMode.CALLBACK_ONLY)
+                    }
+                    DeliveryChip("Notion", integrationMode == SampleIntegrationMode.NOTION, SampleIntegrationRuntime.hasNotionConfig) {
+                        onDeliverySelect(SampleIntegrationMode.NOTION)
+                    }
+                    DeliveryChip("GitHub", integrationMode == SampleIntegrationMode.GITHUB, SampleIntegrationRuntime.hasGitHubConfig) {
+                        onDeliverySelect(SampleIntegrationMode.GITHUB)
+                    }
+                    DeliveryChip("Both", integrationMode == SampleIntegrationMode.BOTH, SampleIntegrationRuntime.hasNotionConfig && SampleIntegrationRuntime.hasGitHubConfig) {
+                        onDeliverySelect(SampleIntegrationMode.BOTH)
+                    }
+                }
+            }
+
+            TextButton(onClick = onReset, modifier = Modifier.align(Alignment.End)) {
+                Text("Reset")
             }
         }
     }
@@ -385,185 +437,79 @@ private fun DeliveryChip(
 ) {
     FilterChip(
         selected = selected,
-        onClick = onClick,
         enabled = enabled,
+        onClick = onClick,
         label = { Text(label) },
     )
 }
 
 @Composable
-private fun ConfigChip(label: String, value: String) {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceVariant,
-    ) {
-        Text(
-            "$label: $value",
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-            style = MaterialTheme.typography.labelMedium,
-        )
-    }
-}
-
-@Composable
-private fun StatusBanner(status: String) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.secondaryContainer,
-    ) {
-        Text(
-            status,
-            modifier = Modifier.padding(14.dp),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-    }
-}
-
-@Composable
-private fun SectionHeader(title: String, body: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
-private fun ScenarioCard(index: Int, scenario: CrashScenario, onRun: () -> Unit) {
-    ElevatedCard(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
-                ScenarioIndex(index)
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Top,
-                    ) {
-                        Text(
-                            scenario.title,
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        ScenarioBadge(scenario)
-                    }
-                    Text(
-                        scenario.description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+private fun SettingsGlyph() {
+    val color = MaterialTheme.colorScheme.onSurface
+    Canvas(modifier = Modifier.size(24.dp)) {
+        val stroke = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round)
+        val rows = listOf(7.dp.toPx(), 12.dp.toPx(), 17.dp.toPx())
+        rows.forEachIndexed { index, y ->
+            drawLine(color, Offset(4.dp.toPx(), y), Offset(20.dp.toPx(), y), strokeWidth = stroke.width, cap = StrokeCap.Round)
+            val knobX = when (index) {
+                0 -> 9.dp.toPx()
+                1 -> 15.dp.toPx()
+                else -> 11.dp.toPx()
             }
-
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.surfaceVariant,
-            ) {
-                Text(
-                    "Grouping: ${scenario.expectedGrouping}",
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            if (scenario.fatal) {
-                Button(
-                    onClick = onRun,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                ) {
-                    Text(scenario.actionLabel)
-                }
-            } else {
-                OutlinedButton(onClick = onRun, modifier = Modifier.fillMaxWidth()) {
-                    Text(scenario.actionLabel)
-                }
-            }
+            drawCircle(color, radius = 2.7.dp.toPx(), center = Offset(knobX, y))
         }
-    }
-}
-
-@Composable
-private fun ScenarioIndex(index: Int) {
-    Surface(
-        modifier = Modifier.size(32.dp),
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.primaryContainer,
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(index.toString(), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
-private fun ScenarioBadge(scenario: CrashScenario) {
-    Surface(
-        shape = MaterialTheme.shapes.small,
-        color = if (scenario.fatal) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.tertiaryContainer,
-    ) {
-        Text(
-            scenario.badgeLabel,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-            style = MaterialTheme.typography.labelSmall,
-        )
     }
 }
 
 private data class CrashScenario(
     val title: String,
-    val description: String,
+    val shortDescription: String,
     val screen: String,
     val fatal: Boolean,
     val expectedGrouping: String,
-    val actionLabel: String = if (fatal) "Trigger fatal crash" else "Log non-fatal error",
-    val badgeLabel: String = if (fatal) "fatal" else "non-fatal",
-    val statusLabel: String = if (fatal) "Fatal scenario" else "Non-fatal scenario",
+    val marker: String,
+    val actionLabel: String = if (fatal) "Crash" else "Log",
     val run: () -> Unit,
 )
 
 private fun sampleScenarios(): List<CrashScenario> = listOf(
     CrashScenario(
-        title = "Checkout null payment token",
-        description = "Deterministic NPE. Trigger twice to verify one grouped bug and a higher occurrence count.",
+        title = "Checkout token",
+        shortDescription = "Null payment token",
         screen = "CheckoutScreen",
         fatal = true,
         expectedGrouping = "same fingerprint on repeated runs",
+        marker = "NPE",
         run = { StageNpeCrasher.trigger() },
     ),
     CrashScenario(
-        title = "Catalog index out of bounds",
-        description = "Different stack and exception type. This should create a separate grouped bug.",
+        title = "Catalog index",
+        shortDescription = "Out-of-bounds item access",
         screen = "CatalogScreen",
         fatal = true,
         expectedGrouping = "separate fingerprint",
+        marker = "IDX",
         run = { listOf("one", "two")[5] },
     ),
     CrashScenario(
         title = "Main thread ANR",
-        description = "Blocks the UI thread long enough for Android to report an ANR. Reopen the app to convert the previous ANR exit into a report.",
+        shortDescription = "Blocked UI thread",
         screen = "ANRScreen",
         fatal = true,
         expectedGrouping = "ANR exit reason fingerprint after restart",
-        actionLabel = "Trigger ANR",
-        badgeLabel = "ANR",
-        statusLabel = "ANR scenario",
+        marker = "ANR",
+        actionLabel = "ANR",
         run = {
             Thread.sleep(20_000)
         },
     ),
     CrashScenario(
-        title = "Session state violation",
-        description = "Caught non-fatal error with metadata and breadcrumbs. Useful for callback JSON testing.",
+        title = "Session state",
+        shortDescription = "Caught state violation",
         screen = "SessionScreen",
         fatal = false,
         expectedGrouping = "stable non-fatal fingerprint",
+        marker = "ERR",
         run = {
             MBA.logError(
                 IllegalStateException("User session reached checkout without an active cart"),
@@ -575,11 +521,12 @@ private fun sampleScenarios(): List<CrashScenario> = listOf(
         },
     ),
     CrashScenario(
-        title = "Malformed remote config",
-        description = "Caught JSON parsing failure. Koog should infer possible cause from malformed payload parsing.",
+        title = "Remote config",
+        shortDescription = "Malformed JSON payload",
         screen = "RemoteConfigScreen",
         fatal = false,
         expectedGrouping = "JSON parser fingerprint",
+        marker = "JSON",
         run = {
             try {
                 Json.parseToJsonElement("{bad json}")
