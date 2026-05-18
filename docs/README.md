@@ -6,22 +6,35 @@ what the local agent does, and what diagnostic data is collected.
 
 ## Recommended Reading Order
 
-1. `MBA_AGENT_SDKONLY.md`
+1. `SDKONLY_IMPLEMENTATION_GUIDE.md`
 
-   Start here if you want to run Mobile Bug Agent without the hosted backend.
-   SDKOnly mode keeps processing inside the app and gives the host application
-   callbacks, JSON payloads, and optional Notion/GitHub delivery.
+   Start here to add Mobile Bug Agent to an Android app in SDKOnly mode. It
+   covers dependencies, initialization, callbacks, raw fallback, optional
+   Notion/GitHub delivery, and release-build notes.
 
-2. `MOBILE_AGENT_AND_CORE_OVERVIEW.md`
+2. `MBA_AGENT_SDKONLY.md`
+
+   Read this for the SDKOnly processing model and future direction.
+
+3. `MOBILE_AGENT_AND_CORE_OVERVIEW.md`
 
    Read this for the full architecture. It explains how the Android adapter,
    shared core, local agent, and optional integrations work together.
 
-3. `MONITORING_SECURITY_CLAIMS.md`
+4. `MONITORING_SECURITY_CLAIMS.md`
 
    Read this for the monitoring and privacy boundary. It explains what MBA
    collects, what it does not collect, and where app-provided crash text can
    still contain sensitive values.
+
+5. `ARCHITECTURE.md`
+
+   Read this for the full repository architecture across SDK modules, server,
+   Notion, GitHub, and the demo pipeline.
+
+6. `KOOG_AGENT_ROADMAP.md`
+
+   Read this for the Koog crash-analysis and auto-fix roadmap.
 
 ## Current Scope
 

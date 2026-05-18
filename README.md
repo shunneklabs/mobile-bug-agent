@@ -53,7 +53,7 @@ Pending crash file / report upload
             └─ `/events`: SSE timeline for booth dashboard
 ```
 
-More detail: [ARCHITECTURE.md](ARCHITECTURE.md).
+More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## 📦 Modules
 
@@ -68,6 +68,15 @@ More detail: [ARCHITECTURE.md](ARCHITECTURE.md).
 | `mba-server` | Ktor ingest server with queue, job state, rate limit, persistence, SSE, booth page |
 | `mba-sample` | Android demo app for stage-safe crash generation and SDK smoke tests |
 
+## 📚 Documentation
+
+- [SDKOnly Android implementation guide](docs/SDKONLY_IMPLEMENTATION_GUIDE.md)
+- [SDKOnly mode overview](docs/MBA_AGENT_SDKONLY.md)
+- [Mobile agent and core architecture](docs/MOBILE_AGENT_AND_CORE_OVERVIEW.md)
+- [Monitoring and privacy boundary](docs/MONITORING_SECURITY_CLAIMS.md)
+- [Repository architecture](docs/ARCHITECTURE.md)
+- [Koog agent roadmap](docs/KOOG_AGENT_ROADMAP.md)
+
 ## 🚀 Quick Start: sample app
 
 1. Clone the repo.
@@ -81,36 +90,98 @@ More detail: [ARCHITECTURE.md](ARCHITECTURE.md).
 3. Build and run `mba-sample` on a device or emulator.
 4. Trigger a crash, relaunch, and confirm a Notion ticket or server job appears.
 
-## 📦 SDK integration
+## 📦 SDKOnly integration
+
+For a complete implementation walkthrough, read
+[docs/SDKONLY_IMPLEMENTATION_GUIDE.md](docs/SDKONLY_IMPLEMENTATION_GUIDE.md).
+
+At minimum, an Android app adds the Android adapter:
 
 ```kotlin
-// Application.onCreate()
-MBA.init(crashDir = filesDir.resolve("mba-crashes").absolutePath) {
-    mode = MBAMode.SdkOnly(
-        llmApiKey = "your-gemini-key",
-        ticketBackend = NotionTicketBackend(
-            apiKey = "secret_...",
-            bugTicketDbId = "...",
-            crashReportDbId = "...",
-        ),
-    )
-    debug = true // enables internal SDK logging (Kermit → Logcat)
+dependencies {
+    implementation("dev.sunnat629.mba:mba-android:<version>")
 }
-
-// Track screens
-MBA.setScreen("CheckoutScreen")
-
-// Add breadcrumbs
-MBA.addBreadcrumb("User tapped checkout")
-
-// Log non-fatal errors
-try { riskyOperation() } catch (e: Exception) {
-    MBA.logError(e, mapOf("context" to "payment"))
-}
-
-// Capture coroutine crashes
-val scope = CoroutineScope(Dispatchers.IO + MBA.exceptionHandler)
 ```
+
+When working inside this repository, use:
+
+```kotlin
+dependencies {
+    implementation(project(":mba-android"))
+}
+```
+
+Add optional delivery modules only when the app needs them:
+
+```kotlin
+dependencies {
+    implementation("dev.sunnat629.mba:mba-notion:<version>")
+    implementation("dev.sunnat629.mba:mba-github:<version>")
+}
+```
+
+Initialize as early as possible in `Application.onCreate`:
+
+```kotlin
+class ExampleApp : Application() {
+    override fun onCreate() {
+        super.onCreate()
+
+        MBAAndroid.install(this)
+
+        MBA.configure(
+            MBAConfig.Builder().apply {
+                mode = MBAMode.SdkOnly(llmApiKey = BuildConfig.GEMINI_API_KEY)
+                useAgent = BuildConfig.GEMINI_API_KEY.isNotBlank()
+                debug = BuildConfig.DEBUG
+            }.build(),
+        )
+
+        MBAAndroid.saveConfig(
+            context = this,
+            sendToBackend = false,
+            llm = if (BuildConfig.GEMINI_API_KEY.isBlank()) {
+                null
+            } else {
+                LLM.gemini(BuildConfig.GEMINI_API_KEY)
+            },
+            useAgent = BuildConfig.GEMINI_API_KEY.isNotBlank(),
+            callback = { event ->
+                Log.i("MBA", "Crash group=${event.group.id}, title=${event.report.title}")
+            },
+            batchCallback = { batch ->
+                Log.i("MBA", "Processed ${batch.totalCount} pending crash report(s)")
+            },
+            jsonCallback = { json ->
+                Log.d("MBA", "Latest SDKOnly event JSON: $json")
+            },
+            batchJsonCallback = { json ->
+                Log.d("MBA", "SDKOnly batch JSON: $json")
+            },
+            debug = BuildConfig.DEBUG,
+        )
+    }
+}
+```
+
+Use the runtime API to add safe context and report non-fatal errors:
+
+```kotlin
+MBA.setScreen("CheckoutScreen")
+MBA.addBreadcrumb("Tapped Pay")
+MBA.logError(error, metadata = mapOf("flow" to "checkout"))
+
+val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + MBA.exceptionHandler)
+```
+
+Optional Notion/GitHub delivery is configured by adding the integration module
+and registering ticket backends with `MBAAndroid.setTicketBackends(...)`. Apps
+that do not need Notion or GitHub can stay callback-only and handle the JSON in
+their own app layer.
+
+Treat crash context like logs. Do not put emails, tokens, payment data, raw user
+input, or private content in exception messages, breadcrumbs, screen names, or
+custom metadata.
 
 ## 🤖 Why Koog
 
@@ -130,6 +201,8 @@ Current shape:
 - [x] **PII sanitizer** — email, phone, IP, token, and custom pattern scrubbing before network calls
 - [x] **Crash fingerprinting + dedup** — stable grouping for repeated failures
 - [x] **Android upload path** — AndroidX Startup plus WorkManager processing on next launch
+- [x] **Android ANR exits** — Android 11/API 30+ previous-process ANR detection after app restart
+- [x] **SDKOnly callbacks** — latest and batch object/JSON callbacks for app-owned workflows
 - [x] **Koog analysis** — Gemini/OpenAI analysis through `mba-agent`, with fallback path retained
 - [x] **Notion integration** — linked Bug Tickets and Crash Reports databases
 - [x] **GitHub integration** — issue creation, source reader, reviewer lookup, guarded PR opener
