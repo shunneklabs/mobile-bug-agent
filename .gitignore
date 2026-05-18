@@ -30,9 +30,11 @@ local.properties
 
 # Agent local planning artifacts
 /.agent/
+/.agents/
 /.junie/
 /issues
 /assets/
+/skills-lock.json
 
 # Local runtime/demo data
 /data/
