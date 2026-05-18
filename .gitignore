@@ -42,3 +42,6 @@ local.properties
 
 # Local architecture planning notes
 /scripts/
+
+# Temporary booth presentation site
+/mba-presentation/
