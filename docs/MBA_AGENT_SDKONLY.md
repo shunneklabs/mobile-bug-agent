@@ -1,150 +1,86 @@
-# MBA Agent SDKOnly Owner Notes
+# SDKOnly Mode
 
-This document explains what `mba-agent` owns in SDKOnly mode, how it works with
-`mba-android`, and what app developers should expect from callbacks, raw
-fallback, local aggregation, and optional Notion/GitHub sinks.
+SDKOnly mode lets an app run Mobile Bug Agent without sending crashes to the
+hosted MBA backend. The app captures crashes, processes them locally, receives
+callbacks or JSON payloads, and can optionally send results to Notion or GitHub
+using app-owned credentials.
 
-Scope: SDKOnly only. Hosted backend behavior is intentionally out of scope.
+This mode is useful when a team wants the SDK to act as a standalone crash
+agent inside the application.
 
-## Mental Model
+## What SDKOnly Provides
 
-In SDKOnly mode, the app ships the crash agent locally. The app owns keys,
-runtime settings, optional integrations, and callback handling.
+In SDKOnly mode, Mobile Bug Agent can:
 
-`mba-agent` is the processing brain. It does not capture Android crashes and it
-does not know about Android WorkManager. It receives a `RawCrashReport`, turns it
-into an analyzed or fallback `ProcessedCrashReport`, groups it locally, and
-returns an `MBAAgentEvent`.
+- capture fatal JVM/Kotlin crashes
+- record explicitly logged non-fatal errors
+- detect supported Android ANR exits after the next app start
+- build a structured raw crash report
+- run Koog/LLM crash analysis when configured
+- fall back to a raw technical report when analysis is disabled or fails
+- group repeated crashes by app, environment, and fingerprint
+- emit the latest processed event to app callbacks
+- emit a batch event containing all processed crashes from a worker run
+- optionally create or update Notion and GitHub records
 
-`mba-android` is the Android adapter. It captures pending crash files, reads
-runtime config, builds the agent pipeline, processes every pending crash, and
-publishes app-facing callbacks/flows.
+The app controls the runtime mode, LLM configuration, callbacks, and optional
+external integrations.
 
-Optional modules such as `mba-notion` and `mba-github` provide ticket backends.
-They are not dependencies of `mba-agent` or `mba-android` unless the app chooses
-to add and register them.
+## Installation Shape
 
-## Module Responsibilities
+A typical Android app depends on the Android adapter:
 
-### `mba-core`
-
-Owns shared data and capture primitives:
-
-- `RawCrashReport`
-- `ProcessedCrashReport`
-- `DeviceContext`
-- `Severity`
-- `CrashFingerprint`
-- `CrashReportBuilder`
-- `MBAConfig`
-- `MBAMode`
-- `LLMConfig`
-- platform crash writing through `CrashWriter`
-
-It does not run Koog and does not create tickets.
-
-### `mba-agent`
-
-Owns SDKOnly processing contracts and orchestration:
-
-- Koog/LLM crash analysis through `CrashAnalysisAgent`
-- SDKOnly orchestration through `SdkOnlyCrashOrchestrator`
-- non-agentic raw fallback through `LocalFallbackCrashOrchestrator`
-- delivery ordering through `CrashDeliveryPipeline`
-- local aggregation contracts:
-  - `LocalCrashAggregationStore`
-  - `LocalBugGroup`
-  - `LocalCrashOccurrence`
-- app-facing event contracts:
-  - `MBAAgentEvent`
-  - `MBAAgentBatchEvent`
-  - `MBAAgentCallback`
-  - `MBAAgentBatchCallback`
-- generic optional sink contract:
-  - `MBAAgentSink`
-  - `MBAAgentSinkResult`
-- generic ticket backend bridge:
-  - `TicketBackendAgentSink`
-
-It does not depend directly on Notion, GitHub, Android, or WorkManager.
-
-### `mba-android`
-
-Owns Android runtime wiring:
-
-- `MBAAndroid.install(context)`
-- `MBAAndroid.saveConfig(...)`
-- `CrashUploadWorker`
-- reading pending crash files
-- Android file-backed local aggregation store
-- publishing:
-  - `agentEvents`
-  - `agentEventJson`
-  - `agentEventBatches`
-  - `agentBatchEventJson`
-  - latest callback
-  - batch callback
-  - JSON callbacks
-
-It does not contain Notion or GitHub clients.
-
-### `mba-notion` and `mba-github`
-
-Own optional external delivery:
-
-- Notion ticket creation/update
-- GitHub issue creation/update
-
-The app registers these with `MBAAndroid.setTicketBackends(...)` or
-`MBAAndroid.setExternalSinks(...)`.
-
-## SDKOnly Runtime Flow
-
-High-level flow:
-
-```text
-App crash / logged error
-        |
-        v
-mba-core CrashWriter writes RawCrashReport JSON to disk
-        |
-        v
-mba-android CrashUploadWorker starts on next app run
-        |
-        v
-PendingCrashProcessor reads all mba_crash_*.json files
-        |
-        v
-CrashDeliveryPipeline processes each raw crash
-        |
-        +-- if hosted upload is configured: try backend /report first
-        |
-        +-- if SDKOnly agent enabled: run Koog via SdkOnlyCrashOrchestrator
-        |
-        +-- if Koog disabled, missing, or fails: run LocalFallbackCrashOrchestrator
-        |
-        v
-LocalCrashAggregationStore upserts group and occurrence
-        |
-        v
-Optional Notion/GitHub sinks sync external artifacts
-        |
-        v
-Worker deletes successfully processed crash file
-        |
-        v
-MBAAndroid publishes latest callback + optional batch callback/flows
+```kotlin
+implementation(project(":mba-android"))
 ```
 
-Important: the worker processes all pending crash files so old crashes are not
-lost. The default app callback is not called once per file; it receives the
-latest event once per worker run. Apps that need all processed events can use the
-batch callback or batch flow.
+Optional external delivery modules are added only when the app needs them:
 
-## What Koog Produces
+```kotlin
+implementation(project(":mba-notion"))
+implementation(project(":mba-github"))
+```
 
-When `useAgent=true` and an LLM key is available, `CrashAnalysisAgent` runs Koog
-and builds a richer `ProcessedCrashReport`:
+The Android adapter brings in the shared core and local agent pieces it needs.
+Apps do not need to add each lower-level module separately when consuming the
+published Android SDK.
+
+## Runtime Flow
+
+```text
+App crash, ANR exit, or logged non-fatal error
+        |
+        v
+MBA writes RawCrashReport JSON to app-private storage
+        |
+        v
+On the next worker run, pending crash files are read
+        |
+        v
+SDKOnly pipeline processes each crash
+        |
+        +-- Koog/LLM analysis, if enabled and configured
+        |
+        +-- raw fallback, if analysis is disabled or fails
+        |
+        v
+Local aggregation creates or updates one bug group
+        |
+        v
+Optional Notion/GitHub sinks create or update external records
+        |
+        v
+App receives latest callback and optional batch callback/flow
+```
+
+The SDK does not run network uploads or LLM analysis inside the fatal crash
+handler. During a fatal crash, the reliable action is to write the raw crash
+snapshot to disk. Processing happens later, after the app starts again.
+
+## Agent Analysis
+
+When local agent analysis is enabled and an LLM key is configured, the SDK runs
+Koog against the crash-context payload and produces a richer report:
 
 - title
 - description
@@ -152,253 +88,98 @@ and builds a richer `ProcessedCrashReport`:
 - confidence
 - steps to reproduce
 - possible cause
-- parsed crash file
-- parsed crash line
-- parsed crash method
+- parsed crash file, line, and method when available
 - app-code classification
-- sanitized message/stack/breadcrumbs
+- sanitized crash message, stack trace, and breadcrumbs
 - fingerprint
 
-The raw crash is still included in the event as `event.raw`, including device
-and app metadata.
+The raw crash is still available in the callback event. This lets the app show
+or forward the original technical context when needed.
 
-## Raw Fallback Behavior
+## Raw Fallback
 
 Raw fallback is used when:
 
-- `useAgent=false`
-- no LLM key is configured
-- Koog/LLM throws or the key is invalid
-- app wants callback/ticket payloads without agentic content
+- local agent analysis is turned off
+- no LLM key is available
+- the configured LLM key is invalid
+- Koog/LLM analysis fails
+- the app intentionally wants non-agentic crash payloads
 
-Fallback still creates a `ProcessedCrashReport`, but it is derived locally from
-the raw crash via `CrashReportBuilder`.
+Fallback reports are still useful. They include exception type, message, stack
+trace, app version, build type, device model, OS version, screen name when set,
+breadcrumbs when added, custom metadata when provided, fingerprint, and local
+grouping details.
 
-Fallback events are marked:
+Fallback events are marked as non-agentic so the app can tell the difference
+between analyzed reports and raw-derived reports.
 
-```text
-agentic = false
-analysisSource = RAW_FALLBACK
-```
+## Duplicate Grouping
 
-If Koog attempted analysis and failed, the SDKOnly orchestrator can also include:
-
-```text
-analysisError = <error message>
-```
-
-Fallback still includes:
-
-- raw exception type
-- raw message
-- raw stack trace
-- device info
-- app version
-- build type/environment
-- screen
-- breadcrumbs
-- custom metadata
-- fingerprint
-- local grouping data
-
-If Notion/GitHub sinks are selected, fallback sends the raw-derived event to
-those sinks. It does not invent agentic content.
-
-## Local Aggregation
-
-SDKOnly aggregation groups crashes locally by:
+SDKOnly grouping uses:
 
 ```text
 appId + environment + fingerprint
 ```
 
-The current event model separates:
+The first occurrence creates a local bug group. Later occurrences with the same
+grouping key update that group instead of creating a second parent bug.
 
-- `LocalBugGroup`: grouped incident
-- `LocalCrashOccurrence`: raw occurrence metadata
-- `MBAAgentEvent`: the processed event passed to callbacks/sinks
+The app can still receive every processed occurrence through the batch callback
+or batch flow. The default latest callback is optimized for the newest event
+from the worker run.
 
-A repeated crash should produce a new occurrence and update the existing group.
-Optional external sinks should not create a second parent artifact for the same
-group when the existing URL/state is already stored.
+## Callbacks and JSON Payloads
 
-## External Sinks
+Apps can receive processed results as Kotlin objects or JSON strings.
 
-`mba-agent` only knows the generic `MBAAgentSink` contract:
-
-```kotlin
-public interface MBAAgentSink {
-    public val name: String
-    public suspend fun sync(event: MBAAgentEvent): MBAAgentSinkResult
-}
-```
-
-`mba-notion` and `mba-github` can be plugged in by the app, but the agent module
-does not import them directly.
-
-Expected sink behavior:
-
-- New group: create parent ticket/issue if selected.
-- Duplicate group: update existing parent or create only an occurrence row if
-  that sink supports it.
-- GitHub issue creation should be idempotent for a group.
-- Notion parent row creation should be idempotent for a group.
-
-## Android App-Facing Callbacks
-
-`MBAAndroid.saveConfig(...)` supports object callbacks and JSON callbacks.
-
-Latest-only callbacks:
+Use the latest callback when the app only needs the newest processed event:
 
 ```kotlin
-callback = MBAAgentCallback { event ->
-    // Latest processed crash event from this worker run.
-}
-
-jsonCallback = { json ->
-    // Same latest event serialized by the SDK.
-}
+MBAAndroid.saveConfig(
+    context = app,
+    callback = { event ->
+        // event.latest processed crash result
+    },
+)
 ```
 
-Batch callbacks:
+Use the batch callback when the app needs all processed crashes from the worker
+run:
 
 ```kotlin
-batchCallback = MBAAgentBatchCallback { batch ->
-    // batch.latest is the same event delivered to callback.
-    // batch.events contains all processed pending events.
-}
-
-batchJsonCallback = { json ->
-    // Full batch JSON serialized by the SDK.
-}
+MBAAndroid.saveConfig(
+    context = app,
+    batchCallback = { batch ->
+        // batch.events contains every processed event from this run
+    },
+)
 ```
 
-Flows are also available:
+JSON callbacks are useful when the host app wants to hand the payload to its own
+pipeline, backend, logging system, or custom ticketing workflow.
 
-```kotlin
-MBAAndroid.agentEvents
-MBAAndroid.agentEventJson
-MBAAndroid.agentEventBatches
-MBAAndroid.agentBatchEventJson
-```
+## Optional Notion and GitHub Delivery
 
-Architectural rule:
+Notion and GitHub are optional modules. They are not required for SDKOnly mode.
 
-- The default callback is latest-only to keep app behavior simple.
-- The batch callback/flow exists so no processed crash is hidden from apps that
-  want full control.
-- Internal processing still handles all pending crash files.
+When enabled, the SDK sends the processed or raw-fallback result to the
+registered sinks. The app owns those credentials and decides whether to enable
+one integration, both integrations, or neither.
 
-## Sample App Runtime Controls
+Duplicate crashes should update the existing grouped record instead of creating
+new parent tickets for the same bug group.
 
-The sample app uses `SampleRuntime` to keep processing mode dynamic at the app
-layer.
+## Privacy Boundary
 
-Build values still exist as defaults:
+SDKOnly mode analyzes crash-context data only. It does not inspect app
+databases, screen contents, contacts, photos, location, network traffic,
+cookies, or user sessions.
 
-```properties
-MBA_SAMPLE_MODE=sdkOnly
-MBA_SAMPLE_USE_AGENT=true
-```
+Crash context can still contain sensitive values if the host app puts those
+values in exception messages, stack traces, breadcrumbs, screen names, ANR
+traces, or custom metadata. Treat crash context like logs: avoid adding secrets
+or raw personal data.
 
-At runtime, the sample UI can switch:
-
-- SDKOnly vs hosted backend
-- Koog agent on/off
-- optional integrations:
-  - callback only
-  - Notion
-  - GitHub
-  - both
-
-The runtime selection is persisted in sample app `SharedPreferences` and applied
-through `MBAAndroid.saveConfig(...)`.
-
-## Key Runtime Flags
-
-### `sendToBackend`
-
-Owned by `mba-android` config.
-
-- `true`: try backend upload first.
-- `false`: process locally through SDKOnly/fallback path.
-
-### `useAgent`
-
-Owned by SDK/app config.
-
-- `true`: create local Koog/LLM analyzer when an LLM key exists.
-- `false`: skip Koog and use raw fallback.
-
-SDKOnly with a blank LLM key is valid only when `useAgent=false`.
-
-### `skipNotion`
-
-Stored on raw crash for hosted/backend flows and used by external integrations
-where relevant.
-
-### `skipGitIssue`
-
-SDKOnly sink routing flag used by `SdkOnlyCrashOrchestrator` and
-`LocalFallbackCrashOrchestrator`. In Android wiring, GitHub is skipped when no
-GitHub sink is registered.
-
-## Event Field Guide
-
-`MBAAgentEvent` is the owner-facing event payload.
-
-Important fields:
-
-- `mode`: `SDK_ONLY` or `SDK_ONLY_FALLBACK`
-- `group`: grouped bug state
-- `occurrence`: current raw occurrence metadata
-- `report`: analyzed or fallback processed report
-- `raw`: original raw crash snapshot
-- `externalState`: known Notion/GitHub URLs and IDs
-- `isNewGroup`: whether this occurrence created the group
-- `agentic`: true only when Koog produced the report
-- `analysisSource`: `KOOG`, `RAW_FALLBACK`, or `LOCAL_DUPLICATE`
-- `analysisError`: set when analysis failed and fallback was used
-
-`MBAAgentBatchEvent` wraps:
-
-- `latest`: latest event by raw crash timestamp
-- `events`: all processed events from that worker run
-- `totalCount`
-- `successCount`
-- `failCount`
-
-## What `mba-agent` Should Not Own
-
-Keep these out of `mba-agent`:
-
-- Android APIs
-- WorkManager scheduling
-- Notion SDK/client imports
-- GitHub SDK/client imports
-- server-only APIs
-- UI/sample runtime preferences
-- direct file paths for Android app storage
-
-Use interfaces and adapters instead.
-
-## Current Owner Checklist
-
-When changing SDKOnly behavior, verify:
-
-- `:mba-agent:jvmTest`
-- `:mba-android:testDebugUnitTest`
-- `:mba-sample:assembleDebug`
-
-Also manually check Logcat labels:
-
-```text
-MBA/Sample: SDKOnly latest callback...
-MBA/Sample: App-layer latest callback JSON[0]: ...
-MBA/Sample: SDKOnly batch callback...
-MBA/Sample: App-layer batch callback JSON[0]: ...
-MBA/MBAAndroid: SDKOnly callback batch JSON[0]: ...
-```
-
-If only backend mode is enabled, local SDKOnly callbacks may not appear because
-the backend accepted the crash and local processing was skipped.
+See `MONITORING_SECURITY_CLAIMS.md` for the complete monitoring and privacy
+boundary.
