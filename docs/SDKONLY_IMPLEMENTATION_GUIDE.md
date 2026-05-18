@@ -24,6 +24,9 @@ dependencies {
 }
 ```
 
+Before Maven Central is available, pre-release artifacts can be consumed from
+GitHub Packages. See [GitHub Packages SDK integration](GITHUB_PACKAGES_SDK.md).
+
 When working inside this repository:
 
 ```kotlin

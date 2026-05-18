@@ -1,7 +1,11 @@
+import org.gradle.api.publish.maven.MavenPublication
+
 plugins {
     id("com.android.library")
     alias(libs.plugins.kotlin.serialization)
 }
+
+apply(from = rootProject.file("gradle/publishing.gradle.kts"))
 
 android {
     namespace = "dev.sunnat629.mba.android"
@@ -18,6 +22,23 @@ android {
 
     buildFeatures {
         buildConfig = true
+    }
+
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+        }
+    }
+}
+
+afterEvaluate {
+    extensions.configure<org.gradle.api.publish.PublishingExtension>("publishing") {
+        publications {
+            create<MavenPublication>("release") {
+                from(components["release"])
+                artifactId = "mba-android"
+            }
+        }
     }
 }
 

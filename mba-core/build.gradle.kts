@@ -4,6 +4,8 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+apply(from = rootProject.file("gradle/publishing.gradle.kts"))
+
 kotlin {
     android {
         namespace = "dev.sunnat629.mba.core"
