@@ -31,13 +31,10 @@ class MBASampleApp : Application() {
 
         MBA.configure(
             MBAConfig.Builder().apply {
-                this.mode = when (mode) {
-                    SampleDeliveryMode.SDK_ONLY -> MBAMode.SdkOnly(llm = SampleRuntime.geminiConfig)
-                    SampleDeliveryMode.HOSTED -> MBAMode.Saas(projectKey = "sample-app-debug")
-                }
+                this.mode = MBAMode.SdkOnly(llm = SampleRuntime.geminiConfig)
                 debug = true
                 useAgent = settings.useAgent
-                autoFix = mode == SampleDeliveryMode.HOSTED
+                autoFix = false
                 skipNotion = false
             }.build()
         )

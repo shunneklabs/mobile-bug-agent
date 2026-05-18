@@ -88,7 +88,7 @@ object SampleRuntime {
             backendEndpoint = BuildConfig.MBA_BACKEND_ENDPOINT,
             projectKey = "sample-app-debug",
             serverApiKey = BuildConfig.MBA_SERVER_API_KEY,
-            sendToBackend = appliedSettings.deliveryMode == SampleDeliveryMode.HOSTED,
+            sendToBackend = false,
             llm = geminiConfig,
             useAgent = appliedSettings.useAgent,
             callback = { event ->
@@ -118,7 +118,10 @@ object SampleRuntime {
     }
 
     private fun SampleProcessingSettings.normalized(): SampleProcessingSettings =
-        if (useAgent && !hasLlmConfig) copy(useAgent = false) else this
+        copy(
+            deliveryMode = SampleDeliveryMode.SDK_ONLY,
+            useAgent = useAgent && hasLlmConfig,
+        )
 
     private fun logChunkedJson(label: String, json: String) {
         MBALog.i(TAG, "$label:")
@@ -128,14 +131,9 @@ object SampleRuntime {
     }
 
     private fun String.toDeliveryMode(): SampleDeliveryMode =
-        if (equals("sdkOnly", ignoreCase = true) || equals("sdk-only", ignoreCase = true)) {
-            SampleDeliveryMode.SDK_ONLY
-        } else {
-            SampleDeliveryMode.HOSTED
-        }
+        SampleDeliveryMode.SDK_ONLY
 }
 
 enum class SampleDeliveryMode(val label: String) {
     SDK_ONLY("SDKOnly"),
-    HOSTED("Hosted backend"),
 }

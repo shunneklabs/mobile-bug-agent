@@ -1,7 +1,19 @@
 package dev.sunnat629.mba.sample
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,13 +21,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -23,6 +38,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -34,7 +50,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -42,25 +60,26 @@ import dev.sunnat629.mba.core.MBA
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun CrashTestScreen() {
     LaunchedEffect(Unit) {
-        MBA.setScreen("SampleCrashLab")
-        MBA.addBreadcrumb("Opened SampleCrashLab")
+        MBA.setScreen("KotlinConfCrashLab")
+        MBA.addBreadcrumb("Opened KotlinConfCrashLab")
     }
 
-    var status by remember { mutableStateOf("Ready. Fatal scenarios close the app; reopen it to let WorkManager process the saved crash.") }
+    var status by remember {
+        mutableStateOf("Ready. Trigger a scenario, reopen the app after a fatal crash, and watch SDKOnly process the saved report.")
+    }
     val context = LocalContext.current
     val settings by SampleRuntime.settings.collectAsState()
-    val mode = settings.deliveryMode
     val integrationMode by SampleIntegrationRuntime.mode.collectAsState()
     val scenarios = remember { sampleScenarios() }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("MBA Sample Crash Lab") },
+                title = { Text("KotlinConf Crash Lab") },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
@@ -73,49 +92,46 @@ fun CrashTestScreen() {
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            ModeCard(mode)
-            ConfigCard(settings)
-            ProcessingCard(
+            KotlinConfHero(settings = settings, integrationMode = integrationMode)
+
+            AgentControls(
                 settings = settings,
                 hasLlm = SampleRuntime.hasLlmConfig,
-                onModeSelect = { requested ->
-                    val applied = SampleRuntime.selectDeliveryMode(context, requested)
-                    status = "Processing route: ${applied.deliveryMode.label}. Trigger a crash to test it."
-                },
                 onUseAgentChange = { enabled ->
                     val applied = SampleRuntime.setUseAgent(context, enabled)
-                    status = "Agent: ${if (applied.useAgent) "Koog enabled" else "raw fallback"}. Trigger a crash to test it."
-                },
-                onHostedBackendChange = { enabled ->
-                    val requested = if (enabled) SampleDeliveryMode.HOSTED else SampleDeliveryMode.SDK_ONLY
-                    val applied = SampleRuntime.selectDeliveryMode(context, requested)
-                    status = "Processing route: ${applied.deliveryMode.label}. Trigger a crash to test it."
+                    status = if (applied.useAgent) {
+                        "Koog agent is on. Next crash will include title, cause, severity, and reproduction hints."
+                    } else {
+                        "Raw fallback is on. Next crash will emit technical JSON without LLM analysis."
+                    }
                 },
                 onReset = {
                     val applied = SampleRuntime.resetToBuildDefaults(context)
-                    status = "Processing route reset to build defaults: ${applied.deliveryMode.label}, agent=${if (applied.useAgent) "on" else "raw fallback"}."
+                    status = "Reset for KotlinConf: SDKOnly, backend off, agent=${if (applied.useAgent) "on" else "raw fallback"}."
                 },
             )
-            IntegrationCard(
+
+            IntegrationPanel(
                 selected = integrationMode,
                 onSelect = { requested ->
                     val applied = SampleIntegrationRuntime.select(context, requested)
-                    status = "Integration route: ${applied.label}. Trigger a crash to test this app-layer setup."
+                    status = "App-layer delivery changed to ${applied.label}. SDKOnly will still emit callback JSON first."
                 },
             )
 
-            StatusCard(status)
+            StatusBanner(status)
 
             SectionHeader(
                 title = "Crash Scenarios",
-                body = "Use these to test grouping, Koog summaries, Notion parent/occurrence rows, and optional GitHub issue creation.",
+                body = "Each scenario is deterministic, so repeated runs should update the same local bug group instead of creating duplicate parent tickets.",
             )
 
-            scenarios.forEach { scenario ->
+            scenarios.forEachIndexed { index, scenario ->
                 ScenarioCard(
+                    index = index + 1,
                     scenario = scenario,
                     onRun = {
                         MBA.setScreen(scenario.screen)
@@ -123,9 +139,9 @@ fun CrashTestScreen() {
                         MBA.addBreadcrumb("Expected grouping key: ${scenario.expectedGrouping}")
                         runScenario(scenario)
                         status = if (scenario.fatal) {
-                            "${scenario.statusLabel} '${scenario.title}' triggered. Reopen the app to process it."
+                            "${scenario.statusLabel} triggered. Reopen the app to process '${scenario.title}'."
                         } else {
-                            "Non-fatal scenario '${scenario.title}' logged. It will be processed by the SDK worker."
+                            "Logged '${scenario.title}'. The worker will process it through SDKOnly callbacks."
                         }
                     },
                 )
@@ -134,71 +150,89 @@ fun CrashTestScreen() {
             HorizontalDivider()
 
             SectionHeader(
-                title = "What Should Happen",
-                body = when (mode) {
-                    SampleDeliveryMode.SDK_ONLY ->
-                        "SDKOnly: app captures crash, runs Koog on-device with the app LLM key, updates local aggregation, invokes callback/JSON, then uses the selected app-layer integration route."
-                    SampleDeliveryMode.HOSTED ->
-                        "Hosted: app uploads raw crash to MBA Server. Backend Koog owns analysis, aggregation, Notion, and GitHub. The app does not create duplicate tickets."
-                },
+                title = "Event Flow",
+                body = "SDKOnly captures the crash, stores it privately, processes it after restart, groups duplicates locally, emits latest and batch callbacks, then optional app-layer Notion/GitHub sinks run if selected.",
             )
+            Spacer(Modifier.height(8.dp))
         }
     }
 }
 
 @Composable
-private fun ModeCard(mode: SampleDeliveryMode) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = when (mode) {
-                SampleDeliveryMode.SDK_ONLY -> Color(0xFF123B2A)
-                SampleDeliveryMode.HOSTED -> Color(0xFF152B52)
-            },
-        ),
+private fun KotlinConfHero(
+    settings: SampleProcessingSettings,
+    integrationMode: SampleIntegrationMode,
+) {
+    val pulse by rememberInfiniteTransition(label = "agent-pulse")
+        .animateFloat(
+            initialValue = 0.55f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 1100, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "agent-alpha",
+        )
+
+    Surface(
         modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = Color(0xFF0F3329),
+        contentColor = Color.White,
+        tonalElevation = 3.dp,
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(mode.label, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text(
-                when (mode) {
-                    SampleDeliveryMode.SDK_ONLY -> "Standalone agent mode. The app owns LLM keys and optional Notion/GitHub keys."
-                    SampleDeliveryMode.HOSTED -> "Backend mode. The app sends raw crashes to /report and the server owns agent work."
-                },
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-    }
-}
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        "KotlinConf SDKOnly Agent",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                    )
+                    Text(
+                        "Crash capture, Koog analysis, duplicate grouping, and app-owned delivery in one Android demo.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFFD7EFE5),
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .padding(start = 12.dp)
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF47D18C).copy(alpha = pulse)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("K", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
+                }
+            }
 
-@Composable
-private fun ConfigCard(settings: SampleProcessingSettings) {
-    val hasLlm = SampleRuntime.hasLlmConfig
-    val hasNotion = BuildConfig.NOTION_API_KEY.isNotBlank() && BuildConfig.NOTION_TICKET_DB_ID.isNotBlank()
-    val hasBackend = BuildConfig.MBA_BACKEND_ENDPOINT.isNotBlank()
-    val hasGitHub = BuildConfig.GITHUB_TOKEN.isNotBlank() && BuildConfig.GITHUB_OWNER.isNotBlank() && BuildConfig.GITHUB_REPO.isNotBlank()
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Configuration", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ConfigChip("Mode", settings.deliveryMode.label)
-                ConfigChip("Agent", if (settings.useAgent) "on" else "raw fallback")
-                ConfigChip("Mode default", BuildConfig.MBA_SAMPLE_MODE)
-                ConfigChip("Agent default", BuildConfig.MBA_SAMPLE_USE_AGENT)
-                ConfigChip("Gemini", if (hasLlm) "ready" else "missing")
-                ConfigChip("Notion", if (hasNotion) "ready" else "missing")
-                ConfigChip("Backend", if (hasBackend && settings.deliveryMode == SampleDeliveryMode.HOSTED) BuildConfig.MBA_BACKEND_ENDPOINT else "off")
-                ConfigChip("GitHub", if (hasGitHub) "${BuildConfig.GITHUB_OWNER}/${BuildConfig.GITHUB_REPO}" else "off")
+                HeroPill("Mode", settings.deliveryMode.label)
+                HeroPill("Backend", "off")
+                HeroPill("Agent", if (settings.useAgent) "Koog" else "raw")
+                HeroPill("Delivery", integrationMode.label)
             }
         }
     }
 }
 
 @Composable
-private fun ConfigChip(label: String, value: String) {
+private fun HeroPill(label: String, value: String) {
     Surface(
-        shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = MaterialTheme.shapes.medium,
+        color = Color.White.copy(alpha = 0.14f),
+        contentColor = Color.White,
     ) {
         Text(
             "$label: $value",
@@ -208,167 +242,148 @@ private fun ConfigChip(label: String, value: String) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ProcessingCard(
+private fun AgentControls(
     settings: SampleProcessingSettings,
     hasLlm: Boolean,
-    onModeSelect: (SampleDeliveryMode) -> Unit,
     onUseAgentChange: (Boolean) -> Unit,
-    onHostedBackendChange: (Boolean) -> Unit,
     onReset: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Processing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("KotlinConf Route", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(
-                        "Active: ${settings.deliveryMode.label}, agent=${if (settings.useAgent) "Koog" else "raw fallback"}",
+                        "SaaS is disabled for this event build. The sample always runs SDKOnly with backend upload off.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                OutlinedButton(onClick = onReset) {
-                    Text("Use defaults")
+                TextButton(onClick = onReset) {
+                    Text("Reset")
                 }
             }
 
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ProcessingButton(
-                    label = "SDKOnly",
-                    selected = settings.deliveryMode == SampleDeliveryMode.SDK_ONLY,
-                    onClick = { onModeSelect(SampleDeliveryMode.SDK_ONLY) },
-                )
-                ProcessingButton(
-                    label = "Hosted backend",
-                    selected = settings.deliveryMode == SampleDeliveryMode.HOSTED,
-                    onClick = { onModeSelect(SampleDeliveryMode.HOSTED) },
-                )
+                ConfigChip("SDKOnly", "locked")
+                ConfigChip("Backend", "off")
+                ConfigChip("Gemini", if (hasLlm) "ready" else "missing")
+                ConfigChip("Build", BuildConfig.VERSION_NAME)
             }
 
-            Row(
+            val agentColor by animateColorAsState(
+                targetValue = if (settings.useAgent) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                label = "agent-control-color",
+            )
+            Surface(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+                shape = MaterialTheme.shapes.medium,
+                color = agentColor,
             ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("Use hosted backend", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        if (settings.deliveryMode == SampleDeliveryMode.HOSTED) {
-                            "Send raw crashes to MBA Server"
-                        } else {
-                            "Process locally in SDKOnly mode"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text("Use Koog agent", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                        Crossfade(
+                            targetState = Triple(settings.useAgent, hasLlm, settings.deliveryMode),
+                            label = "agent-caption",
+                        ) { (enabled, llmReady, _) ->
+                            Text(
+                                when {
+                                    enabled -> "LLM analysis adds title, severity, steps, and possible cause."
+                                    llmReady -> "Raw fallback selected; callbacks still include crash and device metadata."
+                                    else -> "Add GEMINI_API_KEY to enable agent analysis."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = settings.useAgent,
+                        onCheckedChange = onUseAgentChange,
+                        enabled = hasLlm,
                     )
                 }
-                Switch(
-                    checked = settings.deliveryMode == SampleDeliveryMode.HOSTED,
-                    onCheckedChange = onHostedBackendChange,
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("Use Koog agent", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        when {
-                            settings.useAgent -> "LLM analysis enabled"
-                            hasLlm -> "Raw callback/ticket fallback"
-                            else -> "Raw fallback; Gemini key missing"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(
-                    checked = settings.useAgent,
-                    onCheckedChange = onUseAgentChange,
-                    enabled = hasLlm,
-                )
             }
         }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ProcessingButton(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    if (selected) {
-        Button(onClick = onClick) {
-            Text(label)
-        }
-    } else {
-        OutlinedButton(onClick = onClick) {
-            Text(label)
-        }
-    }
-}
-
-@Composable
-private fun IntegrationCard(
+private fun IntegrationPanel(
     selected: SampleIntegrationMode,
     onSelect: (SampleIntegrationMode) -> Unit,
 ) {
     val hasNotion = SampleIntegrationRuntime.hasNotionConfig
     val hasGitHub = SampleIntegrationRuntime.hasGitHubConfig
 
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("App-layer Integrations", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(
-                        "Active: ${selected.label}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                ) {
-                    Text(
-                        selected.label,
-                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("App-layer Delivery", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    "SDKOnly emits JSON first. The app decides whether to ignore it, store it, or forward it to Notion and GitHub.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                IntegrationButton(
+                DeliveryChip(
                     label = "Callback only",
                     selected = selected == SampleIntegrationMode.CALLBACK_ONLY,
                     enabled = true,
                     onClick = { onSelect(SampleIntegrationMode.CALLBACK_ONLY) },
                 )
-                IntegrationButton(
-                    label = "Use Notion",
+                DeliveryChip(
+                    label = "Notion",
                     selected = selected == SampleIntegrationMode.NOTION,
                     enabled = hasNotion,
                     onClick = { onSelect(SampleIntegrationMode.NOTION) },
                 )
-                IntegrationButton(
-                    label = "Use GitHub",
+                DeliveryChip(
+                    label = "GitHub",
                     selected = selected == SampleIntegrationMode.GITHUB,
                     enabled = hasGitHub,
                     onClick = { onSelect(SampleIntegrationMode.GITHUB) },
                 )
-                IntegrationButton(
-                    label = "Use both",
+                DeliveryChip(
+                    label = "Both",
                     selected = selected == SampleIntegrationMode.BOTH,
                     enabled = hasNotion && hasGitHub,
                     onClick = { onSelect(SampleIntegrationMode.BOTH) },
                 )
+            }
+
+            AnimatedVisibility(visible = selected != SampleIntegrationMode.CALLBACK_ONLY) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                ) {
+                    Text(
+                        "Selected sinks receive grouped bug updates. Callback JSON still stays available for app-owned handling.",
+                        modifier = Modifier.padding(12.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             }
 
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -380,30 +395,46 @@ private fun IntegrationCard(
 }
 
 @Composable
-private fun IntegrationButton(
+private fun DeliveryChip(
     label: String,
     selected: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
-    if (selected) {
-        Button(onClick = onClick, enabled = enabled) {
-            Text(label)
-        }
-    } else {
-        OutlinedButton(onClick = onClick, enabled = enabled) {
-            Text(label)
-        }
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        enabled = enabled,
+        label = { Text(label) },
+    )
+}
+
+@Composable
+private fun ConfigChip(label: String, value: String) {
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+    ) {
+        Text(
+            "$label: $value",
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            style = MaterialTheme.typography.labelMedium,
+        )
     }
 }
 
 @Composable
-private fun StatusCard(status: String) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+private fun StatusBanner(status: String) {
+    Surface(
         modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.secondaryContainer,
     ) {
-        Text(status, modifier = Modifier.padding(14.dp), style = MaterialTheme.typography.bodyMedium)
+        Text(
+            status,
+            modifier = Modifier.padding(14.dp),
+            style = MaterialTheme.typography.bodyMedium,
+        )
     }
 }
 
@@ -416,30 +447,49 @@ private fun SectionHeader(title: String, body: String) {
 }
 
 @Composable
-private fun ScenarioCard(scenario: CrashScenario, onRun: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(scenario.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    Text(scenario.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = if (scenario.fatal) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.tertiaryContainer,
-                ) {
+private fun ScenarioCard(index: Int, scenario: CrashScenario, onRun: () -> Unit) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
+                ScenarioIndex(index)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        Text(
+                            scenario.title,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        ScenarioBadge(scenario)
+                    }
                     Text(
-                        scenario.badgeLabel,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                        style = MaterialTheme.typography.labelSmall,
+                        scenario.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
-            Text(
-                "Expected grouping: ${scenario.expectedGrouping}",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+            ) {
+                Text(
+                    "Grouping: ${scenario.expectedGrouping}",
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             if (scenario.fatal) {
                 Button(
                     onClick = onRun,
@@ -454,6 +504,44 @@ private fun ScenarioCard(scenario: CrashScenario, onRun: () -> Unit) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ScenarioIndex(index: Int) {
+    Surface(
+        modifier = Modifier.size(32.dp),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.primaryContainer,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(index.toString(), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun ScenarioBadge(scenario: CrashScenario) {
+    val alpha by rememberInfiniteTransition(label = "scenario-badge-${scenario.title}")
+        .animateFloat(
+            initialValue = if (scenario.fatal) 0.72f else 1f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "scenario-badge-alpha",
+        )
+    Surface(
+        modifier = Modifier.graphicsLayer { this.alpha = alpha },
+        shape = MaterialTheme.shapes.small,
+        color = if (scenario.fatal) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.tertiaryContainer,
+    ) {
+        Text(
+            scenario.badgeLabel,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+            style = MaterialTheme.typography.labelSmall,
+        )
     }
 }
 
@@ -472,7 +560,7 @@ private data class CrashScenario(
 private fun sampleScenarios(): List<CrashScenario> = listOf(
     CrashScenario(
         title = "Checkout null payment token",
-        description = "Deterministic NPE. Trigger this twice to verify one parent bug plus occurrence count update.",
+        description = "Deterministic NPE. Trigger twice to verify one grouped bug and a higher occurrence count.",
         screen = "CheckoutScreen",
         fatal = true,
         expectedGrouping = "same fingerprint on repeated runs",
@@ -480,7 +568,7 @@ private fun sampleScenarios(): List<CrashScenario> = listOf(
     ),
     CrashScenario(
         title = "Catalog index out of bounds",
-        description = "Different stack and exception type. Should create a separate parent bug.",
+        description = "Different stack and exception type. This should create a separate grouped bug.",
         screen = "CatalogScreen",
         fatal = true,
         expectedGrouping = "separate fingerprint",
@@ -488,7 +576,7 @@ private fun sampleScenarios(): List<CrashScenario> = listOf(
     ),
     CrashScenario(
         title = "Main thread ANR",
-        description = "Blocks the UI thread long enough for Android to report an ANR. On Android 11+, reopen the app to let MBA convert the previous ANR exit into a crash report.",
+        description = "Blocks the UI thread long enough for Android to report an ANR. Reopen the app to convert the previous ANR exit into a report.",
         screen = "ANRScreen",
         fatal = true,
         expectedGrouping = "ANR exit reason fingerprint after restart",
@@ -501,7 +589,7 @@ private fun sampleScenarios(): List<CrashScenario> = listOf(
     ),
     CrashScenario(
         title = "Session state violation",
-        description = "Caught non-fatal error with metadata and breadcrumbs. Useful for SDKOnly callback testing.",
+        description = "Caught non-fatal error with metadata and breadcrumbs. Useful for callback JSON testing.",
         screen = "SessionScreen",
         fatal = false,
         expectedGrouping = "stable non-fatal fingerprint",

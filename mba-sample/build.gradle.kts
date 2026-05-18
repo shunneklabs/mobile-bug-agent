@@ -37,7 +37,7 @@ android {
             ?: "http://10.0.2.2:8080"
         val sampleMode = props.getProperty("MBA_SAMPLE_MODE")
             ?: System.getenv("MBA_SAMPLE_MODE")
-            ?: "hosted"
+            ?: "sdkOnly"
         val sampleUseAgent = props.getProperty("MBA_SAMPLE_USE_AGENT")
             ?: System.getenv("MBA_SAMPLE_USE_AGENT")
             ?: "true"
