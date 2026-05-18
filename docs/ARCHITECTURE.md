@@ -106,6 +106,16 @@ This document describes the Mobile Bug Agent SDK, server, and demo architecture.
 │   (actual)           │    │                      │
 └──────────────────────┘    └──────────────────────┘
 
+┌──────────────────────┐    ┌──────────────────────┐
+│   mba-ios            │    │   mba-web            │
+│   (future scaffold)  │    │   (future scaffold)  │
+│                      │    │                      │
+│ • no crash capture   │    │ • no crash capture   │
+│   yet                │    │   yet                │
+│ • reserved KMP       │    │ • reserved KMP       │
+│   platform boundary  │    │   platform boundary  │
+└──────────────────────┘    └──────────────────────┘
+
 ┌─────────────────────────────────────────────────────────────┐
 │                     mba-server (Ktor)                       │
 │                                                             │
@@ -124,7 +134,7 @@ This document describes the Mobile Bug Agent SDK, server, and demo architecture.
 │                                                             │
 │  GitHubIssueBackend → creates labeled crash issues          │
 │  GitHubSourceReader → reads files/snippets for analysis     │
-│  GitHubPullRequestCreator → opens guarded PRs               │
+│  GitHubPullRequestCreator → experimental guarded PR helper  │
 │                                                             │
 │  Guardrails: no main/master target, max 20 changed lines,   │
 │  no new dependencies, no public API changes, target file    │
@@ -211,8 +221,10 @@ External developers interact with **only these types**:
 | `DeviceContext` | mba-core | Device info data class |
 | `TicketResult` | mba-core | Ticket creation result |
 | `NotionTicketBackend` | mba-notion | Notion implementation |
+| `GitHubIssueBackend` | mba-github | GitHub issue implementation |
 
-**Everything else is `internal`** — enforced by `explicitApi()` in every module.
+The public API is intentionally small. Internal implementation details can
+change while the SDK is alpha.
 
 ## Logging
 
@@ -261,8 +273,10 @@ Run: `./gradlew allTests`
 
 - **`mba-github`** — alternative `TicketBackend` (`GitHubIssueBackend`) plus guarded auto-fix primitives:
   - `GitHubAutoFixOpener.openAutoFix` — opens a tracking issue and a `autofix/issue-N-<slug>` branch off `GITHUB_BASE_BRANCH`.
-  - `GitHubPullRequestCreator.openFix` — guard-railed PR creator (≤20 diff lines, no new deps, no public-API changes, refuses `main`/`master` base, labels `mba/ai-generated` + `do-not-merge-yet`).
-  - Gated on the server by `RawCrashReport.autoFix`, severity (HIGH/CRITICAL only), and `GITHUB_*` env vars. See README §"Routing truth table" for full matrix.
+  - `GitHubPullRequestCreator.openFix` — experimental guard-railed PR helper (≤20 diff lines, no new deps, no public-API changes, refuses `main`/`master` base).
+  - Full patch/build/draft PR orchestration is future work.
+
+- **`mba-ios`** and **`mba-web`** — future platform scaffolds. They reserve module boundaries but do not provide production crash capture yet.
 
 ## License
 

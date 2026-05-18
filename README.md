@@ -12,6 +12,10 @@ duplicates, runs optional agent analysis, and gives the app a structured result.
 The app can keep that result in callbacks, create a Notion ticket, or create a
 GitHub issue.
 
+The repo also includes `mba-ios` and `mba-web` as future KMP platform
+scaffolds. They reserve module boundaries for iOS and Web/Wasm work, but they
+do not capture crashes yet.
+
 The long-term plan is a hosted/SaaS path that centralizes crash streams across
 devices, sends team notifications, and can prepare guarded draft PRs for safe
 fixes. That part is future-facing, not the core claim of the SDK today.
@@ -129,6 +133,8 @@ Details:
 | `mba-agent` | Koog-backed crash analysis and raw fallback pipeline |
 | `mba-android` | Android crash capture, ANR exit capture, WorkManager processing |
 | `mba-jvm` | JVM crash helper |
+| `mba-ios` | Future iOS SDK scaffold |
+| `mba-web` | Future Web/Wasm SDK scaffold |
 | `mba-notion` | Optional Notion ticket backend |
 | `mba-github` | Optional GitHub issue backend and experimental autofix helpers |
 | `mba-server` | Experimental self-hosted ingest/SSE demo server |
@@ -141,6 +147,7 @@ Details:
   the GitHub issue id.
 - Cross-device duplicate GitHub issue merging needs centralized lookup or SaaS
   aggregation.
+- `mba-ios` and `mba-web` are placeholders, not production capture adapters.
 - Slack notifications are not implemented in the SDK today.
 - Auto-fix PR creation is experimental. The repo has GitHub issue and branch
   helpers, but the full patch/build/draft PR loop is not the current SDK claim.
@@ -153,10 +160,14 @@ The SaaS/self-hosted direction is:
 many app installs
   -> centralized crash ingest
   -> cross-device dedupe
+  -> iOS and Web/Wasm adapters feeding the same models
   -> Notion / GitHub / Slack notifications
   -> optional guarded auto-fix
   -> draft PR for human review
 ```
+
+Full KMP structure planning is tracked in
+[#79](https://github.com/shunneklabs/mobile-bug-agent/issues/79).
 
 Architecture notes and future planning live in `docs/`:
 

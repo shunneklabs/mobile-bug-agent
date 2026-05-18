@@ -89,6 +89,19 @@ It is responsible for:
 
 It does not contain Notion or GitHub clients.
 
+### `mba-ios` and `mba-web`
+
+These are future platform scaffold modules.
+
+They are responsible for:
+
+- reserving package and module boundaries for iOS and Web/Wasm SDK work
+- keeping the repo aligned with the long-term KMP direction
+- making future platform work explicit without claiming support today
+
+They do not currently capture crashes, process reports, or provide production
+SDK APIs.
+
 ### `mba-notion` and `mba-github`
 
 These are optional integration modules. Apps add them only when they want MBA to

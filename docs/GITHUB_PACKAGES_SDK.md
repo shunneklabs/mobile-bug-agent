@@ -16,6 +16,8 @@ Use only the modules your app needs.
 | `dev.sunnat629.mba:mba-android:<version>` | Android app crash/ANR capture, persisted crash queue, SDKOnly agent entry point |
 | `dev.sunnat629.mba:mba-agent:<version>` | Shared Koog-based crash analysis engine |
 | `dev.sunnat629.mba:mba-core:<version>` | Shared models, fingerprinting, report payloads |
+| `dev.sunnat629.mba:mba-ios:<version>` | Future iOS SDK scaffold; not a production crash adapter yet |
+| `dev.sunnat629.mba:mba-web:<version>` | Future Web/Wasm SDK scaffold; not a production crash adapter yet |
 | `dev.sunnat629.mba:mba-notion:<version>` | Optional Notion exporter for apps that want MBA to create/update Notion pages |
 | `dev.sunnat629.mba:mba-github:<version>` | Optional GitHub exporter for apps that want MBA to create/update GitHub issues |
 | `dev.sunnat629.mba:mba-jvm:<version>` | JVM/server-side integration helpers |

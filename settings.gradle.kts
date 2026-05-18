@@ -65,6 +65,8 @@ rootProject.name = "mobile-bug-agent"
 include(
     ":mba-core",
     ":mba-android",
+    ":mba-ios",
+    ":mba-web",
     ":mba-jvm",
     ":mba-agent",
     ":mba-notion",

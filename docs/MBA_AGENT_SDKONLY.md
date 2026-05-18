@@ -237,11 +237,13 @@ Possible platform work includes:
 
 - JVM desktop/server adapters
 - iOS/Kotlin Multiplatform adapters where platform APIs allow it
-- shared models and grouping logic across Android, JVM, and iOS
+- Web/Wasm adapters where browser/runtime APIs allow it
+- shared models and grouping logic across Android, JVM, iOS, and Web/Wasm
 - platform-specific capture modules that feed the same agent pipeline
 
-Each platform still needs its own crash-capture strategy because Android, iOS,
-JVM, and native runtimes report failures differently.
+`mba-ios` and `mba-web` exist as scaffold modules today. Each platform still
+needs its own crash-capture strategy because Android, iOS, JVM, browser, and
+native runtimes report failures differently.
 
 ### ANR and Performance Diagnostics
 

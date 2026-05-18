@@ -40,11 +40,14 @@ what the local agent does, and what diagnostic data is collected.
 7. `ARCHITECTURE.md`
 
    Read this for the full repository architecture across SDK modules, server,
-   Notion, GitHub, and the demo pipeline.
+   Notion, GitHub, future platform scaffolds, and the demo pipeline.
 
 8. `KOOG_AGENT_ROADMAP.md`
 
    Read this for the Koog crash-analysis and auto-fix roadmap.
+
+Full KMP structure planning is tracked in
+[#79](https://github.com/shunneklabs/mobile-bug-agent/issues/79).
 
 ## Current Scope
 
@@ -57,5 +60,8 @@ what the local agent does, and what diagnostic data is collected.
 - App-layer callbacks and JSON payloads
 - Optional Notion and GitHub delivery modules
 - Optional hosted backend upload
+- Placeholder iOS and Web/Wasm modules for future KMP expansion
 
-Native crash capture is not part of the current public scope.
+Native crash capture, iOS crash capture, Web/Wasm crash capture, Slack
+notifications, and full auto-fix PR creation are not part of the current public
+SDK scope.
