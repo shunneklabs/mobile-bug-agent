@@ -27,4 +27,37 @@ class MBAConfigTest {
             }.build()
         }
     }
+
+    @Test
+    fun sdkOnlyUsesExplicitModeLlmConfig() {
+        val config = MBAConfig.Builder().apply {
+            mode = MBAMode.SdkOnly(
+                llm = LLM.ollama(
+                    model = "qwen2.5-coder:7b",
+                    endpoint = "http://10.0.2.2:11434",
+                ),
+            )
+            useAgent = true
+        }.build()
+
+        assertEquals(LLM.Provider.OLLAMA, config.llm.provider)
+        assertEquals("qwen2.5-coder:7b", config.llm.model)
+        assertEquals("http://10.0.2.2:11434", config.llm.endpoint)
+    }
+
+    @Test
+    fun sdkOnlyCustomProviderRequiresEndpoint() {
+        assertFailsWith<IllegalArgumentException> {
+            MBAConfig.Builder().apply {
+                mode = MBAMode.SdkOnly(
+                    llm = LLMConfig(
+                        provider = LLM.Provider.CUSTOM,
+                        apiKey = "",
+                        model = "local-model",
+                    ),
+                )
+                useAgent = true
+            }.build()
+        }
+    }
 }

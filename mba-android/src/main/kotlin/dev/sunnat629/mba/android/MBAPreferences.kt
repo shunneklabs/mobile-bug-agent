@@ -3,6 +3,7 @@ package dev.sunnat629.mba.android
 import android.content.Context
 import android.content.SharedPreferences
 import dev.sunnat629.mba.core.MBALog
+import dev.sunnat629.mba.core.config.LLM
 
 /**
  * Persists MBA config to SharedPreferences so CrashUploadWorker
@@ -17,6 +18,7 @@ import dev.sunnat629.mba.core.MBALog
  * - mba_llm_provider
  * - mba_llm_api_key
  * - mba_llm_model
+ * - mba_llm_endpoint
  * - mba_use_agent
  * - mba_debug
  * - mba_last_anr_timestamp
@@ -34,6 +36,7 @@ internal object MBAPreferences {
     private const val KEY_LLM_PROVIDER = "mba_llm_provider"
     private const val KEY_LLM_API_KEY = "mba_llm_api_key"
     private const val KEY_LLM_MODEL = "mba_llm_model"
+    private const val KEY_LLM_ENDPOINT = "mba_llm_endpoint"
     private const val KEY_USE_AGENT = "mba_use_agent"
     private const val KEY_DEBUG = "mba_debug"
     private const val KEY_LAST_ANR_TIMESTAMP = "mba_last_anr_timestamp"
@@ -48,6 +51,7 @@ internal object MBAPreferences {
         llmProvider: String?,
         llmApiKey: String?,
         llmModel: String?,
+        llmEndpoint: String?,
         useAgent: Boolean,
         debug: Boolean,
     ) {
@@ -60,6 +64,7 @@ internal object MBAPreferences {
             .putString(KEY_LLM_PROVIDER, llmProvider ?: "")
             .putString(KEY_LLM_API_KEY, llmApiKey ?: "")
             .putString(KEY_LLM_MODEL, llmModel ?: "")
+            .putString(KEY_LLM_ENDPOINT, llmEndpoint ?: "")
             .putBoolean(KEY_USE_AGENT, useAgent)
             .putBoolean(KEY_DEBUG, debug)
             .apply()
@@ -90,6 +95,9 @@ internal object MBAPreferences {
     fun loadLlmModel(context: Context): String? =
         prefs(context).getString(KEY_LLM_MODEL, null)?.ifBlank { null }
 
+    fun loadLlmEndpoint(context: Context): String? =
+        prefs(context).getString(KEY_LLM_ENDPOINT, null)?.ifBlank { null }
+
     fun loadUseAgent(context: Context): Boolean =
         prefs(context).getBoolean(KEY_USE_AGENT, true)
 
@@ -107,7 +115,8 @@ internal object MBAPreferences {
 
     fun isConfigured(context: Context): Boolean =
         (loadSendToBackend(context) && loadBackendEndpoint(context) != null) ||
-            (loadLlmApiKey(context)?.isNotBlank() == true)
+            (loadLlmApiKey(context)?.isNotBlank() == true) ||
+            loadLlmProvider(context) == LLM.Provider.OLLAMA.name
 
     private fun prefs(context: Context): SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

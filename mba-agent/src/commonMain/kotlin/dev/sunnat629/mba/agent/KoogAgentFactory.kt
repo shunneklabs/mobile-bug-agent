@@ -1,12 +1,23 @@
 package dev.sunnat629.mba.agent
 
 import ai.koog.prompt.dsl.prompt
+import ai.koog.prompt.executor.clients.anthropic.AnthropicClientSettings
+import ai.koog.prompt.executor.clients.anthropic.AnthropicLLMClient
+import ai.koog.prompt.executor.clients.dashscope.DashscopeClientSettings
+import ai.koog.prompt.executor.clients.dashscope.DashscopeLLMClient
+import ai.koog.prompt.executor.clients.deepseek.DeepSeekClientSettings
+import ai.koog.prompt.executor.clients.deepseek.DeepSeekLLMClient
 import ai.koog.prompt.executor.clients.google.GoogleLLMClient
-import ai.koog.prompt.executor.clients.google.GoogleModels
+import ai.koog.prompt.executor.clients.google.GoogleClientSettings
+import ai.koog.prompt.executor.clients.mistralai.MistralAIClientSettings
+import ai.koog.prompt.executor.clients.mistralai.MistralAILLMClient
+import ai.koog.prompt.executor.clients.openai.OpenAIClientSettings
 import ai.koog.prompt.executor.clients.openai.OpenAILLMClient
-import ai.koog.prompt.executor.clients.openai.OpenAIModels
+import ai.koog.prompt.executor.clients.openrouter.OpenRouterClientSettings
+import ai.koog.prompt.executor.clients.openrouter.OpenRouterLLMClient
 import ai.koog.prompt.executor.llms.MultiLLMPromptExecutor
 import ai.koog.prompt.executor.model.PromptExecutor
+import ai.koog.prompt.executor.ollama.client.OllamaClient
 import ai.koog.prompt.llm.LLMProvider
 import ai.koog.prompt.llm.LLModel
 import dev.sunnat629.mba.agent.model.CrashSummary
@@ -61,30 +72,67 @@ internal class KoogAgentFactory(
 ) : Closeable {
 
     private val koogExecutor: PromptExecutor by lazy {
+        val provider = llmConfig.koogProvider()
         val client = when (llmConfig.provider) {
-            LLM.Provider.GEMINI -> GoogleLLMClient(llmConfig.apiKey)
-            LLM.Provider.OPENAI -> OpenAILLMClient(llmConfig.apiKey)
-            LLM.Provider.ANTHROPIC,
-            LLM.Provider.OLLAMA,
-            LLM.Provider.CUSTOM -> throw NotImplementedError(
-                "Koog does not yet support ${llmConfig.provider} in this factory."
+            LLM.Provider.GEMINI -> GoogleLLMClient(
+                apiKey = llmConfig.apiKey,
+                settings = GoogleClientSettings(
+                    baseUrl = llmConfig.endpoint ?: "https://generativelanguage.googleapis.com",
+                ),
+            )
+            LLM.Provider.OPENAI -> OpenAILLMClient(
+                apiKey = llmConfig.apiKey,
+                settings = OpenAIClientSettings(
+                    baseUrl = llmConfig.endpoint ?: "https://api.openai.com",
+                ),
+            )
+            LLM.Provider.ANTHROPIC -> AnthropicLLMClient(
+                apiKey = llmConfig.apiKey,
+                settings = AnthropicClientSettings(
+                    baseUrl = llmConfig.endpoint ?: "https://api.anthropic.com",
+                ),
+            )
+            LLM.Provider.OLLAMA -> OllamaClient(
+                baseUrl = llmConfig.endpoint ?: "http://localhost:11434",
+            )
+            LLM.Provider.OPENROUTER -> OpenRouterLLMClient(
+                apiKey = llmConfig.apiKey,
+                settings = OpenRouterClientSettings(
+                    baseUrl = llmConfig.endpoint ?: "https://openrouter.ai",
+                ),
+            )
+            LLM.Provider.MISTRAL -> MistralAILLMClient(
+                apiKey = llmConfig.apiKey,
+                settings = MistralAIClientSettings(
+                    baseUrl = llmConfig.endpoint ?: "https://api.mistral.ai",
+                ),
+            )
+            LLM.Provider.DEEPSEEK -> DeepSeekLLMClient(
+                apiKey = llmConfig.apiKey,
+                settings = DeepSeekClientSettings(
+                    baseUrl = llmConfig.endpoint ?: "https://api.deepseek.com",
+                ),
+            )
+            LLM.Provider.DASHSCOPE -> DashscopeLLMClient(
+                apiKey = llmConfig.apiKey,
+                settings = DashscopeClientSettings(
+                    baseUrl = llmConfig.endpoint ?: "https://dashscope-intl.aliyuncs.com/",
+                ),
+            )
+            LLM.Provider.CUSTOM -> OpenAILLMClient(
+                apiKey = llmConfig.apiKey,
+                settings = OpenAIClientSettings(
+                    baseUrl = requireNotNull(llmConfig.endpoint) {
+                        "Custom LLM provider requires endpoint."
+                    },
+                ),
             )
         }
-        MultiLLMPromptExecutor(
-            when (llmConfig.provider) {
-                LLM.Provider.GEMINI -> LLMProvider.Google
-                LLM.Provider.OPENAI -> LLMProvider.OpenAI
-                else -> throw IllegalStateException("Unsupported provider: ${llmConfig.provider}")
-            } to client
-        )
+        MultiLLMPromptExecutor(provider to client)
     }
 
     private val koogModel: LLModel by lazy {
-        when (llmConfig.provider) {
-            LLM.Provider.GEMINI -> GoogleModels.Gemini2_5Pro
-            LLM.Provider.OPENAI -> OpenAIModels.Chat.GPT4o
-            else -> throw IllegalStateException("Unsupported provider: ${llmConfig.provider}")
-        }
+        LLModel(llmConfig.koogProvider(), llmConfig.model)
     }
 
     private val executor: CrashAnalysisExecutor by lazy {
@@ -96,6 +144,18 @@ internal class KoogAgentFactory(
 
     override fun close() {
         // Koog PromptExecutor owns its clients; no explicit close needed yet.
+    }
+
+    private fun LLMConfig.koogProvider(): LLMProvider = when (provider) {
+        LLM.Provider.GEMINI -> LLMProvider.Google
+        LLM.Provider.OPENAI -> LLMProvider.OpenAI
+        LLM.Provider.ANTHROPIC -> LLMProvider.Anthropic
+        LLM.Provider.OLLAMA -> LLMProvider.Ollama
+        LLM.Provider.OPENROUTER -> LLMProvider.OpenRouter
+        LLM.Provider.MISTRAL -> LLMProvider.MistralAI
+        LLM.Provider.DEEPSEEK -> LLMProvider.DeepSeek
+        LLM.Provider.DASHSCOPE -> LLMProvider.Alibaba
+        LLM.Provider.CUSTOM -> LLMProvider.OpenAI
     }
 }
 

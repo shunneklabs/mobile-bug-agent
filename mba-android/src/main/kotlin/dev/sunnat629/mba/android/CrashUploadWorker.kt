@@ -195,12 +195,24 @@ internal class CrashUploadWorker(
     }
 
     private fun loadLlmConfig(context: Context): LLMConfig? {
-        val apiKey = MBAPreferences.loadLlmApiKey(context) ?: return null
-        val provider = MBAPreferences.loadLlmProvider(context)?.uppercase()
+        val provider = MBAPreferences.loadLlmProvider(context)?.uppercase() ?: return null
+        val apiKey = MBAPreferences.loadLlmApiKey(context).orEmpty()
         val model = MBAPreferences.loadLlmModel(context)
+        val endpoint = MBAPreferences.loadLlmEndpoint(context)
         val base = when (provider) {
-            LLM.Provider.OPENAI.name -> LLM.openAI(apiKey)
-            else -> LLM.gemini(apiKey)
+            LLM.Provider.GEMINI.name -> LLM.gemini(apiKey, endpoint = endpoint)
+            LLM.Provider.OPENAI.name -> LLM.openAI(apiKey, endpoint = endpoint)
+            LLM.Provider.ANTHROPIC.name -> LLM.anthropic(apiKey, endpoint = endpoint)
+            LLM.Provider.OLLAMA.name -> LLM.ollama(endpoint = endpoint ?: "http://localhost:11434")
+            LLM.Provider.OPENROUTER.name -> LLM.openRouter(apiKey, endpoint = endpoint)
+            LLM.Provider.MISTRAL.name -> LLM.mistral(apiKey, endpoint = endpoint)
+            LLM.Provider.DEEPSEEK.name -> LLM.deepSeek(apiKey, endpoint = endpoint)
+            LLM.Provider.DASHSCOPE.name -> LLM.dashScope(apiKey, endpoint = endpoint)
+            LLM.Provider.CUSTOM.name -> {
+                if (endpoint.isNullOrBlank() || model.isNullOrBlank()) return null
+                LLM.custom(apiKey = apiKey, endpoint = endpoint, model = model)
+            }
+            else -> return null
         }
         return if (model.isNullOrBlank()) base else base.model(model)
     }

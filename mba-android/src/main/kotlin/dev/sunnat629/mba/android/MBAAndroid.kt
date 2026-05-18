@@ -190,6 +190,7 @@ public object MBAAndroid {
             llmProvider = llm?.provider?.name,
             llmApiKey = llm?.apiKey,
             llmModel = llm?.model,
+            llmEndpoint = llm?.endpoint,
             useAgent = useAgent,
             debug = debug,
         )

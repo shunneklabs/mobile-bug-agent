@@ -55,7 +55,7 @@ public class MBAConfig internal constructor(
      *
      * ```kotlin
      * MBA.init(crashDir) {
-     *     mode = MBAMode.SdkOnly(llmApiKey = "...")
+     *     mode = MBAMode.SdkOnly(llm = LLM.ollama(model = "llama3.2:latest"))
      *     debug = true
      * }
      * ```
@@ -106,13 +106,28 @@ public class MBAConfig internal constructor(
                 "MBA mode must be set. Use MBAMode.SdkOnly(...) or MBAMode.Saas(...)"
             }
 
-            // Resolve LLM config: explicit llm > mode's llmApiKey > error
+            // Resolve LLM config: explicit builder llm > mode llm > legacy Gemini key.
             val resolvedLlm = llm ?: when (resolvedMode) {
                 is MBAMode.SdkOnly -> {
-                    require(resolvedMode.llmApiKey.isNotBlank() || !useAgent) {
-                        "SdkOnly mode requires a non-blank LLM API key."
+                    val modeLlm = resolvedMode.llm
+                    require(modeLlm != null || resolvedMode.llmApiKey.isNotBlank() || !useAgent) {
+                        "SdkOnly mode with useAgent=true requires an LLMConfig or legacy llmApiKey."
                     }
-                    if (useAgent) LLM.gemini(resolvedMode.llmApiKey) else LLMConfig.NONE
+                    if (useAgent) {
+                        (modeLlm ?: LLM.gemini(resolvedMode.llmApiKey)).also { config ->
+                            require(config.model.isNotBlank()) {
+                                "SdkOnly mode with useAgent=true requires a non-blank LLM model."
+                            }
+                            require(!config.requiresApiKey || config.apiKey.isNotBlank()) {
+                                "SdkOnly mode with ${config.provider} requires a non-blank LLM API key."
+                            }
+                            require(config.provider != LLM.Provider.CUSTOM || !config.endpoint.isNullOrBlank()) {
+                                "SdkOnly custom LLM provider requires a non-blank endpoint."
+                            }
+                        }
+                    } else {
+                        LLMConfig.NONE
+                    }
                 }
                 is MBAMode.Saas -> LLMConfig.NONE
                 is MBAMode.SelfHosted -> LLMConfig.NONE

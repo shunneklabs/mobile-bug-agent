@@ -82,14 +82,18 @@ open class AgentFactory(
             model = config.model,
             json = json,
         )
+        LLM.Provider.OPENROUTER,
+        LLM.Provider.MISTRAL,
+        LLM.Provider.DEEPSEEK,
+        LLM.Provider.DASHSCOPE,
         LLM.Provider.ANTHROPIC -> throw NotImplementedError(
-            "Anthropic provider is planned but not yet implemented."
+            "${config.provider} is supported through Koog. Legacy HTTP caller is not implemented."
         )
         LLM.Provider.OLLAMA -> throw NotImplementedError(
-            "Ollama provider is planned but not yet implemented."
+            "Ollama is supported through Koog. Legacy HTTP caller is not implemented."
         )
         LLM.Provider.CUSTOM -> throw NotImplementedError(
-            "Custom provider requires endpoint configuration. Not yet implemented."
+            "Custom OpenAI-compatible providers are supported through Koog. Legacy HTTP caller is not implemented."
         )
     }
 }
