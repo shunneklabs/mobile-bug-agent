@@ -200,9 +200,18 @@ public object MBAAndroid {
     }
 
     internal suspend fun publishAgentEvent(event: MBAAgentEvent) {
+        val json = eventJson.encodeToString(event)
         _agentEvents.emit(event)
-        _agentEventJson.emit(eventJson.encodeToString(event))
+        _agentEventJson.emit(json)
+        logAgentEventJson(json)
         agentCallback?.onCrashAnalyzed(event)
+    }
+
+    private fun logAgentEventJson(json: String) {
+        MBALog.d(TAG, "SDKOnly callback JSON:")
+        json.chunked(LOG_CHUNK_SIZE).forEachIndexed { index, chunk ->
+            MBALog.d(TAG, "SDKOnly callback JSON[$index]: $chunk")
+        }
     }
 
     private fun enqueueCrashUploadWorker(context: Context) {
@@ -227,4 +236,6 @@ public object MBAAndroid {
 
         MBALog.d(TAG, "CrashUploadWorker enqueued (unique: $WORK_NAME, policy: KEEP)")
     }
+
+    private const val LOG_CHUNK_SIZE = 3500
 }
