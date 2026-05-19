@@ -1,5 +1,7 @@
 # Mobile Bug Agent
 
+![Mobile Bug Agent cover](cover.png)
+
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.3.21-7F52FF?logo=kotlin)](https://kotlinlang.org)
 [![Platform](https://img.shields.io/badge/platform-Android%20%7C%20JVM%20%7C%20iOS%20scaffold%20%7C%20Web%20scaffold-brightgreen)]()
