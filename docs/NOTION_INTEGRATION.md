@@ -16,7 +16,7 @@ In SDKOnly mode it can:
 - create one parent bug page for a new crash group
 - update the parent page when the same crash happens again
 - create a lightweight occurrence row linked to the parent for duplicate crashes
-- write Koog fields such as severity, confidence, steps to reproduce, and
+- write MBA analysis fields such as severity, confidence, steps to reproduce, and
   possible cause when the Notion database has matching properties
 - still create a useful page body when the database only has a title property
 
@@ -74,10 +74,10 @@ Recommended rich schema:
 | `Name` | Title | Bug title |
 | `Severity` | Select | `CRITICAL`, `HIGH`, `MEDIUM`, `LOW` |
 | `Fingerprint` | Text | Stable crash grouping key |
-| `Description` | Text | Koog or fallback summary |
+| `Description` | Text | MBA analysis or fallback summary |
 | `Affected Screen` | Text | Current screen, when available |
 | `Device Matrix` | Text | Device or device matrix |
-| `AI Confidence` | Number | Koog confidence, for example `0.86` |
+| `AI Confidence` | Number | MBA analysis confidence, for example `0.86`; raw fallback is `0` |
 | `App Version` | Text | App version from the SDK |
 | `Occurred At` | Date | First or latest occurrence time |
 | `OS Version` | Text | Android version/API |
@@ -85,13 +85,14 @@ Recommended rich schema:
 | `Occurrences` | Number | Number of grouped occurrences |
 | `Unique Devices` | Number | Unique device count |
 | `Bug Type` | Select | `Bug Group`, `Crash Occurrence` |
+| `Parent Bug` | Relation | Self-relation to this same database for occurrence rows |
 | `Status` | Status | `New`, `Triaged`, `In Progress`, etc. |
 | `External Sync State` | Select | `Notion Created`, `GitHub Created`, `Both Created` |
 | `First Seen` | Date | First occurrence time |
 | `Last Seen` | Date | Latest occurrence time |
 | `Device ID Hash` | Text | Stable per-device grouping hash |
-| `Possible Cause` | Text | Koog/fallback cause hypothesis |
-| `Steps to Reproduce` | Text | Koog/fallback reproduction steps |
+| `Possible Cause` | Text | MBA analysis cause hypothesis; empty in raw fallback |
+| `Steps to Reproduce` | Text | MBA analysis reproduction steps; empty in raw fallback |
 | `GitHub Issue URL` | URL | Optional GitHub issue URL |
 | `Notion Ticket URL` | URL | Optional self-reference |
 
@@ -124,7 +125,8 @@ The sample app uses:
 NOTION_TICKET_DB_ID_OR_URL=your_bug_database_id_or_url
 ```
 
-Despite the sample property name, pass the database id for the current SDK.
+The SDK uses this single database for grouped bug pages and linked occurrence
+rows.
 
 ## 6. Wire The SDK
 
@@ -196,10 +198,14 @@ For a duplicate:
 - Occurrence count, unique devices, last seen, and device details are patched
   on the parent page.
 - Notion creates a lightweight child occurrence row linked by `Parent Bug`.
-- The duplicate occurrence does not overwrite parent Koog fields.
+- The duplicate occurrence does not overwrite parent MBA analysis fields.
 
 It should not create a second parent page for the same `appId + environment +
 fingerprint`.
+
+If the stored parent page was deleted, archived, or moved to trash, the SDK
+treats that local external id as stale and creates a new parent page for that
+bug group on the next sync.
 
 ## Troubleshooting
 
@@ -218,7 +224,7 @@ fingerprint`.
 
 `AI Confidence = 0`:
 
-- Koog analysis failed and MBA used raw fallback. Check callback JSON for
+- MBA analysis failed or was disabled and MBA used raw fallback. Check callback JSON for
   `analysisSource = RAW_FALLBACK` and `analysisError`.
 
 No Notion page is created:

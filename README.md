@@ -1,8 +1,8 @@
 # Mobile Bug Agent
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Kotlin](https://img.shields.io/badge/Kotlin-2.3.20-7F52FF?logo=kotlin)](https://kotlinlang.org)
-[![Platform](https://img.shields.io/badge/platform-Android%20%7C%20JVM-brightgreen)]()
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.3.21-7F52FF?logo=kotlin)](https://kotlinlang.org)
+[![Platform](https://img.shields.io/badge/platform-Android%20%7C%20JVM%20%7C%20iOS%20scaffold%20%7C%20Web%20scaffold-brightgreen)]()
 [![Status](https://img.shields.io/badge/status-alpha-orange)]()
 
 Mobile Bug Agent is a Kotlin crash pipeline for Android apps.
@@ -28,7 +28,7 @@ Android crash / non-fatal error / supported ANR exit
   -> scrub obvious PII patterns
   -> compute fingerprint
   -> group repeated crashes locally
-  -> run Koog-backed analysis when an LLM is configured
+  -> run MBA analysis when an LLM is configured
   -> fall back to raw structured report when analysis is unavailable
   -> return object and JSON callbacks
   -> optionally create/update Notion tickets or GitHub issues
@@ -130,7 +130,7 @@ Details:
 | Module | Purpose |
 |---|---|
 | `mba-core` | Public API, models, PII scrubber, fingerprinting, local dedup helpers |
-| `mba-agent` | Koog-backed crash analysis and raw fallback pipeline |
+| `mba-agent` | MBA analysis, Koog-backed model execution, and raw fallback pipeline |
 | `mba-android` | Android crash capture, ANR exit capture, WorkManager processing |
 | `mba-jvm` | JVM crash helper |
 | `mba-ios` | Future iOS SDK scaffold |
@@ -143,8 +143,9 @@ Details:
 ## Current Boundaries
 
 - SDKOnly grouping is local to the app install.
-- Direct GitHub issue updates work best when the same install has already stored
-  the GitHub issue id.
+- Direct GitHub issue updates are fastest when the same install has already
+  stored the GitHub issue id. If not, `mba-github` still checks open
+  auto-generated issues for the same fingerprint before creating a new one.
 - Cross-device duplicate GitHub issue merging needs centralized lookup or SaaS
   aggregation.
 - `mba-ios` and `mba-web` are placeholders, not production capture adapters.
@@ -184,8 +185,9 @@ Build and run the sample:
 ./gradlew :mba-sample:assembleDebug
 ```
 
-The sample is configured as a normal external app would be: it consumes the
-published SDK coordinates instead of `implementation(project(":mba-*"))`.
+The sample is a local repo demo app. It currently uses `implementation(project(":mba-*"))`
+so SDK and sample changes can be tested together. External apps should use the
+published coordinates from [docs/GITHUB_PACKAGES_SDK.md](docs/GITHUB_PACKAGES_SDK.md).
 
 ## License
 

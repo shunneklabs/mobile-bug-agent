@@ -4,14 +4,16 @@ This document tracks what Mobile Bug Agent already does with Koog and what we pl
 
 ## Latest Branch Status
 
-The active implementation branch for KotlinConf work is `kotlinConf`.
+KotlinConf work has been squash-merged into `master`. There is no active local
+`kotlinConf` branch.
 
-Recent completed work on this branch:
+Recent completed work:
 
 - `faf711b` — hardened `/report` API boundaries and enriched booth event/artifact metadata for issues `#38` and `#39`.
 - `787ee4e` — added Koog auto-fix tool-wrapper contracts and deterministic fixtures/tests for issues `#41` and `#42`.
+- `f0cecaf` — added the fixable checkout crash scenario to the sample app.
 
-The branch is intentionally separate from `master`; it is the phase branch for the current KotlinConf workstream and should be reviewed/merged later as a batch.
+Current sample work now lands on `master` unless a new feature branch is created.
 
 ## Current Koog Status
 

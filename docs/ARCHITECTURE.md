@@ -161,12 +161,12 @@ This document describes the Mobile Bug Agent SDK, server, and demo architecture.
    │  CrashFingerprint.compute(exceptionType, stackTrace)
    │  → deterministic hash for dedup
    │
-5. LOCAL DEDUP CHECK (<1ms)
+5. LOCAL GROUPING / DEDUP CHECK (<1ms)
    │  LocalDedupCache.contains(fingerprint)
    │  → if duplicate: skip LLM, update count
    │  → if new: continue to AI
    │
-6. KOOG AI ANALYSIS (2-8 seconds)
+6. MBA ANALYSIS (2-8 seconds when LLM is enabled)
    │  SinglePromptExecutor (1 model call):
    │  → parseStackTrace + classifySeverity + generateSummary
    │  → Returns: title, description, severity, confidence,
@@ -179,10 +179,9 @@ This document describes the Mobile Bug Agent SDK, server, and demo architecture.
    │  → Creates linked occurrence row for duplicates
    │
    │  Optional GitHub path:
-   │  → Create issue
-   │  → Read source context
-   │  → Run guardrails
-   │  → Open branch/PR only if safe and enabled
+   │  → Reuse open issue with same fingerprint when found
+   │  → Create or update issue
+   │  → Guarded source/PR helpers exist, but full auto-fix PR orchestration is future work
    │
 8. DONE
    → TicketResult { ticketId, url, success }
@@ -200,7 +199,9 @@ mba-sample
   → /jobs/{id} gives point-in-time status for clients and operators
 ```
 
-The booth demo depends on this visible chain. Current Workstream D is adding full Koog tool-call events so the page can show not only final status, but each tool step.
+The booth demo depends on this visible chain. More granular tool-call events are
+future polish so the page can show each analysis and delivery step, not only
+final status.
 
 ## Public API Surface
 

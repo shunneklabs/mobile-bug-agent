@@ -28,13 +28,27 @@ external integrations.
 
 ## Installation Shape
 
-A typical Android app depends on the Android adapter:
+A typical third-party Android app depends on the published Android adapter:
+
+```kotlin
+implementation("dev.sunnat629.mba:mba-android:<version>")
+```
+
+When working inside this repository, the sample app uses the local project
+module instead:
 
 ```kotlin
 implementation(project(":mba-android"))
 ```
 
 Optional external delivery modules are added only when the app needs them:
+
+```kotlin
+implementation("dev.sunnat629.mba:mba-notion:<version>")
+implementation("dev.sunnat629.mba:mba-github:<version>")
+```
+
+Repository-local form:
 
 ```kotlin
 implementation(project(":mba-notion"))
@@ -60,7 +74,7 @@ starts the worker and pending crash files are read
         v
 SDKOnly pipeline processes each crash
         |
-        +-- Koog/LLM analysis, if enabled and configured
+        +-- MBA analysis, if enabled and configured
         |
         +-- raw fallback, if analysis is disabled or fails
         |
@@ -78,11 +92,11 @@ The SDK does not run network uploads or LLM analysis inside the fatal crash
 handler. During a fatal crash, the reliable action is to write the raw crash
 snapshot to disk. Processing happens later, after the app starts again.
 
-## Agent Analysis
+## MBA Analysis
 
 When local agent analysis is enabled and an LLM provider/model is configured,
-the SDK runs Koog against the crash-context payload and produces a richer
-report:
+the SDK runs MBA analysis against the crash-context payload and produces a
+richer report. The current model execution path is Koog-backed.
 
 - title
 - description
@@ -105,7 +119,7 @@ Raw fallback is used when:
 - local agent analysis is turned off
 - no usable LLM configuration is available
 - the configured LLM key, endpoint, or local model is invalid
-- Koog/LLM analysis fails
+- MBA analysis fails
 - the app intentionally wants non-agentic crash payloads
 
 Fallback reports are still useful. They include exception type, message, stack
@@ -170,7 +184,10 @@ registered sinks. The app owns those credentials and decides whether to enable
 one integration, both integrations, or neither.
 
 Duplicate crashes should update the existing grouped record instead of creating
-new parent tickets for the same bug group.
+new parent tickets for the same bug group. Notion can also create linked
+occurrence rows when the database has a `Parent Bug` relation. GitHub checks for
+an open `mba/auto-generated` issue with the same fingerprint before creating a
+new issue.
 
 ## Privacy Boundary
 

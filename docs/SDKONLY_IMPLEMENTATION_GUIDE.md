@@ -16,7 +16,7 @@ Hosted/SaaS setup is separate. This guide focuses only on SDKOnly.
 
 ## 1. Add The SDK
 
-For a published SDK:
+For a normal third-party Android app, use published coordinates:
 
 ```kotlin
 dependencies {
@@ -27,14 +27,6 @@ dependencies {
 Before Maven Central is available, pre-release artifacts can be consumed from
 GitHub Packages. See [GitHub Packages SDK integration](GITHUB_PACKAGES_SDK.md).
 
-When working inside this repository:
-
-```kotlin
-dependencies {
-    implementation(project(":mba-android"))
-}
-```
-
 Only add external delivery modules if your app needs them:
 
 ```kotlin
@@ -44,10 +36,12 @@ dependencies {
 }
 ```
 
-Repository form:
+When working inside this repository, the local sample app uses project modules
+so SDK and sample changes compile together:
 
 ```kotlin
 dependencies {
+    implementation(project(":mba-android"))
     implementation(project(":mba-notion"))
     implementation(project(":mba-github"))
 }
@@ -160,9 +154,10 @@ Treat crash context like logs. Do not put emails, access tokens, payment data,
 raw user input, or private content in screen names, breadcrumbs, exception
 messages, or custom metadata.
 
-## 5. Choose Agent Or Raw Fallback
+## 5. Choose MBA Analysis Or Raw Fallback
 
-Use the Koog agent when you want richer reports:
+Use MBA analysis when you want richer reports. Internally this is backed by
+Koog when the app provides a supported LLM config:
 
 ```kotlin
 MBAConfig.Builder().apply {
@@ -321,10 +316,10 @@ Fatal crash flow:
 5. The app restores SDKOnly config and optional sinks.
 6. The app calls `MBAAndroid.flushPendingCrashes(...)`.
 7. WorkManager processes pending crash files.
-8. SDKOnly runs Koog analysis or raw fallback.
+8. SDKOnly runs MBA analysis or raw fallback.
 9. Local grouping updates the matching bug group.
 10. The app receives callbacks/JSON.
-9. Optional Notion/GitHub sinks create or update external records.
+11. Optional Notion/GitHub sinks create or update external records.
 ```
 
 ANR flow:
@@ -357,3 +352,16 @@ ANR flow:
   `useAgent = true`.
 - Add safe screen names and breadcrumbs.
 - Use callbacks or JSON to handle results in the app layer.
+
+## Sample App Notes
+
+The repo sample is intentionally local-first:
+
+- dependencies use `implementation(project(":mba-android"))`,
+  `implementation(project(":mba-notion"))`, and
+  `implementation(project(":mba-github"))`
+- delivery is SDKOnly
+- settings let the demo switch MBA analysis on/off and choose callback-only,
+  Notion, GitHub, or both when credentials exist
+- the first demo scenario is a real, fixable checkout crash used to exercise
+  crash capture, Notion/GitHub creation, and future repair workflows

@@ -146,7 +146,7 @@ class ExampleApp : Application() {
 The important integration contract is:
 
 - `sendToBackend = false` keeps the SDK standalone.
-- `useAgent = true` enables Koog analysis when the app provides valid LLM
+- `useAgent = true` enables MBA analysis when the app provides valid LLM
   configuration.
 - The callback gives the app the generated JSON/object so external developers
   are not forced to use MBA's Notion or GitHub integrations.
@@ -154,8 +154,8 @@ The important integration contract is:
   registered, so previous-run crashes are processed with the current app-layer
   routing.
 
-If the Koog/LLM call fails or is disabled, the callback should still receive the
-raw crash details with device/app metadata so the host app can act on the event.
+If MBA analysis fails or is disabled, the callback should still receive the raw
+crash details with device/app metadata so the host app can act on the event.
 
 ## Optional Notion Export
 
@@ -245,22 +245,15 @@ Local validation without pushing packages:
 ./gradlew publishToMavenLocal -PMBA_VERSION=0.1.0-local
 ```
 
-Compile `mba-sample` against locally published artifacts:
+Compile the repo sample against local project modules:
 
 ```bash
-./gradlew :mba-sample:compileDebugKotlin \
-  -PMBA_USE_MAVEN_LOCAL=true \
-  -PMBA_SAMPLE_USE_PUBLISHED_SDK=true \
-  -PMBA_SAMPLE_SDK_VERSION=0.1.0-local
+./gradlew :mba-sample:compileDebugKotlin
 ```
 
-Compile `mba-sample` against GitHub Packages:
-
-```bash
-./gradlew :mba-sample:compileDebugKotlin \
-  -PMBA_SAMPLE_USE_PUBLISHED_SDK=true \
-  -PMBA_SAMPLE_SDK_VERSION=0.1.0-kotlinconf.1
-```
+`mba-sample` currently uses `implementation(project(":mba-*"))` for repo
+development. To validate published artifacts, use a separate consumer app with
+the coordinate examples above.
 
 `mba-sample` and `mba-server` are not SDK artifacts and should not be
 published.

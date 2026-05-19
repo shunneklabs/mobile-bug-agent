@@ -44,7 +44,7 @@ what the local agent does, and what diagnostic data is collected.
 
 8. `KOOG_AGENT_ROADMAP.md`
 
-   Read this for the Koog crash-analysis and auto-fix roadmap.
+   Read this for the Koog-backed MBA analysis and auto-fix roadmap.
 
 Full KMP structure planning is tracked in
 [#79](https://github.com/shunneklabs/mobile-bug-agent/issues/79).
@@ -59,6 +59,7 @@ Full KMP structure planning is tracked in
 - Local duplicate grouping
 - App-layer callbacks and JSON payloads
 - Optional Notion and GitHub delivery modules
+- Local sample app using project modules for repo development
 - Optional hosted backend upload
 - Placeholder iOS and Web/Wasm modules for future KMP expansion
 

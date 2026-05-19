@@ -112,6 +112,9 @@ They are responsible for:
 - mapping processed crash events into Notion or GitHub payloads
 - creating a parent record for a new bug group
 - updating an existing record for duplicate crashes
+- creating linked Notion occurrence rows when a `Parent Bug` relation exists
+- reusing an open GitHub issue with the same fingerprint before creating a new
+  issue
 - returning external URLs or delivery errors to the SDK event
 
 ## Android Lifecycle
@@ -214,8 +217,9 @@ Notion/GitHub integrations.
 Hosted mode sends raw crash reports to the configured MBA backend. The backend
 can run analysis, grouping, and external ticket sync server-side.
 
-An app can expose this choice as a runtime setting, as the sample app does, or
-configure it statically for a build.
+An app can expose this choice as a runtime setting or configure it statically
+for a build. The current sample app is SDKOnly-focused and exposes runtime
+settings for MBA analysis and optional Notion/GitHub delivery.
 
 ## What The SDK Monitors
 

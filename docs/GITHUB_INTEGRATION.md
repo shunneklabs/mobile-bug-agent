@@ -15,7 +15,7 @@ In SDKOnly mode it can:
 
 - create one GitHub issue for a new crash group
 - update the existing issue when the same crash happens again
-- include Koog fields such as severity, confidence, steps to reproduce, and
+- include MBA analysis fields such as severity, confidence, steps to reproduce, and
   possible cause
 - include device/app metadata, breadcrumbs, and stack trace
 - label issues by severity
@@ -137,7 +137,7 @@ MBAAndroid.setTicketBackends(
 
 MBA creates issues with:
 
-- title from Koog analysis or raw fallback
+- title from MBA analysis or raw fallback
 - severity and confidence
 - crash fingerprint
 - occurrence timestamp
@@ -151,7 +151,7 @@ MBA creates issues with:
 - stack trace
 - labels such as `mba/high` and `mba/auto-generated`
 
-If Koog fails, MBA still creates a structured raw-fallback issue. In that case
+If MBA analysis fails, MBA still creates a structured raw-fallback issue. In that case
 confidence is `0%`, and the callback JSON contains `analysisSource =
 RAW_FALLBACK` plus `analysisError`.
 
@@ -167,10 +167,15 @@ For a duplicate:
 
 - GitHub updates the existing issue when the stored issue number exists.
 - The updated issue body includes occurrence count, unique devices, last seen,
-  and the latest enriched report when Koog succeeds.
+  and the latest enriched report when MBA analysis succeeds.
 
 It should not create a second issue for the same `appId + environment +
 fingerprint`.
+
+For a new local group, `mba-github` first searches open `mba/auto-generated`
+issues for the same fingerprint. If one is still open, it reuses that issue
+instead of creating another one. If the old issue is closed or deleted, a new
+issue is created.
 
 ## 6. Callback-Only Alternative
 
@@ -216,8 +221,9 @@ Duplicate issues are created:
 - Confirm the first issue id was saved before the second occurrence was
   processed.
 
-Issue exists but has no Koog fields:
+Issue exists but has no MBA analysis fields:
 
 - Check callback JSON for `analysisSource`.
 - `KOOG` means agent analysis ran.
-- `RAW_FALLBACK` means the LLM/Koog path failed and MBA used structured fallback.
+- `RAW_FALLBACK` means MBA analysis failed or was disabled and MBA used
+  structured fallback.
