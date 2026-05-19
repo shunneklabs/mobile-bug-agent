@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Mobile Bug Agent docs
+    url: https://github.com/shunneklabs/mobile-bug-agent/tree/master/docs
+    about: Read setup, SDKOnly, Notion, GitHub, and architecture docs.

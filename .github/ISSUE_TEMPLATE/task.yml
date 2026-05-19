@@ -1,0 +1,30 @@
+name: Task
+description: Implementation, cleanup, hardening, or maintenance work.
+title: "Task: "
+labels: ["type/task", "status/needs-triage"]
+body:
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What files/modules/behavior are in scope?
+    validations:
+      required: true
+  - type: textarea
+    id: work
+    attributes:
+      label: Work
+      description: Concrete implementation steps.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Suggested Priority
+      options:
+        - P0
+        - P1
+        - P2
+        - P3

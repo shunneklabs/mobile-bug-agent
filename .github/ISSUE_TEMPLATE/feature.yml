@@ -1,0 +1,36 @@
+name: Feature
+description: New capability or enhancement.
+title: "Feature: "
+labels: ["type/feature", "status/needs-triage"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should MBA be able to do?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: Why does this matter for SDK users, demos, or future SaaS?
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - SDKOnly
+        - Android
+        - Notion
+        - GitHub
+        - Auto-fix
+        - Security / PII
+        - KMP
+        - Sample
+        - Other
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: What proves this is done?

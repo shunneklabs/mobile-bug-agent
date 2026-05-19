@@ -1,0 +1,26 @@
+name: Architecture
+description: Design decision, module boundary, or technical plan.
+title: "Architecture: "
+labels: ["type/architecture", "status/needs-design"]
+body:
+  - type: textarea
+    id: decision
+    attributes:
+      label: Decision Needed
+      description: What architecture choice needs to be made?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Current behavior, constraints, and tradeoffs.
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Direction
+      description: Preferred design or options.
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks / Open Questions

@@ -1,0 +1,21 @@
+name: Docs
+description: README, guide, or documentation update.
+title: "Docs: "
+labels: ["type/docs", "documentation", "status/needs-triage"]
+body:
+  - type: textarea
+    id: doc
+    attributes:
+      label: What Needs Updating
+      description: Which doc is stale, missing, or confusing?
+    validations:
+      required: true
+  - type: textarea
+    id: correct
+    attributes:
+      label: Correct Information
+      description: What should the doc say?
+  - type: input
+    id: links
+    attributes:
+      label: Related Links
