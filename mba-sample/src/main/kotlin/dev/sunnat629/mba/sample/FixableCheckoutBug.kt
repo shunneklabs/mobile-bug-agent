@@ -19,7 +19,18 @@ object FixableCheckoutBug {
     }
 
     private fun submitCheckout(checkout: CheckoutDraft): CheckoutReceipt {
-        val token = checkout.paymentToken!!.trim()
+        val token = checkout.paymentToken?.trim().orEmpty()
+
+        // Demo-safe guardrail: never crash the sample app if tokenization fails.
+        // In a real app this should surface a recoverable UI error state.
+        if (token.isBlank()) {
+            return CheckoutReceipt(
+                cartId = checkout.cartId,
+                tokenPreview = "(missing)",
+                totalCents = checkout.totalCents,
+            )
+        }
+
         return CheckoutReceipt(
             cartId = checkout.cartId,
             tokenPreview = token.takeLast(4),
