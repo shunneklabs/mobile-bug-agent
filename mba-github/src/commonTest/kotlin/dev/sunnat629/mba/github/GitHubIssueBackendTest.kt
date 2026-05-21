@@ -99,6 +99,7 @@ class GitHubIssueBackendTest {
         val result = backend.createTicket(testReport)
 
         assertTrue(result.success)
+        assertEquals("[MBA] Checkout crashes during payment", capturedIssue?.title)
         val body = capturedIssue?.body.orEmpty()
         assertTrue(body.contains("### Possible Cause"), body)
         assertTrue(body.contains("Payment response is null"), body)

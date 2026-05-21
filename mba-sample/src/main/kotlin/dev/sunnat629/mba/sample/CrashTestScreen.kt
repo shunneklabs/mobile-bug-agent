@@ -133,6 +133,12 @@ fun CrashTestScreen() {
                 status = status,
             )
 
+            RealCrashButton(
+                onClick = {
+                    triggerRealCheckoutButtonCrash()
+                },
+            )
+
             scenarios.forEach { scenario ->
                 ScenarioRow(
                     scenario = scenario,
@@ -152,6 +158,23 @@ fun CrashTestScreen() {
 
             Spacer(Modifier.height(8.dp))
         }
+    }
+}
+
+@Composable
+private fun RealCrashButton(onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.error,
+            contentColor = MaterialTheme.colorScheme.onError,
+        ),
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Text("Real checkout crash", fontWeight = FontWeight.Bold)
     }
 }
 
@@ -551,6 +574,18 @@ private fun sampleScenarios(): List<CrashScenario> = listOf(
         },
     ),
 )
+
+private fun triggerRealCheckoutButtonCrash() {
+    val itemPricesCents = listOf(1_299, 499, 250)
+    val subtotalCents = itemPricesCents.sum()
+    val discountCents = if (subtotalCents >= 2_000) 200 else 0
+    val totalCents = subtotalCents - discountCents
+    val paymentToken: String? = null
+
+    check(!paymentToken.isNullOrBlank()) {
+        "Checkout payment token missing while charging $totalCents cents"
+    }
+}
 
 private fun runScenario(scenario: CrashScenario) {
     scenario.run()

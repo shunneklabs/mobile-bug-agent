@@ -206,6 +206,7 @@ class NotionTicketBackendTest {
         assertTrue(result.success)
 
         assertTrue(capturedBody.contains("Name"), "Should use default title field name")
+        assertTrue(capturedBody.contains("[MBA] Checkout crash on payment"), "Should prefix agent-created ticket title")
         assertTrue(capturedBody.contains("Severity"), "Should use default severity field name")
         assertTrue(capturedBody.contains("Fingerprint"), "Should include fingerprint")
         assertTrue(capturedBody.contains("AI Confidence"), "Should include AI confidence")
