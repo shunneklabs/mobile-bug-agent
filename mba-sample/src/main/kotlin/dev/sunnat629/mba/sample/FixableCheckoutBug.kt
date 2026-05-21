@@ -1,5 +1,7 @@
 package dev.sunnat629.mba.sample
 
+import dev.sunnat629.mba.core.MBA
+
 /**
  * Intentional demo bug.
  *
@@ -18,8 +20,20 @@ object FixableCheckoutBug {
         submitCheckout(checkout)
     }
 
-    private fun submitCheckout(checkout: CheckoutDraft): CheckoutReceipt {
-        val token = checkout.paymentToken!!.trim()
+    private fun submitCheckout(checkout: CheckoutDraft): CheckoutReceipt? {
+        val token = checkout.paymentToken?.trim()
+        if (token.isNullOrEmpty()) {
+            MBA.logError(
+                IllegalStateException("Checkout payment token missing while charging ${checkout.totalCents} cents"),
+                metadata = mapOf(
+                    "sample.scenario" to "fixable-checkout-token",
+                    "sample.cart_id" to checkout.cartId,
+                    "sample.recoverable" to "true",
+                ),
+            )
+            return null
+        }
+
         return CheckoutReceipt(
             cartId = checkout.cartId,
             tokenPreview = token.takeLast(4),
