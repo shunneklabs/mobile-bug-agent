@@ -1,7 +1,6 @@
 package dev.sunnat629.mba.agent
 
 import dev.sunnat629.mba.agent.model.CrashSummary
-import dev.sunnat629.mba.agent.model.CombinedCrashAnalysis
 import dev.sunnat629.mba.agent.model.ParsedStackTrace
 import dev.sunnat629.mba.agent.model.SeverityResult
 import dev.sunnat629.mba.agent.prompts.SystemPrompt
@@ -9,7 +8,6 @@ import dev.sunnat629.mba.agent.prompts.ToolPrompts
 import dev.sunnat629.mba.core.config.LLM
 import dev.sunnat629.mba.core.config.LLMConfig
 import dev.sunnat629.mba.core.model.DeviceContext
-import dev.sunnat629.mba.core.model.Severity
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
@@ -38,7 +36,7 @@ open class AgentFactory(
         ignoreUnknownKeys = true
         isLenient = true
     },
-) : Closeable {
+) : Closeable, CrashAnalysisExecutorFactory {
 
     // Single shared HttpClient — reused across all LLM calls (legacy path only).
     private val httpClient = HttpClient {
@@ -63,7 +61,7 @@ open class AgentFactory(
     }
 
     /** Returns a reusable executor. */
-    internal open fun create(): CrashAnalysisExecutor = executor
+    override fun create(): CrashAnalysisExecutor = executor
 
     /** Release the shared HttpClient and its connection pool. */
     override fun close() {
@@ -97,31 +95,6 @@ open class AgentFactory(
             "Custom OpenAI-compatible providers are supported through Koog. Legacy HTTP caller is not implemented."
         )
     }
-}
-
-/**
- * What the AI agent can do — defined as an interface for testability.
- * Production: backed by LLM. Tests: use a mock.
- */
-internal interface CrashAnalysisExecutor {
-    suspend fun analyzeCrash(
-        sanitizedTrace: String,
-        device: DeviceContext,
-        screen: String?,
-        breadcrumbs: List<String>,
-        crashContext: String,
-    ): CombinedCrashAnalysis? = null
-
-    suspend fun parseStackTrace(sanitizedTrace: String): ParsedStackTrace
-    suspend fun classifySeverity(parsed: ParsedStackTrace, device: DeviceContext): SeverityResult
-    suspend fun generateSummary(
-        parsed: ParsedStackTrace,
-        severity: SeverityResult,
-        screen: String?,
-        breadcrumbs: List<String>,
-        device: DeviceContext,
-        crashContext: String,
-    ): CrashSummary
 }
 
 /** Abstraction for raw LLM calls. Isolated for testability. */

@@ -18,12 +18,8 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(project(":mba-core"))
-            implementation(libs.koog.agents)
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.json)
-            implementation(libs.ktor.client.core)
-            implementation(libs.ktor.client.content.negotiation)
-            implementation(libs.ktor.serialization.json)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
@@ -31,9 +27,17 @@ kotlin {
             implementation(libs.ktor.client.mock)
         }
         androidMain.dependencies {
+            implementation(libs.koog.agents)
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.content.negotiation)
+            implementation(libs.ktor.serialization.json)
             implementation(libs.ktor.client.okhttp)
         }
         jvmMain.dependencies {
+            implementation(libs.koog.agents)
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.content.negotiation)
+            implementation(libs.ktor.serialization.json)
             implementation(libs.ktor.client.okhttp)
         }
     }

@@ -11,7 +11,7 @@ import dev.sunnat629.mba.core.processing.CrashReportBuilder
 import dev.sunnat629.mba.core.store.LocalDedupCache
 
 class CrashAnalysisAgent(
-    private val agentFactory: AgentFactory,
+    private val agentFactory: CrashAnalysisExecutorFactory,
     private val piiSanitizer: PIISanitizer,
     private val dedupCache: LocalDedupCache,
     private val useLocalDedup: Boolean = true,

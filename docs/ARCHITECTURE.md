@@ -39,7 +39,7 @@ This document describes the Mobile Bug Agent SDK, server, and demo architecture.
 
 ┌─────────────────────────────────────────────────────────────┐
 │                     mba-agent (KMP)                           │
-│  All types internal — zero public API surface                │
+│  Common pipeline + platform provider executors                │
 │                                                              │
 │  ┌──────────────────────┐    ┌────────────────────────┐     │
 │  │ CrashAnalysisAgent   │    │ KoogAgentFactory       │     │
@@ -58,6 +58,9 @@ This document describes the Mobile Bug Agent SDK, server, and demo architecture.
 │  │ ├─ Ollama/local/OpenRouter/Mistral/DeepSeek/DashScope   │
 │  │ └─ Legacy fallback for older direct HTTP paths           │
 │  └─────────────────────┘                                    │
+│                                                              │
+│  commonMain: contracts, prompts, models, pipeline            │
+│  androidMain/jvmMain: Koog clients, Ktor engines, factories  │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐

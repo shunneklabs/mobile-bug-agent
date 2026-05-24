@@ -1,6 +1,5 @@
 package dev.sunnat629.mba.agent
 
-import ai.koog.prompt.llm.LLMCapability
 import dev.sunnat629.mba.agent.model.CrashSummary
 import dev.sunnat629.mba.agent.model.CombinedCrashAnalysis
 import dev.sunnat629.mba.agent.model.ParsedStackTrace
@@ -98,8 +97,8 @@ class CrashAnalysisAgentTest {
     }
 
     /** Fake factory that returns the mock executor. */
-    private class FakeAgentFactory(private val executor: CrashAnalysisExecutor) {
-        fun create(): CrashAnalysisExecutor = executor
+    private class FakeAgentFactory(private val executor: CrashAnalysisExecutor) : CrashAnalysisExecutorFactory {
+        override fun create(): CrashAnalysisExecutor = executor
     }
 
     @Test
@@ -109,11 +108,7 @@ class CrashAnalysisAgentTest {
         val dedupCache = LocalDedupCache(maxSize = 100, ttl = 24.hours)
 
         val agent = CrashAnalysisAgent(
-            agentFactory = object : AgentFactory(
-                llmConfig = dev.sunnat629.mba.core.config.LLMConfig.NONE
-            ) {
-                override fun create(): CrashAnalysisExecutor = executor
-            },
+            agentFactory = FakeAgentFactory(executor),
             piiSanitizer = piiSanitizer,
             dedupCache = dedupCache,
         )
@@ -139,11 +134,7 @@ class CrashAnalysisAgentTest {
         val dedupCache = LocalDedupCache(maxSize = 100, ttl = 24.hours)
 
         val agent = CrashAnalysisAgent(
-            agentFactory = object : AgentFactory(
-                llmConfig = dev.sunnat629.mba.core.config.LLMConfig.NONE
-            ) {
-                override fun create(): CrashAnalysisExecutor = executor
-            },
+            agentFactory = FakeAgentFactory(executor),
             piiSanitizer = piiSanitizer,
             dedupCache = dedupCache,
         )
@@ -163,50 +154,9 @@ class CrashAnalysisAgentTest {
     }
 
     @Test
-    fun koogPathIsDefault() = runTest {
-        val executor = FakeExecutor()
-
-        val factory = object : AgentFactory(
-            llmConfig = dev.sunnat629.mba.core.config.LLMConfig.NONE,
-        ) {
-            override fun create(): CrashAnalysisExecutor = executor
-        }
-
-        val created = factory.create()
-        assertEquals(executor, created)
-    }
-
-    @Test
-    fun legacyPathCanBeEnabled() = runTest {
-        val executor = FakeExecutor()
-
-        val factory = object : AgentFactory(
-            llmConfig = dev.sunnat629.mba.core.config.LLMConfig.NONE,
-            useKoog = false,
-        ) {
-            override fun create(): CrashAnalysisExecutor = executor
-        }
-
-        val created = factory.create()
-        assertEquals(executor, created)
-    }
-
-    @Test
-    fun geminiKoogModelUsesKnownCapabilities() {
-        val model = koogModelForConfig(
-            dev.sunnat629.mba.core.config.LLM.gemini("test-key")
-        )
-
-        assertEquals("gemini-2.5-flash", model.id)
-        assertTrue(model.supports(LLMCapability.Completion))
-    }
-
-    @Test
     fun fallbackUsesRawOnlyWhenAgentFails() = runTest {
         val agent = CrashAnalysisAgent(
-            agentFactory = object : AgentFactory(
-                llmConfig = dev.sunnat629.mba.core.config.LLMConfig.NONE
-            ) {
+            agentFactory = object : CrashAnalysisExecutorFactory {
                 override fun create(): CrashAnalysisExecutor = object : CrashAnalysisExecutor {
                     override suspend fun parseStackTrace(sanitizedTrace: String): ParsedStackTrace {
                         error("LLM unavailable")
@@ -270,11 +220,7 @@ class CrashAnalysisAgentTest {
             )
         }
         val agent = CrashAnalysisAgent(
-            agentFactory = object : AgentFactory(
-                llmConfig = dev.sunnat629.mba.core.config.LLMConfig.NONE
-            ) {
-                override fun create(): CrashAnalysisExecutor = executor
-            },
+            agentFactory = FakeAgentFactory(executor),
             piiSanitizer = PIISanitizer(),
             dedupCache = LocalDedupCache(maxSize = 100, ttl = 24.hours),
         )
