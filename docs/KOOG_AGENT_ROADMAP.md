@@ -4,16 +4,53 @@ This document tracks what Mobile Bug Agent already does with Koog and what we pl
 
 ## Latest Branch Status
 
-KotlinConf work has been squash-merged into `master`. There is no active local
-`kotlinConf` branch.
+Issue `#79` tracks the KMP structure direction. The repo should keep current
+Android SDKOnly behavior stable while making common source sets safe for future
+iOS and Web/Wasm adapters.
 
-Recent completed work:
+Current direction:
 
-- `faf711b` — hardened `/report` API boundaries and enriched booth event/artifact metadata for issues `#38` and `#39`.
-- `787ee4e` — added Koog auto-fix tool-wrapper contracts and deterministic fixtures/tests for issues `#41` and `#42`.
-- `f0cecaf` — added the fixable checkout crash scenario to the sample app.
+- Keep module names for now.
+- Keep `mba-core` as shared KMP models/config/capture primitives.
+- Keep `mba-agent/commonMain` focused on pure crash-analysis contracts,
+  pipeline logic, prompts, models, sink contracts, and local orchestration.
+- Keep Koog provider clients, legacy HTTP callers, and JVM closeable resources
+  in Android/JVM source sets instead of `commonMain`.
+- Keep `mba-ios` and `mba-web` as honest future scaffolds until real capture
+  strategies exist.
 
-Current sample work now lands on `master` unless a new feature branch is created.
+### Mapping JetBrains' 2026 default structure to MBA
+
+JetBrains' newer KMP default separates shared libraries from runnable platform
+apps. MBA is SDK-first rather than app-first, so the mapping is:
+
+```text
+shared/core library code
+→ mba-core
+→ mba-agent/commonMain
+
+platform runtime adapters
+→ mba-android
+→ mba-ios
+→ mba-web
+→ mba-jvm
+
+sample/runnable app modules
+→ mba-sample
+
+server-side product
+→ mba-server
+
+optional integrations
+→ mba-github
+→ mba-notion
+```
+
+This gives each module one responsibility without forcing a large directory
+move before the platform adapters are real. A future rename to folders such as
+`core/`, `agent/`, `platform/*`, `integrations/*`, `apps/*`, and `server/`
+should be a mechanical follow-up, not a prerequisite for the current SDK
+architecture.
 
 ## Current Koog Status
 
@@ -23,7 +60,11 @@ Koog is already wired into the core crash-analysis path in `mba-agent`.
 
 - Added Koog `0.8.0` to the Gradle version catalog as `koog-agents`.
 - Made `AgentFactory` default to the Koog path through `useKoog = true`.
-- Added `KoogAgentFactory` to create Koog-backed prompt executors.
+- Added `KoogAgentFactory` to create Koog-backed prompt executors for Android
+  and JVM runtime variants.
+- Split `CrashAnalysisExecutorFactory` / `CrashAnalysisExecutor` into
+  `commonMain` so pure SDKOnly orchestration does not depend on Koog, Ktor
+  clients, or JVM classes.
 - Added provider/model support for SDKOnly through Koog:
   - Gemini through Koog `GoogleLLMClient`.
   - OpenAI through Koog `OpenAILLMClient`.
@@ -70,6 +111,27 @@ Koog is already wired into the core crash-analysis path in `mba-agent`.
   - `critical-crash` notify-only route.
   - `low-guardrail-fail` fallback/guardrail route.
 - Updated auto-fix routing so only `LOW` severity can enter auto-fix when `MBA_AUTOFIX_ENABLED=true`; higher severities and disabled auto-fix remain notify-only.
+
+### Current dependency placement
+
+```text
+mba-agent/commonMain
+→ crash-analysis contracts
+→ pure processing pipeline
+→ prompts and serializable analysis models
+→ sink/runtime models
+
+mba-agent/androidMain and mba-agent/jvmMain
+→ AgentFactory
+→ KoogAgentFactory
+→ Koog prompt clients
+→ legacy direct HTTP callers
+→ Ktor OkHttp client engine
+```
+
+This follows the current Kotlin Multiplatform direction: common code should not
+accidentally require platform APIs that future iOS or Web/Wasm targets cannot
+compile.
 
 ## Current Boundary
 

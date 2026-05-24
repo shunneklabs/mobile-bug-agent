@@ -8,6 +8,7 @@ import dev.sunnat629.mba.notion.NotionTicketBackend
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import androidx.core.content.edit
 
 object SampleIntegrationRuntime {
     private const val TAG = "SampleIntegration"
@@ -62,9 +63,9 @@ object SampleIntegrationRuntime {
     fun select(context: Context, mode: SampleIntegrationMode): SampleIntegrationMode {
         val applied = apply(mode)
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putString(KEY_MODE, applied.name)
-            .apply()
+            .edit {
+                putString(KEY_MODE, applied.name)
+            }
         return applied
     }
 

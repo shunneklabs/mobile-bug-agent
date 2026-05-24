@@ -5,6 +5,7 @@ import dev.sunnat629.mba.core.model.ProcessedCrashReport
 import dev.sunnat629.mba.core.model.TicketResult
 import dev.sunnat629.mba.core.ticket.TicketBackend
 import dev.sunnat629.mba.core.ticket.TicketUpdate
+import dev.sunnat629.mba.core.ticket.withMbaTicketPrefix
 import dev.sunnat629.mba.github.model.*
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -68,7 +69,7 @@ public class GitHubIssueBackend(
             logPayload("create", report)
 
             val issueRequest = GitHubIssueRequest(
-                title = report.title,
+                title = report.title.withMbaTicketPrefix(),
                 body = buildIssueBody(report),
                 labels = labels,
             )
@@ -107,7 +108,7 @@ public class GitHubIssueBackend(
             var labels: List<String>? = null
             update.report?.let { report ->
                 logPayload("update", report)
-                title = report.title
+                title = report.title.withMbaTicketPrefix()
                 issueBody = buildIssueBody(report, update)
                 labels = buildSeverityLabels(report)
             }

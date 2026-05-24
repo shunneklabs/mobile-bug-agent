@@ -3,7 +3,7 @@ package dev.sunnat629.mba.agent.model
 import kotlinx.serialization.Serializable
 
 @Serializable
-internal data class ParsedStackTrace(
+public data class ParsedStackTrace(
     val rootException: String,
     val rootMessage: String? = null,
     val crashFile: String? = null,
@@ -15,7 +15,7 @@ internal data class ParsedStackTrace(
 )
 
 @Serializable
-internal data class StackFrame(
+public data class StackFrame(
     val file: String,
     val line: Int? = null,
     val method: String,

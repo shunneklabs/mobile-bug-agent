@@ -36,31 +36,6 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.Closeable
 
-internal fun extractJsonObjectPayload(response: String): String {
-    val trimmed = response.trim()
-    val firstBrace = trimmed.indexOf('{')
-    if (firstBrace < 0) return trimmed
-
-    var depth = 0
-    var inString = false
-    var escaped = false
-    for (index in firstBrace until trimmed.length) {
-        val char = trimmed[index]
-        when {
-            escaped -> escaped = false
-            char == '\\' && inString -> escaped = true
-            char == '"' -> inString = !inString
-            !inString && char == '{' -> depth++
-            !inString && char == '}' -> {
-                depth--
-                if (depth == 0) return trimmed.substring(firstBrace, index + 1)
-            }
-        }
-    }
-
-    return trimmed.substring(firstBrace)
-}
-
 internal fun koogModelForConfig(llmConfig: LLMConfig): LLModel {
     val provider = llmConfig.koogProvider()
     return when (llmConfig.provider) {

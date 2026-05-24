@@ -5,6 +5,7 @@ import dev.sunnat629.mba.core.model.TicketResult
 import dev.sunnat629.mba.core.ticket.CrashOccurrenceTicketBackend
 import dev.sunnat629.mba.core.ticket.TicketBackend
 import dev.sunnat629.mba.core.ticket.TicketUpdate
+import dev.sunnat629.mba.core.ticket.withMbaTicketPrefix
 import dev.sunnat629.mba.notion.model.*
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -66,7 +67,7 @@ public class NotionTicketBackend(
 
         // Name (title)
         properties["Name"] = NotionProperty.Title(
-            listOf(NotionRichText(text = NotionTextContent(report.title)))
+            listOf(NotionRichText(text = NotionTextContent(report.title.withMbaTicketPrefix())))
         )
         // Severity (select: CRITICAL, HIGH, MEDIUM, LOW)
         properties["Severity"] = NotionProperty.Select(
@@ -440,7 +441,7 @@ public class NotionTicketBackend(
         }
         update.report?.takeIf { it.confidence > 0.0f }?.let { report ->
             properties["Name"] = NotionProperty.Title(
-                listOf(NotionRichText(text = NotionTextContent(report.title)))
+                listOf(NotionRichText(text = NotionTextContent(report.title.withMbaTicketPrefix())))
             )
             properties["Severity"] = NotionProperty.Select(
                 NotionSelectItem(name = report.severity.name)

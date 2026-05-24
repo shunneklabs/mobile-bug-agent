@@ -9,7 +9,7 @@ import kotlinx.serialization.Serializable
  * parsed stack trace + severity + summary.
  */
 @Serializable
-internal data class CombinedCrashAnalysis(
+public data class CombinedCrashAnalysis(
     // From ParsedStackTrace
     val rootException: String? = null,
     val rootMessage: String? = null,

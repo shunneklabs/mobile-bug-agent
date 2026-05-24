@@ -10,6 +10,12 @@ The SDK is designed so teams can choose either:
 - SDKOnly mode, where processing runs locally in the app
 - hosted mode, where raw crashes are sent to the MBA backend
 
+The module layout follows the current Kotlin Multiplatform direction without a
+large rename: shared SDK libraries (`mba-core`, `mba-agent`) are separate from
+runtime adapters (`mba-android`, `mba-ios`, `mba-web`, `mba-jvm`), the sample
+application (`mba-sample`), optional integrations (`mba-github`, `mba-notion`),
+and the server product (`mba-server`).
+
 ## Plain-English Flow
 
 ```text
@@ -68,6 +74,11 @@ It is responsible for:
 - app-facing event models
 - batch event models
 - generic sink contracts for optional delivery
+
+Its `commonMain` source set contains the pure processing contracts and pipeline.
+Concrete Koog provider clients and legacy direct HTTP callers live in the
+Android/JVM runtime source sets so future iOS and Web/Wasm adapters do not
+inherit Android/JVM-only dependencies.
 
 It does not depend directly on Android, WorkManager, Notion, or GitHub.
 
